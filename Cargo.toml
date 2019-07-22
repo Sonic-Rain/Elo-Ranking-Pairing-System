@@ -1,0 +1,37 @@
+[package]
+name = "erps"
+version = "0.1.0"
+authors = ["damody <t1238142000@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mysql = "*"
+mqtt-protocol = "0.7"
+clap = "2"
+log = "*"
+env_logger = "*"
+uuid = { version = "0.7", features = ["v4"] }
+time = "0.1"
+bit-vec = "0.5"
+byteorder = "1"
+bytes = "0.4"
+crossbeam = "0.7"
+failure = "0.1"
+failure_derive = "0.1"
+fnv = "1"
+futures = "0.1.18"
+native-tls = { version = "0.2", optional = true }
+regex = "1"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+tokio = "0.1.9"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+tokio-named-pipes = "0.1"
+tokio-uds = "0.2"
+tokio-sync = "0.1"
+twox-hash = "1"
+url = "1"
