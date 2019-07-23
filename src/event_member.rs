@@ -20,6 +20,11 @@ struct LoginData {
     id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct LogoutData {
+    id: String,
+}
+
 
 pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool) -> std::result::Result<(), std::io::Error>
 {
@@ -42,7 +47,7 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
 
 pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool) -> std::result::Result<(), std::io::Error>
 {
-    let data: LoginData = serde_json::from_value(v).unwrap();
+    let data: LogoutData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
     let qres = conn.query(format!("update user set status='offline' where userid='{}';", data.id));
     let publish_packet = match qres {

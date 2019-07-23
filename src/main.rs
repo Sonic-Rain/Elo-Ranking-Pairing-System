@@ -1,8 +1,8 @@
 #![allow(warnings)]
 use log::{info, warn, error, trace};
 
-
 mod event_member;
+mod event_room;
 
 use std::env;
 use std::io::Write;
@@ -79,7 +79,19 @@ fn main() -> std::result::Result<(), std::io::Error> {
         .unwrap_or_else(generate_client_id);
     let mut channel_filters: Vec<(TopicFilter, QualityOfService)> = vec![
         (TopicFilter::new("/member/+/login").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/logout").unwrap(), QualityOfService::Level1)
+        (TopicFilter::new("/member/+/logout").unwrap(), QualityOfService::Level1),
+
+        (TopicFilter::new("/member/+/create").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/close").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/start_queue").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/cancel_queue").unwrap(), QualityOfService::Level1),        
+        (TopicFilter::new("/member/+/invite").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/join").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/accept_join").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/kick").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/leave").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/prestart").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/member/+/start").unwrap(), QualityOfService::Level1),
     ];
     //= matches.values_of("SUBSCRIBE").unwrap().map(|c| (TopicFilter::new(c.to_string()).unwrap(), QualityOfService::Level0)).collect();
 
@@ -161,6 +173,8 @@ fn main() -> std::result::Result<(), std::io::Error> {
 
     let relogin = Regex::new(r"/\w+/(\w+)/login").unwrap();
     let relogout = Regex::new(r"/\w+/(\w+)/logout").unwrap();
+    let recreate = Regex::new(r"/\w+/(\w+)/create").unwrap();
+    let reclose = Regex::new(r"/\w+/(\w+)/close").unwrap();
     
 
     loop {
@@ -199,6 +213,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let userid = cap[1].to_string();
                         info!("logout: userid: {} json: {:?}", userid, v);
                         event_member::logout(&mut stream, userid, v, pool.clone())?;
+                    } else if recreate.is_match(publ.topic_name()) {
+                        let cap = recreate.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("create: userid: {} json: {:?}", userid, v);
+                        event_room::create(&mut stream, userid, v, pool.clone())?;
                     }
                 } else {
                     warn!("LoginData error");
