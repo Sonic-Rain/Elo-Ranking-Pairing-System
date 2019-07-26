@@ -34,11 +34,21 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
 {
     let data: LoginData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
+    let qres2 = conn.query(format!("select ng, rk from user as a join user_rank as b on a.id=b.id where userid='{}';", data.id)).unwrap();
+    let mut ng: u16 = 0;
+    let mut rk: u16 = 0;
+    for row in qres2 {
+        let a = row.unwrap().clone();
+        ng = mysql::from_value(a.get("ng").unwrap());
+        rk = mysql::from_value(a.get("rk").unwrap());
+        break;
+    }
+
     let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
     let publish_packet = match qres {
         Ok(_) => {
             PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-            sender.send(RoomEventData::Login(UserLoginData {u: User { id: id, ng: 1000, rk: 1000}}));
+            sender.send(RoomEventData::Login(UserLoginData {u: User { id: id, ng: ng, rk: rk}}));
         },
         _=> {
             PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"fail\"}".to_string());

@@ -3,16 +3,16 @@ use serde_derive::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct User {
     pub id: String,
-    pub ng: i16,
-    pub rk: i16,
+    pub ng: u16,
+    pub rk: u16,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RoomData {
     pub rid: i32,
     pub users: Vec<User>,
-    pub avg_ng: i16,
-    pub avg_rk: i16,
+    pub avg_ng: u16,
+    pub avg_rk: u16,
 }
 
 impl RoomData {
@@ -24,8 +24,8 @@ impl RoomData {
             sum_rk += user.rk;
         }
         if self.users.len() > 0 {
-            self.avg_ng = sum_ng/self.users.len() as i16;
-            self.avg_rk = sum_rk/self.users.len() as i16;
+            self.avg_ng = sum_ng/self.users.len() as u16;
+            self.avg_rk = sum_rk/self.users.len() as u16;
         }
     }
 
