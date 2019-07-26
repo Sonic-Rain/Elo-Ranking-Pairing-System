@@ -14,6 +14,9 @@ use log::{info, warn, error, trace};
 
 use ::futures::Future;
 use mysql;
+use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
+use crate::event_room::*;
+use crate::room::User;
 
 #[derive(Serialize, Deserialize)]
 struct LoginData {
@@ -26,7 +29,8 @@ struct LogoutData {
 }
 
 
-pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool) -> std::result::Result<(), std::io::Error>
+pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
 {
     let data: LoginData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
@@ -34,6 +38,7 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
     let publish_packet = match qres {
         Ok(_) => {
             PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+            sender.send(RoomEventData::Login(UserLoginData {u: User { id: id, ng: 1000, rk: 1000}}));
         },
         _=> {
             PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"fail\"}".to_string());
@@ -45,7 +50,8 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
     Ok(())
 }
 
-pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool) -> std::result::Result<(), std::io::Error>
+pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
 {
     let data: LogoutData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
@@ -53,6 +59,7 @@ pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysq
     let publish_packet = match qres {
         Ok(_) => {
             PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+            sender.send(RoomEventData::Logout(UserLogoutData { id: id}));
         },
         _=> {
             PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"fail\"}".to_string());

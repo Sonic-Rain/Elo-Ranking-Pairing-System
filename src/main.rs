@@ -3,6 +3,7 @@ use log::{info, warn, error, trace};
 
 mod event_member;
 mod event_room;
+mod room;
 
 use std::env;
 use std::io::Write;
@@ -28,6 +29,8 @@ use regex::Regex;
 use ::futures::Future;
 use mysql;
 
+use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
+use crate::event_room::RoomEventData;
 
 fn generate_client_id() -> String {
     format!("/MQTT/rust/{}", Uuid::new_v4())
@@ -50,7 +53,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
                 .short("S")
                 .long("server")
                 .takes_value(true)
-                .required(true)
                 .help("MQTT server address (host:port)"),
         ).arg(
             Arg::with_name("USER_NAME")
@@ -72,7 +74,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
                 .help("Client identifier"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap();
+    let server_addr = matches.value_of("SERVER").unwrap_or("127.0.0.1:1883");
     let client_id = matches
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
@@ -176,8 +178,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let recreate = Regex::new(r"/\w+/(\w+)/create").unwrap();
     let reclose = Regex::new(r"/\w+/(\w+)/close").unwrap();
     
+    
+    let mut sender: Sender<RoomEventData> = event_room::init();
 
     loop {
+        let mut sender = sender.clone();
         let packet = match VariablePacket::decode(&mut stream) {
             Ok(pk) => pk,
             Err(err) => {
@@ -207,17 +212,17 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let cap = relogin.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("login: userid: {} json: {:?}", userid, v);
-                        event_member::login(&mut stream, userid, v, pool.clone())?;
+                        event_member::login(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     } else if relogout.is_match(publ.topic_name()) {
                         let cap = relogout.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("logout: userid: {} json: {:?}", userid, v);
-                        event_member::logout(&mut stream, userid, v, pool.clone())?;
+                        event_member::logout(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     } else if recreate.is_match(publ.topic_name()) {
                         let cap = recreate.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("create: userid: {} json: {:?}", userid, v);
-                        event_room::create(&mut stream, userid, v, pool.clone())?;
+                        event_room::create(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     }
                 } else {
                     warn!("LoginData error");
