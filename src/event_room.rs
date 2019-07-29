@@ -17,6 +17,7 @@ use ::futures::Future;
 use mysql;
 use std::sync::{Arc, Mutex, Condvar, RwLock};
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
+use std::collections::HashMap;
 
 use crate::room::*;
 
@@ -27,7 +28,7 @@ pub struct CreateRoomData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CloseRoomData {
-    pub rid: i32,
+    pub id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -58,12 +59,13 @@ fn show(dur: Duration) {
 
 pub fn init() -> Sender<RoomEventData> {
     let mut TotalRoom: Vec<RoomData> = vec![];
+    let mut RoomMap: HashMap<String, u32> = HashMap::new();
     let mut TotalUsers: Vec<User> = vec![];
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update = tick(Duration::from_secs(1));
     thread::spawn(move || {
-        let mut roomCount = 0;
+        let mut roomCount: u32 = 0;
         loop {
             select! {
                 recv(update) -> _ => {
@@ -90,6 +92,10 @@ pub fn init() -> Sender<RoomEventData> {
                             RoomEventData::Create(x) => {
                                 println!("{:?}", x);
                                 roomCount += 1;
+                                RoomMap.insert(
+                                    x.id.clone(),
+                                    roomCount,
+                                );
                                 let mut new_room = RoomData {
                                     rid: roomCount,
                                     users: vec![],
@@ -106,14 +112,17 @@ pub fn init() -> Sender<RoomEventData> {
                             },
                             RoomEventData::Close(x) => {
                                 println!("{:?}", x);
-                                let mut i = 0;
-                                while i != TotalRoom.len() {
-                                    if TotalRoom[i].rid == x.rid {
-                                        TotalRoom.remove(i);
-                                    } else {
-                                        i += 1;
+                                if let Some(y) =  RoomMap.get(&x.id) {
+                                    let mut i = 0;
+                                    while i != TotalRoom.len() {
+                                        if TotalRoom[i].rid == *y {
+                                            TotalRoom.remove(i);
+                                        } else {
+                                            i += 1;
+                                        }
                                     }
                                 }
+                                
                                 println!("{:?}", TotalRoom);
                             },
                         }
@@ -130,16 +139,21 @@ pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysq
 {
     let data: CreateRoomData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
-    let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
-    let publish_packet = match qres {
-        Ok(_) => {
-            PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-            sender.send(RoomEventData::Create(CreateRoomData{id: id}));
-        },
-        _=> {
-            PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"fail\"}".to_string());
-        }
-    };
+    sender.send(RoomEventData::Create(CreateRoomData{id: id.clone()}));
+    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let mut buf = Vec::new();
+    publish_packet.encode(&mut buf).unwrap();
+    stream.write_all(&buf[..]).unwrap();
+    Ok(())
+}
+
+pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
+{
+    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let mut conn = pool.get_conn().unwrap();
+    sender.send(RoomEventData::Close(CloseRoomData{id: id.clone()}));
+    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
     stream.write_all(&buf[..]).unwrap();

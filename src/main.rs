@@ -223,6 +223,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let userid = cap[1].to_string();
                         info!("create: userid: {} json: {:?}", userid, v);
                         event_room::create(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                    } else if reclose.is_match(publ.topic_name()) {
+                        let cap = reclose.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("close: userid: {} json: {:?}", userid, v);
+                        event_room::close(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     }
                 } else {
                     warn!("LoginData error");

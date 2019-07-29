@@ -9,7 +9,7 @@ pub struct User {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RoomData {
-    pub rid: i32,
+    pub rid: u32,
     pub users: Vec<User>,
     pub avg_ng: u16,
     pub avg_rk: u16,
