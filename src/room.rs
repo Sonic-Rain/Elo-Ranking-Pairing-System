@@ -1,16 +1,17 @@
 use serde_derive::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct User {
     pub id: String,
     pub ng: u16,
     pub rk: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RoomData {
     pub rid: u32,
     pub users: Vec<User>,
+    pub master: String,
     pub avg_ng: u16,
     pub avg_rk: u16,
 }

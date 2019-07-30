@@ -41,11 +41,23 @@ pub struct UserLogoutData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StartQueueData {
+    pub id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CancelQueueData {
+    pub id: String,
+}
+
 pub enum RoomEventData {
     Login(UserLoginData),
     Logout(UserLogoutData),
     Create(CreateRoomData),
     Close(CloseRoomData),
+    StartQueue(StartQueueData),
+    CancelQueue(CancelQueueData),
 }
 
 // Prints the elapsed time.
@@ -59,6 +71,7 @@ fn show(dur: Duration) {
 
 pub fn init() -> Sender<RoomEventData> {
     let mut TotalRoom: Vec<RoomData> = vec![];
+    let mut QueueRoom: Vec<RoomData> = vec![];
     let mut RoomMap: HashMap<String, u32> = HashMap::new();
     let mut TotalUsers: Vec<User> = vec![];
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
@@ -74,13 +87,36 @@ pub fn init() -> Sender<RoomEventData> {
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
+                            RoomEventData::StartQueue(x) => {
+                                for r in &QueueRoom {
+                                    if r.master == x.id {
+                                        return;
+                                    }
+                                }
+                                for r in &TotalRoom {
+                                    if r.master == x.id {
+                                        QueueRoom.push((*r).clone());
+                                        break;
+                                    }
+                                }
+                                println!("{:?}", QueueRoom);
+                            },
+                            RoomEventData::CancelQueue(x) => {
+                                for i in 0..QueueRoom.len() {
+                                    if QueueRoom[i].master == x.id {
+                                        QueueRoom.remove(i);
+                                        break;
+                                    }
+                                }
+                                println!("{:?}", QueueRoom);
+                            },
                             RoomEventData::Login(x) => {
-                                println!("{:?}", x);
-                                TotalUsers.push(x.u);
+                                if !TotalUsers.contains(&x.u) {
+                                    TotalUsers.push(x.u);
+                                }
                                 println!("{:?}", TotalUsers);
                             },
                             RoomEventData::Logout(x) => {
-                                println!("{:?}", x);
                                 for i in 0..TotalUsers.len() {
                                     if TotalUsers[i].id == x.id {
                                         TotalUsers.remove(i);
@@ -90,7 +126,6 @@ pub fn init() -> Sender<RoomEventData> {
                                 println!("{:?}", TotalUsers);
                             },
                             RoomEventData::Create(x) => {
-                                println!("{:?}", x);
                                 roomCount += 1;
                                 RoomMap.insert(
                                     x.id.clone(),
@@ -99,6 +134,7 @@ pub fn init() -> Sender<RoomEventData> {
                                 let mut new_room = RoomData {
                                     rid: roomCount,
                                     users: vec![],
+                                    master: x.id.clone(),
                                     avg_ng: 0,
                                     avg_rk: 0,
                                 };
@@ -111,7 +147,6 @@ pub fn init() -> Sender<RoomEventData> {
                                 println!("TotalRoom {:?}", TotalRoom);
                             },
                             RoomEventData::Close(x) => {
-                                println!("{:?}", x);
                                 if let Some(y) =  RoomMap.get(&x.id) {
                                     let mut i = 0;
                                     while i != TotalRoom.len() {
@@ -153,6 +188,32 @@ pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
     let data: CreateRoomData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Close(CloseRoomData{id: id.clone()}));
+    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let mut buf = Vec::new();
+    publish_packet.encode(&mut buf).unwrap();
+    stream.write_all(&buf[..]).unwrap();
+    Ok(())
+}
+
+pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
+{
+    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let mut conn = pool.get_conn().unwrap();
+    sender.send(RoomEventData::StartQueue(StartQueueData{id: id.clone()}));
+    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let mut buf = Vec::new();
+    publish_packet.encode(&mut buf).unwrap();
+    stream.write_all(&buf[..]).unwrap();
+    Ok(())
+}
+
+pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
+{
+    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let mut conn = pool.get_conn().unwrap();
+    sender.send(RoomEventData::CancelQueue(CancelQueueData{id: id.clone()}));
     let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();

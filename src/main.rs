@@ -83,17 +83,17 @@ fn main() -> std::result::Result<(), std::io::Error> {
         (TopicFilter::new("/member/+/login").unwrap(), QualityOfService::Level1),
         (TopicFilter::new("/member/+/logout").unwrap(), QualityOfService::Level1),
 
-        (TopicFilter::new("/member/+/create").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/close").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/start_queue").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/cancel_queue").unwrap(), QualityOfService::Level1),        
-        (TopicFilter::new("/member/+/invite").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/join").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/accept_join").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/kick").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/leave").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/prestart").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/start").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/create").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/close").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/start_queue").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/cancel_queue").unwrap(), QualityOfService::Level1),        
+        (TopicFilter::new("/room/+/invite").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/join").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/accept_join").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/kick").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/leave").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/prestart").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("/room/+/start").unwrap(), QualityOfService::Level1),
     ];
     //= matches.values_of("SUBSCRIBE").unwrap().map(|c| (TopicFilter::new(c.to_string()).unwrap(), QualityOfService::Level0)).collect();
 
@@ -177,6 +177,8 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let relogout = Regex::new(r"/\w+/(\w+)/logout").unwrap();
     let recreate = Regex::new(r"/\w+/(\w+)/create").unwrap();
     let reclose = Regex::new(r"/\w+/(\w+)/close").unwrap();
+    let restart_queue = Regex::new(r"/\w+/(\w+)/start_queue").unwrap();
+    let recancel_queue = Regex::new(r"/\w+/(\w+)/cancel_queue").unwrap();
     
     
     let mut sender: Sender<RoomEventData> = event_room::init();
@@ -228,6 +230,16 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let userid = cap[1].to_string();
                         info!("close: userid: {} json: {:?}", userid, v);
                         event_room::close(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                    } else if restart_queue.is_match(publ.topic_name()) {
+                        let cap = restart_queue.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("start_queue: userid: {} json: {:?}", userid, v);
+                        event_room::start_queue(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                    } else if recancel_queue.is_match(publ.topic_name()) {
+                        let cap = recancel_queue.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("cancel_queue: userid: {} json: {:?}", userid, v);
+                        event_room::cancel_queue(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     }
                 } else {
                     warn!("LoginData error");
