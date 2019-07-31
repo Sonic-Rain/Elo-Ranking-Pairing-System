@@ -22,6 +22,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::room::*;
+use crate::msg::*;
+
+const TEAM_SIZE: u16 = 5;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -71,24 +74,43 @@ fn show(dur: Duration) {
     );
 }
 
-pub fn init() -> Sender<RoomEventData> {
+pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
     
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update = tick(Duration::from_secs(1));
+    
     thread::spawn(move || {
         let mut TotalRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
         let mut QueueRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
+        let mut GameGroups: Vec<FightGroup> = vec![];
         let mut RoomMap: HashMap<String, u32> = HashMap::new();
         let mut TotalUsers: Vec<User> = vec![];
         let mut roomCount: u32 = 0;
         loop {
+            let msgtx = msgtx.clone();
             select! {
                 recv(update) -> _ => {
                     //show(start.elapsed());
                     if QueueRoom.len() > 2 {
                         QueueRoom.sort_by_key(|x| x.borrow().avg_rk);
-                        
+                        let mut g: FightGroup = Default::default();
+                        for i in 0..QueueRoom.len() {
+                            if !QueueRoom[i].borrow().ready &&
+                                QueueRoom[i].borrow().users.len() as u16 + g.user_count <= TEAM_SIZE {
+                                g.add_room(Rc::clone(&QueueRoom[i]));
+                            }
+                            if g.user_count == TEAM_SIZE {
+                                for r in &mut g.rooms {
+                                    r.borrow_mut().ready = true;
+                                    for u in &r.borrow().users {
+                                        msgtx.send(MqttMsg{topic:format!("room/()/res/prestart"), msg: r#"{"msg":"go"}"#.to_string()});
+                                    }
+                                }
+                                GameGroups.push(g.clone());
+                                g = Default::default();
+                            }
+                        }
                     }
                 }
                 recv(rx) -> d => {
@@ -144,6 +166,7 @@ pub fn init() -> Sender<RoomEventData> {
                                     master: x.id.clone(),
                                     avg_ng: 0,
                                     avg_rk: 0,
+                                    ready: false,
                                 };
                                 for i in 0..TotalUsers.len() {
                                     if TotalUsers[i].id == x.id {

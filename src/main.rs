@@ -4,21 +4,20 @@ use log::{info, warn, error, trace};
 mod event_member;
 mod event_room;
 mod room;
+mod msg;
 
 use std::env;
 use std::io::Write;
 use std::io::Error;
 use std::net::TcpStream;
 use std::str;
-
 use clap::{App, Arg};
-
 use uuid::Uuid;
 
 use mqtt::control::variable_header::ConnectReturnCode;
 use mqtt::packet::*;
-use mqtt::TopicFilter;
 use mqtt::{Decodable, Encodable, QualityOfService};
+use mqtt::{TopicFilter, TopicName};
 
 use std::thread;
 use std::time::Duration;
@@ -31,6 +30,7 @@ use mysql;
 
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use crate::event_room::RoomEventData;
+use crate::msg::*;
 
 fn generate_client_id() -> String {
     format!("/MQTT/rust/{}", Uuid::new_v4())
@@ -144,7 +144,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
             if ack.packet_identifier() != 10 {
                 panic!("SUBACK packet identifier not match");
             }
-
             info!("Subscribed!");
             break;
         }
@@ -180,9 +179,23 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue").unwrap();
     let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue").unwrap();
     
-    
-    let mut sender: Sender<RoomEventData> = event_room::init();
-
+    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
+    let mut sender: Sender<RoomEventData> = event_room::init(tx);
+    let mut stream2 = stream.try_clone().unwrap();
+    thread::spawn(move || {
+        loop {
+            select! {
+                recv(rx) -> d => {
+                    if let Ok(d) = d {
+                        let publish_packet = PublishPacket::new(TopicName::new(d.topic).unwrap(), QoSWithPacketIdentifier::Level0, d.msg.clone());
+                        let mut buf = Vec::new();
+                        publish_packet.encode(&mut buf).unwrap();
+                        stream2.write_all(&buf[..]).unwrap();
+                    }
+                }
+            }
+        }
+    });
     loop {
         let mut sender = sender.clone();
         let packet = match VariablePacket::decode(&mut stream) {

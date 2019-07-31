@@ -16,6 +16,7 @@ pub struct RoomData {
     pub master: String,
     pub avg_ng: u16,
     pub avg_rk: u16,
+    pub ready: bool,
 }
 
 impl RoomData {
@@ -51,7 +52,7 @@ impl RoomData {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FightGroup {
     pub rooms: Vec<Rc<RefCell<RoomData>>>,
     pub user_count: u16,
