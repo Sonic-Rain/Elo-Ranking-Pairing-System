@@ -80,20 +80,20 @@ fn main() -> std::result::Result<(), std::io::Error> {
         .map(|x| x.to_owned())
         .unwrap_or_else(generate_client_id);
     let mut channel_filters: Vec<(TopicFilter, QualityOfService)> = vec![
-        (TopicFilter::new("/member/+/login").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/member/+/logout").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("member/+/send/login").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("member/+/send/logout").unwrap(), QualityOfService::Level0),
 
-        (TopicFilter::new("/room/+/create").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/close").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/start_queue").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/cancel_queue").unwrap(), QualityOfService::Level1),        
-        (TopicFilter::new("/room/+/invite").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/join").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/accept_join").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/kick").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/leave").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/prestart").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("/room/+/start").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/create").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/close").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/start_queue").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/cancel_queue").unwrap(), QualityOfService::Level0),        
+        (TopicFilter::new("room/+/send/invite").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/join").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/accept_join").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/kick").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/leave").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/prestart").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/start").unwrap(), QualityOfService::Level0),
     ];
     //= matches.values_of("SUBSCRIBE").unwrap().map(|c| (TopicFilter::new(c.to_string()).unwrap(), QualityOfService::Level0)).collect();
 
@@ -124,7 +124,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     }
 
     // const CHANNEL_FILTER: &'static str = "typing-speed-test.aoeu.eu";
-    info!("Applying channel filters {:?} ...", channel_filters);
+    trace!("Applying channel filters {:?} ...", channel_filters);
     let sub = SubscribePacket::new(10, channel_filters);
     let mut buf = Vec::new();
     sub.encode(&mut buf).unwrap();
@@ -173,12 +173,12 @@ fn main() -> std::result::Result<(), std::io::Error> {
     });
     let pool = mysql::Pool::new(get_url().as_str()).unwrap();
 
-    let relogin = Regex::new(r"/\w+/(\w+)/login").unwrap();
-    let relogout = Regex::new(r"/\w+/(\w+)/logout").unwrap();
-    let recreate = Regex::new(r"/\w+/(\w+)/create").unwrap();
-    let reclose = Regex::new(r"/\w+/(\w+)/close").unwrap();
-    let restart_queue = Regex::new(r"/\w+/(\w+)/start_queue").unwrap();
-    let recancel_queue = Regex::new(r"/\w+/(\w+)/cancel_queue").unwrap();
+    let relogin = Regex::new(r"\w+/(\w+)/send/login").unwrap();
+    let relogout = Regex::new(r"\w+/(\w+)/send/logout").unwrap();
+    let recreate = Regex::new(r"\w+/(\w+)/send/create").unwrap();
+    let reclose = Regex::new(r"\w+/(\w+)/send/close").unwrap();
+    let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue").unwrap();
+    let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue").unwrap();
     
     
     let mut sender: Sender<RoomEventData> = event_room::init();

@@ -18,6 +18,8 @@ use mysql;
 use std::sync::{Arc, Mutex, Condvar, RwLock};
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::room::*;
 
@@ -70,51 +72,56 @@ fn show(dur: Duration) {
 }
 
 pub fn init() -> Sender<RoomEventData> {
-    let mut TotalRoom: Vec<RoomData> = vec![];
-    let mut QueueRoom: Vec<RoomData> = vec![];
-    let mut RoomMap: HashMap<String, u32> = HashMap::new();
-    let mut TotalUsers: Vec<User> = vec![];
+    
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update = tick(Duration::from_secs(1));
     thread::spawn(move || {
+        let mut TotalRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
+        let mut QueueRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
+        let mut RoomMap: HashMap<String, u32> = HashMap::new();
+        let mut TotalUsers: Vec<User> = vec![];
         let mut roomCount: u32 = 0;
         loop {
             select! {
                 recv(update) -> _ => {
                     //show(start.elapsed());
+                    if QueueRoom.len() > 2 {
+                        QueueRoom.sort_by_key(|x| x.borrow().avg_rk);
+                        
+                    }
                 }
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
                             RoomEventData::StartQueue(x) => {
                                 for r in &QueueRoom {
-                                    if r.master == x.id {
+                                    if r.borrow().master == x.id {
                                         return;
                                     }
                                 }
                                 for r in &TotalRoom {
-                                    if r.master == x.id {
+                                    if r.borrow().master == x.id {
                                         QueueRoom.push((*r).clone());
                                         break;
                                     }
                                 }
-                                println!("{:?}", QueueRoom);
+                                println!("{:#?}", QueueRoom);
                             },
                             RoomEventData::CancelQueue(x) => {
                                 for i in 0..QueueRoom.len() {
-                                    if QueueRoom[i].master == x.id {
+                                    if QueueRoom[i].borrow().master == x.id {
                                         QueueRoom.remove(i);
                                         break;
                                     }
                                 }
-                                println!("{:?}", QueueRoom);
+                                println!("{:#?}", QueueRoom);
                             },
                             RoomEventData::Login(x) => {
                                 if !TotalUsers.contains(&x.u) {
                                     TotalUsers.push(x.u);
                                 }
-                                println!("{:?}", TotalUsers);
+                                println!("{:#?}", TotalUsers);
                             },
                             RoomEventData::Logout(x) => {
                                 for i in 0..TotalUsers.len() {
@@ -123,7 +130,7 @@ pub fn init() -> Sender<RoomEventData> {
                                         break;
                                     }
                                 }
-                                println!("{:?}", TotalUsers);
+                                println!("{:#?}", TotalUsers);
                             },
                             RoomEventData::Create(x) => {
                                 roomCount += 1;
@@ -143,22 +150,22 @@ pub fn init() -> Sender<RoomEventData> {
                                         new_room.add_user(&TotalUsers[i]);
                                     }
                                 }
-                                TotalRoom.push(new_room);
-                                println!("TotalRoom {:?}", TotalRoom);
+                                //TotalRoom.push(new_room);
+                                TotalRoom.push(Rc::new(RefCell::new(new_room)));
+                                println!("TotalRoom {:#?}", TotalRoom);
                             },
                             RoomEventData::Close(x) => {
                                 if let Some(y) =  RoomMap.get(&x.id) {
                                     let mut i = 0;
                                     while i != TotalRoom.len() {
-                                        if TotalRoom[i].rid == *y {
+                                        if TotalRoom[i].borrow().rid == *y {
                                             TotalRoom.remove(i);
                                         } else {
                                             i += 1;
                                         }
                                     }
                                 }
-                                
-                                println!("{:?}", TotalRoom);
+                                println!("{:#?}", TotalRoom);
                             },
                         }
                     }
@@ -172,10 +179,10 @@ pub fn init() -> Sender<RoomEventData> {
 pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
-    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let data: CreateRoomData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Create(CreateRoomData{id: id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/create", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
     stream.write_all(&buf[..]).unwrap();
@@ -185,10 +192,10 @@ pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysq
 pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
-    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let data: CreateRoomData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Close(CloseRoomData{id: id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/close", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
     stream.write_all(&buf[..]).unwrap();
@@ -198,10 +205,10 @@ pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
 pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
-    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let data: CreateRoomData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::StartQueue(StartQueueData{id: id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/start_queue", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
     stream.write_all(&buf[..]).unwrap();
@@ -211,10 +218,10 @@ pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool:
 pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
-    let data: CreateRoomData = serde_json::from_value(v).unwrap();
+    let data: CreateRoomData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::CancelQueue(CancelQueueData{id: id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/cancel_queue", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
     stream.write_all(&buf[..]).unwrap();
