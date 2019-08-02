@@ -16,7 +16,7 @@ pub struct RoomData {
     pub master: String,
     pub avg_ng: u16,
     pub avg_rk: u16,
-    pub ready: bool,
+    pub ready: i8,
 }
 
 impl RoomData {
@@ -51,6 +51,11 @@ impl RoomData {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct FightCheck {
+    id: String,
+    check: u8,
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct FightGroup {
@@ -58,9 +63,30 @@ pub struct FightGroup {
     pub user_count: u16,
     pub avg_ng: u16,
     pub avg_rk: u16,
+    pub checks: Vec<FightCheck>,
+    pub game_status: u16,
 }
 
 impl FightGroup {
+    pub fn user_ready(&mut self, id: &String) -> bool {
+        for c in &mut self.checks {
+            if c.id == *id {
+                c.check = 1;
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn check_has_room(&self, id: &String) -> bool {
+        for room in &self.rooms {
+            if room.borrow().master == *id {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn update_avg(&mut self) {
         let mut sum_ng: u32 = 0;
         let mut sum_rk: u32 = 0;
@@ -92,5 +118,65 @@ impl FightGroup {
         }
         self.update_avg();
     }
+
+    pub fn ready(&mut self) {
+        self.checks.clear();
+        for room in &self.rooms {
+            room.borrow_mut().ready = 3;
+        }
+    }
     
+    pub fn prestart(&mut self) {
+        self.checks.clear();
+        for room in &self.rooms {
+            for u in &room.borrow().users {
+                self.checks.push(FightCheck{id: u.id.clone(), check: 0});
+            }
+        }
+    }
+
+    pub fn check_prestart(&self) -> bool {
+        for c in &self.checks {
+            if c.check != 2 {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+
+#[derive(Clone, Debug, Default)]
+pub struct FightGame {
+    pub teams: Vec<Rc<RefCell<FightGroup>>>,
+    pub room_names: Vec<String>,
+    pub user_count: u16,
+    pub winteam: i16,
+    pub game_status: u16,
+}
+
+impl FightGame {
+    pub fn update_names(&mut self) {
+        self.room_names.clear();
+        for t in &self.teams {
+            for r in &t.borrow().rooms {
+                self.room_names.push(r.borrow().master.clone());
+            }
+        }
+    }
+
+    pub fn check_prestart(&self) -> bool {
+        for c in &self.teams {
+            if c.borrow().check_prestart() == false {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn ready(&mut self) {
+        for g in &mut self.teams {
+            g.borrow_mut().ready();
+        }
+    }
 }

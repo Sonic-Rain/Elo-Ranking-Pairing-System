@@ -178,6 +178,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let reclose = Regex::new(r"\w+/(\w+)/send/close").unwrap();
     let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue").unwrap();
     let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue").unwrap();
+    let represtart_queue = Regex::new(r"\w+/(\w+)/send/prestart_queue").unwrap();
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
     let mut sender: Sender<RoomEventData> = event_room::init(tx);
@@ -253,6 +254,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let userid = cap[1].to_string();
                         info!("cancel_queue: userid: {} json: {:?}", userid, v);
                         event_room::cancel_queue(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                    } else if represtart_queue.is_match(publ.topic_name()) {
+                        let cap = represtart_queue.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("cancel_queue: userid: {} json: {:?}", userid, v);
+                        event_room::prestart_queue(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     }
                 } else {
                     warn!("LoginData error");
