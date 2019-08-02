@@ -137,7 +137,7 @@ impl FightGroup {
 
     pub fn check_prestart(&self) -> bool {
         for c in &self.checks {
-            if c.check != 2 {
+            if c.check != 1 {
                 return false;
             }
         }

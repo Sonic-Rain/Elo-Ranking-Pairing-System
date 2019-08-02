@@ -58,7 +58,7 @@ pub struct CancelQueueData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PreStartQueueData {
+pub struct PreStartData {
     pub room: String,
     pub id: String,
 }
@@ -70,7 +70,7 @@ pub enum RoomEventData {
     Close(CloseRoomData),
     StartQueue(StartQueueData),
     CancelQueue(CancelQueueData),
-    PreStartQueue(PreStartQueueData),
+    PreStart(PreStartData),
 }
 
 // Prints the elapsed time.
@@ -126,7 +126,6 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                 fg.teams.push(Rc::clone(rg));
                             }
                             if fg.teams.len() == MATCH_SIZE {
-                                
                                 for g in &mut fg.teams {
                                     let gstatus = g.borrow().game_status;
                                     if gstatus == 0 {
@@ -136,9 +135,12 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     }
                                     g.borrow_mut().game_status = 1;
                                 }
+                                fg.update_names();
+                                for r in &fg.room_names {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"go"}"#.to_string()});
+                                }
                                 PreStartGroups.push(fg.clone());
                                 fg = Default::default();
-                                println!("PreStartGroups {:#?}", PreStartGroups);
                             }
                         }
                     }
@@ -151,9 +153,10 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             start_group.ready();
                             start_group.update_names();
                             for r in &start_group.room_names {
-                                msgtx.send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"go"}"#.to_string()});
+                                msgtx.send(MqttMsg{topic:format!("room/{}/res/start", r), msg: r#"{"msg":"go"}"#.to_string()});
                             }
                             GameingGroups.push(start_group);
+                            println!("{:#?}", GameingGroups);
                         }
                         else {
                             i += 1;
@@ -163,7 +166,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
-                            RoomEventData::PreStartQueue(x) => {
+                            RoomEventData::PreStart(x) => {
                                 for r in &mut ReadyGroups {
                                     let mut rr = r.borrow_mut();
                                     if rr.check_has_room(&x.room) {
@@ -309,15 +312,11 @@ pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool
 }
 
 
-pub fn prestart_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn prestart(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
-    let data: PreStartQueueData = serde_json::from_value(v)?;
+    let data: PreStartData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
-    sender.send(RoomEventData::PreStartQueue(PreStartQueueData{id: data.id.clone(), room: data.room.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/prestart_queue", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-    let mut buf = Vec::new();
-    publish_packet.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
+    sender.send(RoomEventData::PreStart(PreStartData{id: data.id.clone(), room: data.room.clone()}));
     Ok(())
 }
