@@ -117,7 +117,6 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
         let mut roomCount: u32 = 0;
         let mut game_port: u16 = 7777;
         loop {
-            let msgtx = msgtx.clone();
             select! {
                 recv(update200ms) -> _ => {
                     //show(start.elapsed());
@@ -256,71 +255,133 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                 }
                             },
                             RoomEventData::StartQueue(x) => {
+                                let mut success = false;
+                                let mut hasRoom = false;
                                 for r in &QueueRoom {
                                     if r.borrow().master == x.room {
-                                        return;
-                                    }
-                                }
-                                for r in &TotalRoom {
-                                    if r.borrow().master == x.room {
-                                        QueueRoom.push((*r).clone());
+                                        hasRoom = true;
                                         break;
                                     }
+                                }
+                                if !hasRoom {
+                                    for r in &TotalRoom {
+                                        if r.borrow().master == x.room {
+                                            QueueRoom.push((*r).clone());
+                                            success = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if success {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/start_queue", x.room.clone()), 
+                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                } else {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/start_queue", x.room.clone()), 
+                                        msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                                 //info!("QueueRoom: {:#?}", QueueRoom);
                             },
                             RoomEventData::CancelQueue(x) => {
+                                let mut success = false;
                                 for i in 0..QueueRoom.len() {
                                     if QueueRoom[i].borrow().master == x.id {
                                         QueueRoom.remove(i);
+                                        success = true;
                                         break;
                                     }
+                                }
+                                if success {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                } else {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
                             RoomEventData::Login(x) => {
+                                let mut success = false;
                                 if !TotalUsers.contains(&x.u) {
-                                    TotalUsers.push(x.u);
+                                    TotalUsers.push(x.u.clone());
+                                    success = true;
+                                }
+                                if success {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.u.id.clone()), 
+                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                } else {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.u.id.clone()), 
+                                        msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
                             RoomEventData::Logout(x) => {
+                                let mut success = false;
                                 for i in 0..TotalUsers.len() {
                                     if TotalUsers[i].id == x.id {
                                         TotalUsers.remove(i);
+                                        success = true;
                                         break;
                                     }
                                 }
+                                if success {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/logout", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                } else {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/logout", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"fail"}}"#)});
+                                }
                             },
                             RoomEventData::Create(x) => {
-                                roomCount += 1;
-                                RoomMap.insert(
-                                    x.id.clone(),
-                                    roomCount,
-                                );
-                                let mut new_room = RoomData {
-                                    rid: roomCount,
-                                    users: vec![],
-                                    master: x.id.clone(),
-                                    avg_ng: 0,
-                                    avg_rk: 0,
-                                    ready: 0,
-                                };
-                                for i in 0..TotalUsers.len() {
-                                    if TotalUsers[i].id == x.id {
-                                        new_room.add_user(&TotalUsers[i]);
+                                let mut success = false;
+                                if !RoomMap.contains_key(&x.id) {
+                                    roomCount += 1;
+                                    RoomMap.insert(
+                                        x.id.clone(),
+                                        roomCount,
+                                    );
+                                    let mut new_room = RoomData {
+                                        rid: roomCount,
+                                        users: vec![],
+                                        master: x.id.clone(),
+                                        avg_ng: 0,
+                                        avg_rk: 0,
+                                        ready: 0,
+                                    };
+                                    for i in 0..TotalUsers.len() {
+                                        if TotalUsers[i].id == x.id {
+                                            new_room.add_user(&TotalUsers[i]);
+                                            TotalRoom.push(Rc::new(RefCell::new(new_room)));
+                                            success = true;
+                                            break;
+                                        }
                                     }
                                 }
-                                TotalRoom.push(Rc::new(RefCell::new(new_room)));
+                                if success {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                } else {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"fail"}}"#)});
+                                }
                             },
                             RoomEventData::Close(x) => {
+                                let mut success = false;
                                 if let Some(y) =  RoomMap.get(&x.id) {
                                     let mut i = 0;
                                     while i != TotalRoom.len() {
                                         if TotalRoom[i].borrow().rid == *y {
                                             TotalRoom.remove(i);
+                                            success = true;
+                                            break;
                                         } else {
                                             i += 1;
                                         }
                                     }
+                                }
+                                if success {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                } else {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                        msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
                         }
@@ -338,10 +399,6 @@ pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysq
     let data: CreateRoomData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Create(CreateRoomData{id: data.id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/create", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-    let mut buf = Vec::new();
-    publish_packet.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
     Ok(())
 }
 
@@ -351,10 +408,6 @@ pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
     let data: CloseRoomData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Close(CloseRoomData{id: data.id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/close", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-    let mut buf = Vec::new();
-    publish_packet.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
     Ok(())
 }
 
@@ -364,10 +417,6 @@ pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool:
     let data: StartQueueData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::StartQueue(StartQueueData{room: data.room.clone(), action: data.action.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/start_queue", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-    let mut buf = Vec::new();
-    publish_packet.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
     Ok(())
 }
 
@@ -377,10 +426,6 @@ pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool
     let data: CancelQueueData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::CancelQueue(CancelQueueData{id: data.id.clone()}));
-    let publish_packet = PublishPacket::new(TopicName::new(format!("room/{}/res/cancel_queue", id)).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-    let mut buf = Vec::new();
-    publish_packet.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
     Ok(())
 }
 
