@@ -2,7 +2,7 @@ use serde_derive::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct User {
     pub id: String,
     pub ng: u16,
@@ -129,6 +129,7 @@ impl FightGroup {
     pub fn prestart(&mut self) {
         self.checks.clear();
         for room in &self.rooms {
+            room.borrow_mut().ready = 1;
             for u in &room.borrow().users {
                 self.checks.push(FightCheck{id: u.id.clone(), check: 0});
             }

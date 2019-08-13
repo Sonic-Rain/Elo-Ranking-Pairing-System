@@ -80,6 +80,8 @@ fn main() -> std::result::Result<(), std::io::Error> {
         .map(|x| x.to_owned())
         .unwrap_or_else(generate_client_id);
     let mut channel_filters: Vec<(TopicFilter, QualityOfService)> = vec![
+        (TopicFilter::new("reset").unwrap(), QualityOfService::Level0),
+
         (TopicFilter::new("member/+/send/login").unwrap(), QualityOfService::Level0),
         (TopicFilter::new("member/+/send/logout").unwrap(), QualityOfService::Level0),
 
@@ -179,6 +181,9 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue").unwrap();
     let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue").unwrap();
     let represtart = Regex::new(r"\w+/(\w+)/send/prestart").unwrap();
+    let reinvite = Regex::new(r"\w+/(\w+)/send/invite").unwrap();
+    let rejoin = Regex::new(r"\w+/(\w+)/send/join").unwrap();
+    let reset = Regex::new(r"reset").unwrap();
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
     let mut sender: Sender<RoomEventData> = event_room::init(tx);
@@ -224,7 +229,20 @@ fn main() -> std::result::Result<(), std::io::Error> {
                 let vo : Result<Value> = serde_json::from_str(msg);
                 
                 if let Ok(v) = vo {
-                    if relogin.is_match(publ.topic_name()) {
+                    if reset.is_match(publ.topic_name()) {
+                        info!("reset");
+                        sender.send(RoomEventData::Reset());
+                    } else if reinvite.is_match(publ.topic_name()) {
+                        let cap = reinvite.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("invite: userid: {} json: {:?}", userid, v);
+                        event_room::invite(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                    } else if rejoin.is_match(publ.topic_name()) {
+                        let cap = rejoin.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("join: userid: {} json: {:?}", userid, v);
+                        event_room::join(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                    } else if relogin.is_match(publ.topic_name()) {
                         let cap = relogin.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("login: userid: {} json: {:?}", userid, v);
@@ -261,7 +279,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         event_room::prestart(&mut stream, userid, v, pool.clone(), sender.clone())?;
                     }
                 } else {
-                    warn!("LoginData error");
+                    warn!("Json Parser error");
                 };
                 
             }

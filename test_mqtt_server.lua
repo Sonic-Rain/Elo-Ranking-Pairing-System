@@ -26,7 +26,7 @@ local nosubscribe_topics = { "nosubscribe" }
 local cb_buf = {}
 
 
-logincount = 10
+logincount = 4
 
 
 local basic = function()
@@ -47,7 +47,7 @@ local basic = function()
       a = rex.match(topic , "room/(\\w+)/res/prestart")
       if a then
         aclient:publish(string.format("room/%s/send/prestart", a),
-            string.format([[{"id":"%s", "room":"%s"}]], a, a), { qos = 1 })
+            string.format([[{"id":"%s", "room":"%s", "accept": true}]], a, a), { qos = 1 })
         end
     end
     assert(aclient:connect(host, port, {timeout = timeout}))
@@ -56,6 +56,21 @@ local basic = function()
       assert(aclient:subscribe(v, 2, callback))
     end
     
+    for i = 1,logincount do
+      local msg = string.format([[{"id":"da_%02d"}]], i)
+      local topic = string.format("member/da_%02d/send/login", i)
+      assert(aclient:publish(topic, msg, { qos = 1 }))
+    
+      local msg = string.format([[{"id":"da_%02d"}]], i)
+      local topic = string.format("room/da_%02d/send/create", i)
+      assert(aclient:publish(topic, msg, { qos = 1 }))
+    
+      local msg = string.format([[{"room":"da_%02d", "action":"start game"}]], i)
+      local topic = string.format("room/da_%02d/send/start_queue", i)
+      assert(aclient:publish(topic, msg, { qos = 1 }))
+      aclient:message_loop(1)
+    end
+    --[=[
     for i = 1,logincount do
       local msg = string.format([[{"id":"da_%02d"}]], i)
       local topic = string.format("member/da_%02d/send/login", i)
@@ -69,15 +84,15 @@ local basic = function()
     end
     aclient:message_loop(1)
     for i = 1,logincount do
-      local msg = string.format([[{"id":"da_%02d"}]], i)
+      local msg = string.format([[{"room":"da_%02d", "action":"start game"}]], i)
       local topic = string.format("room/da_%02d/send/start_queue", i)
       assert(aclient:publish(topic, msg, { qos = 1 }))
     end
-    
+    ]=]
     
     
     --while true do
-      aclient:message_loop(100)
+      aclient:message_loop(3)
     --end
     aclient:disconnect()
     print("Basic test finished")

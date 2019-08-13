@@ -47,13 +47,18 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
     let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
     let publish_packet = match qres {
         Ok(_) => {
-            PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
-            sender.send(RoomEventData::Login(UserLoginData {u: User { id: id, ng: ng, rk: rk}}));
+            PublishPacket::new(TopicName::new(format!("member/{}/res/login", id.clone())).unwrap(), 
+                QoSWithPacketIdentifier::Level0, r#"{"msg":"ok"}"#.to_string());
+            //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), ng: ng, rk: rk}}));
         },
         _=> {
-            PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"fail\"}".to_string());
+            PublishPacket::new(TopicName::new(format!("member/{}/res/login", id.clone())).unwrap(), 
+                QoSWithPacketIdentifier::Level0, r#"{"msg":"fail"}"#.to_string());
         }
     };
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), ng: ng, rk: rk}}));
+    let publish_packet = PublishPacket::new(TopicName::new(format!("member/{}/res/login", id.clone())).unwrap(), 
+        QoSWithPacketIdentifier::Level0, r#"{"msg":"ok"}"#.to_string());
     let mut buf = Vec::new();
     publish_packet.encode(&mut buf).unwrap();
     stream.write_all(&buf[..]).unwrap();
@@ -68,11 +73,13 @@ pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysq
     let qres = conn.query(format!("update user set status='offline' where userid='{}';", data.id));
     let publish_packet = match qres {
         Ok(_) => {
-            PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"ok\"}".to_string());
+            PublishPacket::new(TopicName::new(format!("member/{}/res/logout", id.clone())).unwrap(), 
+                QoSWithPacketIdentifier::Level0, r#"{"msg":"ok"}"#.to_string());
             sender.send(RoomEventData::Logout(UserLogoutData { id: id}));
         },
         _=> {
-            PublishPacket::new(TopicName::new(id.clone()).unwrap(), QoSWithPacketIdentifier::Level0, "{\"msg\":\"fail\"}".to_string());
+            PublishPacket::new(TopicName::new(format!("member/{}/res/logout", id.clone())).unwrap(), 
+                QoSWithPacketIdentifier::Level0, r#"{"msg":"fail"}"#.to_string());
         }
     };
     let mut buf = Vec::new();
