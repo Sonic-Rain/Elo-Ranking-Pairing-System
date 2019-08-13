@@ -23,6 +23,7 @@ use std::rc::Rc;
 
 use crate::room::*;
 use crate::msg::*;
+use std::process::Command;
 
 const TEAM_SIZE: u16 = 2;
 const MATCH_SIZE: usize = 2;
@@ -102,8 +103,8 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
     
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
-    let update1s = tick(Duration::from_secs(1));
-    let update300ms = tick(Duration::from_millis(300));
+    let update200ms = tick(Duration::from_millis(200));
+    let update100ms = tick(Duration::from_millis(100));
     
     thread::spawn(move || {
         let mut TotalRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
@@ -114,10 +115,11 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
         let mut RoomMap: HashMap<String, u32> = HashMap::new();
         let mut TotalUsers: Vec<User> = vec![];
         let mut roomCount: u32 = 0;
+        let mut game_port: u16 = 7777;
         loop {
             let msgtx = msgtx.clone();
             select! {
-                recv(update1s) -> _ => {
+                recv(update200ms) -> _ => {
                     //show(start.elapsed());
                     if QueueRoom.len() > 2 {
                         QueueRoom.sort_by_key(|x| x.borrow().avg_rk);
@@ -160,19 +162,26 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                         }
                     }
                 }
-                recv(update300ms) -> _ => {
+                recv(update100ms) -> _ => {
                     let mut i = 0;
                     while i != PreStartGroups.len() {
                         if PreStartGroups[i].check_prestart() {
                             let mut start_group = PreStartGroups.remove(i);
+                            game_port += 1;
                             start_group.ready();
                             start_group.update_names();
                             for r in &start_group.room_names {
                                 msgtx.send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                    msg: format!(r#"{{"room":"{}","msg":"start"}}"#, r)});
+                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
                             }
                             GameingGroups.push(start_group);
                             println!("{:#?}", GameingGroups);
+                            /*
+                            Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
+                                    .arg(format!("-Port={}", game_port))
+                                    .spawn()
+                                    .expect("sh command failed to start");
+                                    */
                         }
                         else {
                             i += 1;
@@ -241,6 +250,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     let mut rr = r.borrow_mut();
                                     if rr.check_has_room(&x.room) {
                                         rr.user_ready(&x.id);
+                                        info!("PreStart: {}", x.id);
                                         break;
                                     }
                                 }
@@ -257,6 +267,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                         break;
                                     }
                                 }
+                                //info!("QueueRoom: {:#?}", QueueRoom);
                             },
                             RoomEventData::CancelQueue(x) => {
                                 for i in 0..QueueRoom.len() {

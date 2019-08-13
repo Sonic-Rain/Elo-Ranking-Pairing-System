@@ -158,8 +158,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
         loop {
             let current_timestamp = time::get_time().sec;
             if keep_alive > 0 && current_timestamp >= next_ping_time {
-                info!("Sending PINGREQ to broker");
-
                 let pingreq_packet = PingreqPacket::new();
 
                 let mut buf = Vec::new();
@@ -215,7 +213,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
 
         match packet {
             VariablePacket::PingrespPacket(..) => {
-                info!("Receiving PINGRESP from broker ..");
             }
             VariablePacket::PublishPacket(ref publ) => {
                 let msg = match str::from_utf8(&publ.payload_ref()[..]) {
@@ -225,14 +222,14 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         continue;
                     }
                 };
-                
+                if reset.is_match(publ.topic_name()) {
+                    info!("reset");
+                    sender.send(RoomEventData::Reset());
+                }
                 let vo : Result<Value> = serde_json::from_str(msg);
                 
                 if let Ok(v) = vo {
-                    if reset.is_match(publ.topic_name()) {
-                        info!("reset");
-                        sender.send(RoomEventData::Reset());
-                    } else if reinvite.is_match(publ.topic_name()) {
+                     if reinvite.is_match(publ.topic_name()) {
                         let cap = reinvite.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("invite: userid: {} json: {:?}", userid, v);
