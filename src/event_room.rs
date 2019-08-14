@@ -17,7 +17,7 @@ use ::futures::Future;
 use mysql;
 use std::sync::{Arc, Mutex, Condvar, RwLock};
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -25,7 +25,7 @@ use crate::room::*;
 use crate::msg::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 2;
+const TEAM_SIZE: u16 = 3;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -107,26 +107,29 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
     let update100ms = tick(Duration::from_millis(100));
     
     thread::spawn(move || {
-        let mut TotalRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
-        let mut QueueRoom: Vec<Rc<RefCell<RoomData>>> = vec![];
+        let mut TotalRoom: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
+        let mut QueueRoom: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: Vec<Rc<RefCell<FightGroup>>> = vec![];
         let mut PreStartGroups: Vec<FightGame> = vec![];
         let mut GameingGroups: Vec<FightGame> = vec![];
-        let mut RoomMap: HashMap<String, u32> = HashMap::new();
+        let mut RoomMap: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut TotalUsers: Vec<User> = vec![];
+        let mut TotalUserStatus: BTreeMap<String, UserStatus> = BTreeMap::new();
         let mut roomCount: u32 = 0;
         let mut game_port: u16 = 7777;
         loop {
             select! {
                 recv(update200ms) -> _ => {
                     //show(start.elapsed());
-                    if QueueRoom.len() > 2 {
-                        QueueRoom.sort_by_key(|x| x.borrow().avg_rk);
+                    if QueueRoom.len() > MATCH_SIZE {
                         let mut g: FightGroup = Default::default();
-                        for i in 0..QueueRoom.len() {
-                            if QueueRoom[i].borrow().ready == 0 &&
-                                QueueRoom[i].borrow().users.len() as u16 + g.user_count <= TEAM_SIZE {
-                                g.add_room(Rc::clone(&QueueRoom[i]));
+                        let mut tq: Vec<Rc<RefCell<RoomData>>> = vec![];
+                        tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                        tq.sort_by_key(|x| x.borrow().avg_rk);
+                        for (k, v) in &mut QueueRoom {
+                            if v.borrow().ready == 0 &&
+                                v.borrow().users.len() as u16 + g.user_count <= TEAM_SIZE {
+                                g.add_room(Rc::clone(&v));
                             }
                             if g.user_count == TEAM_SIZE {
                                 g.prestart();
@@ -135,7 +138,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             }
                         }
                     }
-                    if ReadyGroups.len() >= 2 {
+                    if ReadyGroups.len() >= MATCH_SIZE {
                         let mut fg: FightGame = Default::default();
                         for rg in &mut ReadyGroups {
                             if rg.borrow().game_status == 0 && fg.teams.len() < MATCH_SIZE {
@@ -160,8 +163,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             }
                         }
                     }
-                }
-                recv(update100ms) -> _ => {
+                    // update prestart groups
                     let mut i = 0;
                     while i != PreStartGroups.len() {
                         if PreStartGroups[i].check_prestart() {
@@ -174,7 +176,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
                             }
                             GameingGroups.push(start_group);
-                            println!("{:#?}", GameingGroups);
+                            //println!("{:#?}", GameingGroups);
                             /*
                             Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                     .arg(format!("-Port={}", game_port))
@@ -216,13 +218,14 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                 }
                                 let mut hasRoom = false;
                                 if hasUser {
-                                    for r in &TotalRoom {
-                                        if r.borrow().master == x.rid {
+                                    let r = TotalRoom.get(&x.rid);
+                                    match r {
+                                        Some(r) => {
                                             r.borrow_mut().users.push(tu);
                                             println!("Join {:#?}", r);
                                             hasRoom = true;
-                                            break;
-                                        }
+                                        },
+                                        _ => {}
                                     }
                                 }
                                 if hasRoom && hasUser {
@@ -257,19 +260,24 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             RoomEventData::StartQueue(x) => {
                                 let mut success = false;
                                 let mut hasRoom = false;
-                                for r in &QueueRoom {
-                                    if r.borrow().master == x.room {
+                                let r1 = QueueRoom.get(&x.room);
+                                match r1 {
+                                    Some(x) => {
                                         hasRoom = true;
-                                        break;
-                                    }
+                                    },
+                                    _ => {}
                                 }
                                 if !hasRoom {
-                                    for r in &TotalRoom {
-                                        if r.borrow().master == x.room {
-                                            QueueRoom.push((*r).clone());
+                                    let r = TotalRoom.get(&x.room);
+                                    match r {
+                                        Some(y) => {
+                                            QueueRoom.insert(
+                                                x.room.clone(),
+                                                Rc::clone(y)
+                                            );
                                             success = true;
-                                            break;
-                                        }
+                                        },
+                                        _ => {}
                                     }
                                 }
                                 if success {
@@ -283,12 +291,12 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             },
                             RoomEventData::CancelQueue(x) => {
                                 let mut success = false;
-                                for i in 0..QueueRoom.len() {
-                                    if QueueRoom[i].borrow().master == x.id {
-                                        QueueRoom.remove(i);
+                                let data = QueueRoom.remove(&x.id);
+                                match data {
+                                    Some(x) => {
                                         success = true;
-                                        break;
-                                    }
+                                    },
+                                    _ => {}
                                 }
                                 if success {
                                     msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.id.clone()), 
@@ -333,10 +341,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                 let mut success = false;
                                 if !RoomMap.contains_key(&x.id) {
                                     roomCount += 1;
-                                    RoomMap.insert(
-                                        x.id.clone(),
-                                        roomCount,
-                                    );
+                                    
                                     let mut new_room = RoomData {
                                         rid: roomCount,
                                         users: vec![],
@@ -348,7 +353,15 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     for i in 0..TotalUsers.len() {
                                         if TotalUsers[i].id == x.id {
                                             new_room.add_user(&TotalUsers[i]);
-                                            TotalRoom.push(Rc::new(RefCell::new(new_room)));
+                                            let r = Rc::new(RefCell::new(new_room));
+                                            RoomMap.insert(
+                                                x.id.clone(),
+                                                Rc::clone(&r),
+                                            );
+                                            TotalRoom.insert(
+                                                x.id.clone(),
+                                                r,
+                                            );
                                             success = true;
                                             break;
                                         }
@@ -364,16 +377,14 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             },
                             RoomEventData::Close(x) => {
                                 let mut success = false;
-                                if let Some(y) =  RoomMap.get(&x.id) {
-                                    let mut i = 0;
-                                    while i != TotalRoom.len() {
-                                        if TotalRoom[i].borrow().rid == *y {
-                                            TotalRoom.remove(i);
+                                if let Some(y) =  RoomMap.remove(&x.id) {
+                                    let data = TotalRoom.remove(&x.id);
+                                    match data {
+                                        Some(_) => {
+                                            QueueRoom.remove(&x.id);
                                             success = true;
-                                            break;
-                                        } else {
-                                            i += 1;
-                                        }
+                                        },
+                                        _ => {}
                                     }
                                 }
                                 if success {

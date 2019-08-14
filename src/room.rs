@@ -9,6 +9,13 @@ pub struct User {
     pub rk: u16,
 }
 
+#[derive(Clone, Debug)]
+pub struct UserStatus {
+    pub id: String,
+    pub room: Rc<RefCell<RoomData>>,
+    pub group: Rc<RefCell<FightGroup>>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RoomData {
     pub rid: u32,
