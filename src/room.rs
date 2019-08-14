@@ -61,7 +61,7 @@ impl RoomData {
 #[derive(Clone, Debug, Default)]
 pub struct FightCheck {
     id: String,
-    check: u8,
+    check: i8,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -79,6 +79,16 @@ impl FightGroup {
         for c in &mut self.checks {
             if c.id == *id {
                 c.check = 1;
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn user_cancel(&mut self, id: &String) -> bool {
+        for c in &mut self.checks {
+            if c.id == *id {
+                c.check = -1;
                 return true;
             }
         }

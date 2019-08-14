@@ -25,7 +25,7 @@ use crate::room::*;
 use crate::msg::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 3;
+const TEAM_SIZE: u16 = 1;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -122,7 +122,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
             select! {
                 recv(update200ms) -> _ => {
                     //show(start.elapsed());
-                    if QueueRoom.len() > MATCH_SIZE {
+                    if QueueRoom.len() >= MATCH_SIZE {
                         let mut g: FightGroup = Default::default();
                         let mut tq: Vec<Rc<RefCell<RoomData>>> = vec![];
                         tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
@@ -178,13 +178,11 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
                                 }
                                 GameingGroups.push(start_group);
-                                //println!("{:#?}", GameingGroups);
-                                /*
+                                println!("{:#?}", GameingGroups);
                                 Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
                                         .spawn()
                                         .expect("sh command failed to start");
-                                        */
                             },
                             PrestartStatus::Cancel => {
                                 let mut start_group = PreStartGroups.remove(i);
@@ -262,11 +260,16 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                 for r in &mut ReadyGroups {
                                     let mut rr = r.borrow_mut();
                                     if rr.check_has_room(&x.room) {
-                                        rr.user_ready(&x.id);
+                                        if x.accept == true {
+                                            rr.user_ready(&x.id);
+                                        } else {
+                                            rr.user_cancel(&x.id);
+                                        }
                                         info!("PreStart: {}", x.id);
                                         break;
                                     }
                                 }
+                                //info!("ReadyGroups: {:#?}", ReadyGroups);
                             },
                             RoomEventData::StartQueue(x) => {
                                 let mut success = false;
@@ -324,10 +327,10 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     success = true;
                                 }
                                 if success {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.u.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                         msg: format!(r#"{{"msg":"ok"}}"#)});
                                 } else {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.u.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                         msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
@@ -341,10 +344,10 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     }
                                 }
                                 if success {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/logout", x.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
                                         msg: format!(r#"{{"msg":"ok"}}"#)});
                                 } else {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/logout", x.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
                                         msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
