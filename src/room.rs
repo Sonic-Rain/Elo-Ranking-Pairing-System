@@ -143,13 +143,16 @@ impl FightGroup {
         }
     }
 
-    pub fn check_prestart(&self) -> bool {
+    pub fn check_prestart(&self) -> PrestartStatus {
+        let mut res = PrestartStatus::Ready;
         for c in &self.checks {
-            if c.check != 1 {
-                return false;
+            if c.check < 0 {
+                return PrestartStatus::Cancel;
+            } else if c.check !=1 {
+                res= PrestartStatus::Wait;
             }
         }
-        true
+        res
     }
 }
 
@@ -163,6 +166,13 @@ pub struct FightGame {
     pub game_status: u16,
 }
 
+#[derive(PartialEq)]
+pub enum PrestartStatus {
+    Wait,
+    Ready,
+    Cancel
+}
+
 impl FightGame {
     pub fn update_names(&mut self) {
         self.room_names.clear();
@@ -173,13 +183,17 @@ impl FightGame {
         }
     }
 
-    pub fn check_prestart(&self) -> bool {
+    pub fn check_prestart(&self) -> PrestartStatus {
+        let mut res = PrestartStatus::Ready;
         for c in &self.teams {
-            if c.borrow().check_prestart() == false {
-                return false;
+            let v = c.borrow().check_prestart();
+            if v == PrestartStatus::Cancel {
+                return PrestartStatus::Cancel;
+            } else if v == PrestartStatus::Wait {
+                res = PrestartStatus::Wait;
             }
         }
-        true
+        res
     }
 
     pub fn ready(&mut self) {

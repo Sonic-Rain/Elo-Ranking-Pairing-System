@@ -75,6 +75,7 @@ pub struct CancelQueueData {
 pub struct PreStartData {
     pub room: String,
     pub id: String,
+    pub accept: bool,
 }
 
 pub enum RoomEventData {
@@ -166,26 +167,36 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                     // update prestart groups
                     let mut i = 0;
                     while i != PreStartGroups.len() {
-                        if PreStartGroups[i].check_prestart() {
-                            let mut start_group = PreStartGroups.remove(i);
-                            game_port += 1;
-                            start_group.ready();
-                            start_group.update_names();
-                            for r in &start_group.room_names {
-                                msgtx.send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
+                        match PreStartGroups[i].check_prestart() {
+                            PrestartStatus::Ready => {
+                                let mut start_group = PreStartGroups.remove(i);
+                                game_port += 1;
+                                start_group.ready();
+                                start_group.update_names();
+                                for r in &start_group.room_names {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/start", r), 
+                                        msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
+                                }
+                                GameingGroups.push(start_group);
+                                //println!("{:#?}", GameingGroups);
+                                /*
+                                Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
+                                        .arg(format!("-Port={}", game_port))
+                                        .spawn()
+                                        .expect("sh command failed to start");
+                                        */
+                            },
+                            PrestartStatus::Cancel => {
+                                let mut start_group = PreStartGroups.remove(i);
+                                start_group.update_names();
+                                for r in &start_group.room_names {
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/prestart", r), 
+                                        msg: format!(r#"{{"msg":"stop queue"}}"#)});
+                                }
+                            },
+                            PrestartStatus::Wait => {
+                                i += 1;
                             }
-                            GameingGroups.push(start_group);
-                            //println!("{:#?}", GameingGroups);
-                            /*
-                            Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
-                                    .arg(format!("-Port={}", game_port))
-                                    .spawn()
-                                    .expect("sh command failed to start");
-                                    */
-                        }
-                        else {
-                            i += 1;
                         }
                     }
                 }
@@ -299,10 +310,10 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     _ => {}
                                 }
                                 if success {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
                                         msg: format!(r#"{{"msg":"ok"}}"#)});
                                 } else {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/login", x.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
                                         msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
@@ -445,7 +456,7 @@ pub fn prestart(stream: &mut std::net::TcpStream, id: String, v: Value, pool: my
 {
     let data: PreStartData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
-    sender.send(RoomEventData::PreStart(PreStartData{id: data.id.clone(), room: data.room.clone()}));
+    sender.send(RoomEventData::PreStart(data));
     Ok(())
 }
 

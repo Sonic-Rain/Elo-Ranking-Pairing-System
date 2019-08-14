@@ -27,6 +27,7 @@ use regex::Regex;
 
 use ::futures::Future;
 use mysql;
+use room::PrestartStatus;
 
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use crate::event_room::RoomEventData;
