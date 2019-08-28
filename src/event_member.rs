@@ -34,16 +34,37 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
 {
     let data: LoginData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
-    let qres2 = conn.query(format!("select ng, rk from user as a join user_rank as b on a.id=b.id where userid='{}';", data.id)).unwrap();
+    let sql = format!("select ng, rk from user as a join user_rank as b on a.id=b.id where userid='{}';", data.id);
+    let qres2: mysql::QueryResult = conn.query(sql.clone()).unwrap();
     let mut ng: u16 = 0;
     let mut rk: u16 = 0;
+    
+    let mut count = 0;
     for row in qres2 {
+        count += 1;
         let a = row.unwrap().clone();
         ng = mysql::from_value(a.get("ng").unwrap());
         rk = mysql::from_value(a.get("rk").unwrap());
         break;
     }
-
+    if count == 0 {
+        let sql = format!("insert into user (userid, status) values ('{}', 'online');", data.id);
+        {
+            conn.query(sql.clone()).unwrap();
+        }
+        let sql = format!("select id from user where userid='{}';", data.id);
+        println!("sql: {}", sql);
+        let qres = conn.query(sql.clone()).unwrap();
+        let mut id = -1;
+        for row in qres {
+            let a = row.unwrap().clone();
+            id = mysql::from_value(a.get("id").unwrap());
+        }
+        if id > 0 {
+            let sql = format!("insert into user_rank (id, ng, rk) values ({}, 1000, 1000);", id);
+            conn.query(sql.clone()).unwrap();
+        }
+    }
     let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
     let publish_packet = match qres {
         Ok(_) => {
@@ -75,3 +96,4 @@ pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysq
     sender.send(RoomEventData::Logout(UserLogoutData { id: id}));
     Ok(())
 }
+

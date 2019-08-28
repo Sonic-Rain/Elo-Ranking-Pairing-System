@@ -25,7 +25,7 @@ use crate::room::*;
 use crate::msg::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 1;
+const TEAM_SIZE: u16 = 4;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -68,7 +68,8 @@ pub struct StartQueueData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CancelQueueData {
-    pub id: String,
+    pub room: String,
+    pub action: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -178,7 +179,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
                                 }
                                 GameingGroups.push(start_group);
-                                println!("{:#?}", GameingGroups);
+                                println!("GameingGroups {:#?}", GameingGroups);
                                 Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
                                         .spawn()
@@ -305,7 +306,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             },
                             RoomEventData::CancelQueue(x) => {
                                 let mut success = false;
-                                let data = QueueRoom.remove(&x.id);
+                                let data = QueueRoom.remove(&x.room);
                                 match data {
                                     Some(x) => {
                                         success = true;
@@ -313,10 +314,10 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                                     _ => {}
                                 }
                                 if success {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.room.clone()), 
                                         msg: format!(r#"{{"msg":"ok"}}"#)});
                                 } else {
-                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                    msgtx.send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.room.clone()), 
                                         msg: format!(r#"{{"msg":"fail"}}"#)});
                                 }
                             },
@@ -450,7 +451,7 @@ pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool
 {
     let data: CancelQueueData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn().unwrap();
-    sender.send(RoomEventData::CancelQueue(CancelQueueData{id: data.id.clone()}));
+    sender.send(RoomEventData::CancelQueue(data));
     Ok(())
 }
 
