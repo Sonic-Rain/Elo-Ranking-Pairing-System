@@ -5,6 +5,7 @@ use std::rc::Rc;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct User {
     pub id: String,
+    pub hero: String,
     pub ng: u16,
     pub rk: u16,
 }

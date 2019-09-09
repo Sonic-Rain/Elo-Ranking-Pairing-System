@@ -1,5 +1,3 @@
-
-
 use mqtt;
 use mqtt::packet::*;
 use serde_json::{self, Result, Value};
@@ -25,7 +23,7 @@ use crate::room::*;
 use crate::msg::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 4;
+const TEAM_SIZE: u16 = 1;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -53,6 +51,12 @@ pub struct JoinRoomData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserLoginData {
     pub u: User,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UserNGHeroData {
+    pub id: String,
+    pub hero: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -85,6 +89,7 @@ pub enum RoomEventData {
     Logout(UserLogoutData),
     Create(CreateRoomData),
     Close(CloseRoomData),
+    ChooseNGHero(UserNGHeroData),
     Invite(InviteRoomData),
     Join(JoinRoomData),
     StartQueue(StartQueueData),
@@ -101,14 +106,45 @@ fn show(dur: Duration) {
     );
 }
 
-pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
-    
+fn SendGameList(game: &FightGame, msgtx: Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
+    pub struct ListCell {
+        pub id: String,
+        pub name: String,
+        pub hero: String,
+    }
+    pub struct GameCell {
+        pub game: u64,  
+        pub team1: Vec<ListCell>,
+        pub team2: Vec<ListCell>,
+    }
+
+    for r in &game.room_names {
+        let sql = format!("select userid,name from user where userid='{}';", r);
+        println!("sql: {}", sql);
+        let qres = conn.query(sql.clone()).unwrap();
+        let mut userid: String = "".to_owned();
+        let mut name: String = "".to_owned();
+
+        let mut count = 0;
+        for row in qres {
+            count += 1;
+            let a = row.unwrap().clone();
+            userid = mysql::from_value(a.get("userid").unwrap());
+            name = mysql::from_value(a.get("name").unwrap());
+            break;
+        }
+
+    }
+}
+
+pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update200ms = tick(Duration::from_millis(200));
     let update100ms = tick(Duration::from_millis(100));
     
     thread::spawn(move || {
+        let mut conn = pool.get_conn().unwrap();
         let mut TotalRoom: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut QueueRoom: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: Vec<Rc<RefCell<FightGroup>>> = vec![];
@@ -119,6 +155,7 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
         let mut TotalUserStatus: BTreeMap<String, UserStatus> = BTreeMap::new();
         let mut roomCount: u32 = 0;
         let mut game_port: u16 = 7777;
+        let mut game_id: u64 = 0;
         loop {
             select! {
                 recv(update200ms) -> _ => {
@@ -172,18 +209,29 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                             PrestartStatus::Ready => {
                                 let mut start_group = PreStartGroups.remove(i);
                                 game_port += 1;
+                                game_id += 1;
+                                if game_port > 65500 {
+                                    game_port = 7777;
+                                }
+                                if game_id > u64::max_value()-10 {
+                                    game_id = 0;
+                                }
                                 start_group.ready();
                                 start_group.update_names();
                                 for r in &start_group.room_names {
                                     msgtx.send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                        msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}"}}"#, r, game_port)});
+                                        msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
+                                            r, game_port, game_id)});
                                 }
-                                GameingGroups.push(start_group);
+                                GameingGroups.push(start_group.clone());
                                 println!("GameingGroups {:#?}", GameingGroups);
+                                println!("game_port: {}", game_port);
                                 Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
                                         .spawn()
                                         .expect("sh command failed to start");
+                                std::thread::sleep_ms(10000);
+                                SendGameList(&start_group, msgtx.clone(), &mut conn);
                             },
                             PrestartStatus::Cancel => {
                                 let mut start_group = PreStartGroups.remove(i);
@@ -202,6 +250,14 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
+                            RoomEventData::ChooseNGHero(x) => {
+                                for u in &mut TotalUsers {
+                                    if u.id == x.id {
+                                        u.hero = x.hero;
+                                        break;
+                                    }
+                                }
+                            },
                             RoomEventData::Invite(x) => {
                                 let mut hasUser = false;
                                 for u in &TotalUsers {
@@ -419,65 +475,66 @@ pub fn init(msgtx: Sender<MqttMsg>) -> Sender<RoomEventData> {
     tx
 }
 
-pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: CreateRoomData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Create(CreateRoomData{id: data.id.clone()}));
     Ok(())
 }
 
-pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: CloseRoomData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Close(CloseRoomData{id: data.id.clone()}));
     Ok(())
 }
 
-pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: StartQueueData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::StartQueue(StartQueueData{room: data.room.clone(), action: data.action.clone()}));
     Ok(())
 }
 
-pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: CancelQueueData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::CancelQueue(data));
     Ok(())
 }
 
-pub fn prestart(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn prestart(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: PreStartData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::PreStart(data));
     Ok(())
 }
 
-pub fn join(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn join(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: JoinRoomData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Join(data));
     Ok(())
 }
 
-pub fn invite(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn choose_ng_hero(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
+{
+    let data: UserNGHeroData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::ChooseNGHero(data));
+    Ok(())
+}
+
+pub fn invite(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: InviteRoomData = serde_json::from_value(v)?;
-    let mut conn = pool.get_conn().unwrap();
     sender.send(RoomEventData::Invite(data));
     Ok(())
 }

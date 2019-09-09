@@ -83,20 +83,28 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let mut channel_filters: Vec<(TopicFilter, QualityOfService)> = vec![
         (TopicFilter::new("reset").unwrap(), QualityOfService::Level0),
 
-        (TopicFilter::new("member/+/send/login").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("member/+/send/logout").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("member/+/send/login").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("member/+/send/logout").unwrap(), QualityOfService::Level1),
 
-        (TopicFilter::new("room/+/send/create").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/close").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/start_queue").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/cancel_queue").unwrap(), QualityOfService::Level0),        
-        (TopicFilter::new("room/+/send/invite").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/join").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/accept_join").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/kick").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/leave").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/prestart").unwrap(), QualityOfService::Level0),
-        (TopicFilter::new("room/+/send/start").unwrap(), QualityOfService::Level0),
+        (TopicFilter::new("room/+/send/create").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/close").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/start_queue").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/cancel_queue").unwrap(), QualityOfService::Level1),        
+        (TopicFilter::new("room/+/send/invite").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/join").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/accept_join").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/kick").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/leave").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/prestart").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("room/+/send/start").unwrap(), QualityOfService::Level1),
+
+        (TopicFilter::new("game/+/send/game_over").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("game/+/send/start_game").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("game/+/send/choose").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("game/+/send/exit").unwrap(), QualityOfService::Level1),
+        (TopicFilter::new("game/+/send/choose").unwrap(), QualityOfService::Level1),
+
+
     ];
     //= matches.values_of("SUBSCRIBE").unwrap().map(|c| (TopicFilter::new(c.to_string()).unwrap(), QualityOfService::Level0)).collect();
 
@@ -183,19 +191,25 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let reinvite = Regex::new(r"\w+/(\w+)/send/invite").unwrap();
     let rejoin = Regex::new(r"\w+/(\w+)/send/join").unwrap();
     let reset = Regex::new(r"reset").unwrap();
+    let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
-    let mut sender: Sender<RoomEventData> = event_room::init(tx);
+    let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone());
     let mut stream2 = stream.try_clone().unwrap();
     thread::spawn(move || {
-        loop {
+        let mut pkid = 100;
+        loop {            
             select! {
                 recv(rx) -> d => {
                     if let Ok(d) = d {
-                        let publish_packet = PublishPacket::new(TopicName::new(d.topic).unwrap(), QoSWithPacketIdentifier::Level0, d.msg.clone());
+                        let publish_packet = PublishPacket::new(TopicName::new(d.topic).unwrap(), QoSWithPacketIdentifier::Level1(pkid), d.msg.clone());
                         let mut buf = Vec::new();
                         publish_packet.encode(&mut buf).unwrap();
                         stream2.write_all(&buf[..]).unwrap();
+                        pkid += 1;
+                        if pkid > 65535 {
+                            pkid = 100;
+                        }
                     }
                 }
             }
@@ -234,12 +248,17 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let cap = reinvite.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("invite: userid: {} json: {:?}", userid, v);
-                        event_room::invite(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::invite(&mut stream, userid, v, sender.clone())?;
+                    } else if rechoosehero.is_match(publ.topic_name()) {
+                        let cap = rechoosehero.captures(publ.topic_name()).unwrap();
+                        let userid = cap[1].to_string();
+                        info!("choose ng hero: userid: {} json: {:?}", userid, v);
+                        event_room::choose_ng_hero(&mut stream, userid, v, sender.clone())?;
                     } else if rejoin.is_match(publ.topic_name()) {
                         let cap = rejoin.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("join: userid: {} json: {:?}", userid, v);
-                        event_room::join(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::join(&mut stream, userid, v, sender.clone())?;
                     } else if relogin.is_match(publ.topic_name()) {
                         let cap = relogin.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
@@ -254,27 +273,27 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         let cap = recreate.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("create: userid: {} json: {:?}", userid, v);
-                        event_room::create(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::create(&mut stream, userid, v, sender.clone())?;
                     } else if reclose.is_match(publ.topic_name()) {
                         let cap = reclose.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("close: userid: {} json: {:?}", userid, v);
-                        event_room::close(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::close(&mut stream, userid, v, sender.clone())?;
                     } else if restart_queue.is_match(publ.topic_name()) {
                         let cap = restart_queue.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("start_queue: userid: {} json: {:?}", userid, v);
-                        event_room::start_queue(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::start_queue(&mut stream, userid, v, sender.clone())?;
                     } else if recancel_queue.is_match(publ.topic_name()) {
                         let cap = recancel_queue.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("cancel_queue: userid: {} json: {:?}", userid, v);
-                        event_room::cancel_queue(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::cancel_queue(&mut stream, userid, v, sender.clone())?;
                     } else if represtart.is_match(publ.topic_name()) {
                         let cap = represtart.captures(publ.topic_name()).unwrap();
                         let userid = cap[1].to_string();
                         info!("represtart: userid: {} json: {:?}", userid, v);
-                        event_room::prestart(&mut stream, userid, v, pool.clone(), sender.clone())?;
+                        event_room::prestart(&mut stream, userid, v, sender.clone())?;
                     }
                 } else {
                     warn!("Json Parser error");

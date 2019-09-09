@@ -1,5 +1,3 @@
-
-
 use mqtt;
 use mqtt::packet::*;
 use serde_json::{self, Result, Value};
@@ -34,10 +32,11 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
 {
     let data: LoginData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
-    let sql = format!("select ng, rk from user as a join user_rank as b on a.id=b.id where userid='{}';", data.id);
+    let sql = format!("select ng, rk, name from user as a join user_rank as b on a.id=b.id where userid='{}';", data.id);
     let qres2: mysql::QueryResult = conn.query(sql.clone()).unwrap();
     let mut ng: u16 = 0;
     let mut rk: u16 = 0;
+    let mut name: String = "".to_owned();
     
     let mut count = 0;
     for row in qres2 {
@@ -45,10 +44,11 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
         let a = row.unwrap().clone();
         ng = mysql::from_value(a.get("ng").unwrap());
         rk = mysql::from_value(a.get("rk").unwrap());
+        name = mysql::from_value(a.get("name").unwrap());
         break;
     }
     if count == 0 {
-        let sql = format!("insert into user (userid, status) values ('{}', 'online');", data.id);
+        let sql = format!("insert into user (userid, name, status) values ('{}', 'default name', 'online');", data.id);
         {
             conn.query(sql.clone()).unwrap();
         }
@@ -61,21 +61,22 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
             id = mysql::from_value(a.get("id").unwrap());
         }
         if id > 0 {
-            let sql = format!("insert into user_rank (id, ng, rk) values ({}, 1000, 1000);", id);
+            let sql = format!("insert into user_rank (id, score) values ({}, 1000);", id);
+            conn.query(sql.clone()).unwrap();
+            let sql = format!("insert into user_ng (id, score) values ({}, 1000);", id);
             conn.query(sql.clone()).unwrap();
         }
     }
     let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
     let publish_packet = match qres {
         Ok(_) => {
-      
             //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), ng: ng, rk: rk}}));
         },
         _=> {
       
         }
     };
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), ng: ng, rk: rk}}));
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), ng: ng, rk: rk}}));
     Ok(())
 }
 
