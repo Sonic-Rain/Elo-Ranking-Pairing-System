@@ -17,10 +17,10 @@ pub struct UserStatus {
     pub group: Rc<RefCell<FightGroup>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct RoomData {
     pub rid: u32,
-    pub users: Vec<User>,
+    pub users: Vec<Rc<RefCell<User>>>,
     pub master: String,
     pub avg_ng: u16,
     pub avg_rk: u16,
@@ -32,8 +32,8 @@ impl RoomData {
         let mut sum_ng = 0;
         let mut sum_rk = 0;
         for user in &self.users {
-            sum_ng += user.ng;
-            sum_rk += user.rk;
+            sum_ng += user.borrow().ng;
+            sum_rk += user.borrow().rk;
         }
         if self.users.len() > 0 {
             self.avg_ng = sum_ng/self.users.len() as u16;
@@ -41,15 +41,15 @@ impl RoomData {
         }
     }
 
-    pub fn add_user(&mut self, user: &User) {
-        self.users.push(user.clone());
+    pub fn add_user(&mut self, user: Rc<RefCell<User>>) {
+        self.users.push(Rc::clone(&user));
         self.update_avg();
     }
 
     pub fn rm_user(&mut self, id: &String) {
         let mut i = 0;
         while i != self.users.len() {
-            if self.users[i].id == *id {
+            if self.users[i].borrow().id == *id {
                 self.users.remove(i);
             } else {
                 i += 1;
@@ -149,7 +149,7 @@ impl FightGroup {
         for room in &self.rooms {
             room.borrow_mut().ready = 1;
             for u in &room.borrow().users {
-                self.checks.push(FightCheck{id: u.id.clone(), check: 0});
+                self.checks.push(FightCheck{id: u.borrow().id.clone(), check: 0});
             }
         }
     }

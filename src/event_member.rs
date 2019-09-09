@@ -32,7 +32,9 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
 {
     let data: LoginData = serde_json::from_value(v).unwrap();
     let mut conn = pool.get_conn().unwrap();
-    let sql = format!("select ng, rk, name from user as a join user_rank as b on a.id=b.id where userid='{}';", data.id);
+    let sql = format!(r#"select a.score as ng, b.score as rk, name from user as c 
+                        join user_ng as a on a.id=c.id 
+                        join user_rank as b on b.id=c.id  where userid='{}';"#, data.id);
     let qres2: mysql::QueryResult = conn.query(sql.clone()).unwrap();
     let mut ng: u16 = 0;
     let mut rk: u16 = 0;

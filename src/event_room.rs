@@ -151,7 +151,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
         let mut PreStartGroups: Vec<FightGame> = vec![];
         let mut GameingGroups: Vec<FightGame> = vec![];
         let mut RoomMap: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
-        let mut TotalUsers: Vec<User> = vec![];
+        let mut TotalUsers: Vec<Rc<RefCell<User>>> = vec![];
         let mut TotalUserStatus: BTreeMap<String, UserStatus> = BTreeMap::new();
         let mut roomCount: u32 = 0;
         let mut game_port: u16 = 7777;
@@ -252,8 +252,8 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                         match d {
                             RoomEventData::ChooseNGHero(x) => {
                                 for u in &mut TotalUsers {
-                                    if u.id == x.id {
-                                        u.hero = x.hero;
+                                    if u.borrow().id == x.id {
+                                        u.borrow_mut().hero = x.hero;
                                         break;
                                     }
                                 }
@@ -261,7 +261,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                             RoomEventData::Invite(x) => {
                                 let mut hasUser = false;
                                 for u in &TotalUsers {
-                                    if u.id == x.cid {
+                                    if u.borrow().id == x.cid {
                                         hasUser = true;
                                         break;
                                     }
@@ -273,11 +273,11 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 println!("Invite {:#?}", x);
                             },
                             RoomEventData::Join(x) => {
-                                let mut tu:User = Default::default();
+                                let mut tu:Rc<RefCell<User>> = Default::default();
                                 let mut hasUser = false;
                                 for u in &TotalUsers {
-                                    if u.id == x.cid {
-                                        tu = u.clone();
+                                    if u.borrow().id == x.cid {
+                                        tu = Rc::clone(u);
                                         hasUser = true;
                                         break;
                                     }
@@ -378,12 +378,15 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 }
                             },
                             RoomEventData::Login(x) => {
-                                let mut success = false;
-                                if !TotalUsers.contains(&x.u) {
-                                    TotalUsers.push(x.u.clone());
-                                    success = true;
+                                let mut success = true;
+                                for i in 0..TotalUsers.len() {
+                                    if TotalUsers[i].borrow().id == x.u.id {
+                                        success = true;
+                                        break;
+                                    }
                                 }
                                 if success {
+                                    TotalUsers.push(Rc::new(RefCell::new(x.u.clone())));
                                     msgtx.send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                         msg: format!(r#"{{"msg":"ok"}}"#)});
                                 } else {
@@ -394,7 +397,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                             RoomEventData::Logout(x) => {
                                 let mut success = false;
                                 for i in 0..TotalUsers.len() {
-                                    if TotalUsers[i].id == x.id {
+                                    if TotalUsers[i].borrow().id == x.id {
                                         TotalUsers.remove(i);
                                         success = true;
                                         break;
@@ -422,8 +425,8 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         ready: 0,
                                     };
                                     for i in 0..TotalUsers.len() {
-                                        if TotalUsers[i].id == x.id {
-                                            new_room.add_user(&TotalUsers[i]);
+                                        if TotalUsers[i].borrow().id == x.id {
+                                            new_room.add_user(Rc::clone(&TotalUsers[i]));
                                             let r = Rc::new(RefCell::new(new_room));
                                             RoomMap.insert(
                                                 x.id.clone(),
