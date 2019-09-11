@@ -1,8 +1,4 @@
-use mqtt;
-use mqtt::packet::*;
 use serde_json::{self, Result, Value};
-use mqtt::{Decodable, Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
 use std::env;
 use std::io::{self, Write};
 use serde_derive::{Serialize, Deserialize};
@@ -27,7 +23,7 @@ struct LogoutData {
 }
 
 
-pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: LoginData = serde_json::from_value(v).unwrap();
@@ -82,7 +78,7 @@ pub fn login(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql
     Ok(())
 }
 
-pub fn logout(stream: &mut std::net::TcpStream, id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn logout(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: LogoutData = serde_json::from_value(v).unwrap();

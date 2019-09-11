@@ -29,6 +29,22 @@ s = 1
 logincount = 1
 loopsize = 1
 
+idcount = 0;
+function getid()
+  idcount = idcount + 1
+  return idcount
+end
+
+
+cell = {
+  id = getid(),
+  isLogin = false,
+  hero = "",
+  start = false,
+  prestart = false,
+  nextaction = function(cell, aclient)
+    end,
+  }
 
 local basic = function()
     print("Basic test")
@@ -65,6 +81,9 @@ local basic = function()
         local msg = string.format([[{"id":"da_%02d"}]], i)
         local topic = string.format("room/da_%02d/send/create", i)
         assert(aclient:publish(topic, msg, { qos = 1 }))
+        local msg = string.format([[{"id":"da_%02d","hero":"freyja"}]], i)
+        local topic = string.format("member/da_%02d/send/choose_hero", i)
+        assert(aclient:publish(topic, msg, { qos = 1 }))
         local msg = string.format([[{"room":"da_%02d", "action":"start game"}]], i)
         local topic = string.format("room/da_%02d/send/start_queue", i)
         assert(aclient:publish(topic, msg, { qos = 1 }))
@@ -76,26 +95,6 @@ local basic = function()
       s = s+logincount+1
     end
     aclient:message_loop(1)
-    --[=[
-    for i = 1,logincount do
-      local msg = string.format([[{"id":"da_%02d"}]], i)
-      local topic = string.format("member/da_%02d/send/login", i)
-      assert(aclient:publish(topic, msg, { qos = 1 }))
-    end
-    aclient:message_loop(1)
-    for i = 1,logincount do
-      local msg = string.format([[{"id":"da_%02d"}]], i)
-      local topic = string.format("room/da_%02d/send/create", i)
-      assert(aclient:publish(topic, msg, { qos = 1 }))
-    end
-    aclient:message_loop(1)
-    for i = 1,logincount do
-      local msg = string.format([[{"room":"da_%02d", "action":"start game"}]], i)
-      local topic = string.format("room/da_%02d/send/start_queue", i)
-      assert(aclient:publish(topic, msg, { qos = 1 }))
-    end
-    ]=]
-    
     
     aclient:disconnect()
     print("Basic test finished")

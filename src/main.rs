@@ -13,11 +13,7 @@ use std::net::TcpStream;
 use std::str;
 use clap::{App, Arg};
 use uuid::Uuid;
-
-use mqtt::control::variable_header::ConnectReturnCode;
-use mqtt::packet::*;
-use mqtt::{Decodable, Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
+use rumqtt::{MqttClient, MqttOptions, QoS};
 
 use std::thread;
 use std::time::Duration;
@@ -41,7 +37,6 @@ fn get_url() -> String {
     "mysql://erps:erpsgogo@127.0.0.1:3306/erps".into()
 }
 
-
 fn main() -> std::result::Result<(), std::io::Error> {
     // configure logging
     env::set_var("RUST_LOG", env::var_os("RUST_LOG").unwrap_or_else(|| "info".into()));
@@ -54,7 +49,13 @@ fn main() -> std::result::Result<(), std::io::Error> {
                 .short("S")
                 .long("server")
                 .takes_value(true)
-                .help("MQTT server address (host:port)"),
+                .help("MQTT server address (127.0.0.1)"),
+        ).arg(
+            Arg::with_name("PORT")
+                .short("P")
+                .long("port")
+                .takes_value(true)
+                .help("MQTT server port (1883)"),
         ).arg(
             Arg::with_name("USER_NAME")
                 .short("u")
@@ -75,111 +76,52 @@ fn main() -> std::result::Result<(), std::io::Error> {
                 .help("Client identifier"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or("127.0.0.1:1883");
+    let server_addr = matches.value_of("SERVER").unwrap_or("127.0.0.1").to_owned();
+    let server_port = matches.value_of("PORT").unwrap_or("1883").to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
         .unwrap_or_else(generate_client_id);
-    let mut channel_filters: Vec<(TopicFilter, QualityOfService)> = vec![
-        (TopicFilter::new("reset").unwrap(), QualityOfService::Level0),
+    let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>().unwrap());
+    mqtt_options = mqtt_options.set_keep_alive(100);
+    let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone()).unwrap();
+    mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce).unwrap();
 
-        (TopicFilter::new("member/+/send/login").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("member/+/send/logout").unwrap(), QualityOfService::Level1),
+    mqtt_client.subscribe("room/+/send/create", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/close", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/invite", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/join", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/kick", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/leave", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/prestart", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/start", QoS::AtLeastOnce).unwrap();
 
-        (TopicFilter::new("room/+/send/create").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/close").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/start_queue").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/cancel_queue").unwrap(), QualityOfService::Level1),        
-        (TopicFilter::new("room/+/send/invite").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/join").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/accept_join").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/kick").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/leave").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/prestart").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("room/+/send/start").unwrap(), QualityOfService::Level1),
-
-        (TopicFilter::new("game/+/send/game_over").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("game/+/send/start_game").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("game/+/send/choose").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("game/+/send/exit").unwrap(), QualityOfService::Level1),
-        (TopicFilter::new("game/+/send/choose").unwrap(), QualityOfService::Level1),
-
-
-    ];
-    //= matches.values_of("SUBSCRIBE").unwrap().map(|c| (TopicFilter::new(c.to_string()).unwrap(), QualityOfService::Level0)).collect();
-
-    //channel_filters.push();
-
-    let keep_alive = 100;
-
-    info!("Connecting to {:?} ... ", server_addr);
-    let mut stream = TcpStream::connect(server_addr).unwrap();
-    info!("Connected!");
-
-    info!("Client identifier {:?}", client_id);
-    let mut conn = ConnectPacket::new("MQTT", client_id);
-    conn.set_clean_session(true);
-    conn.set_keep_alive(keep_alive);
-    let mut buf = Vec::new();
-    conn.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
-
-    let connack = ConnackPacket::decode(&mut stream).unwrap();
-    trace!("CONNACK {:?}", connack);
-
-    if connack.connect_return_code() != ConnectReturnCode::ConnectionAccepted {
-        panic!(
-            "Failed to connect to server, return code {:?}",
-            connack.connect_return_code()
-        );
-    }
-
-    // const CHANNEL_FILTER: &'static str = "typing-speed-test.aoeu.eu";
-    trace!("Applying channel filters {:?} ...", channel_filters);
-    let sub = SubscribePacket::new(10, channel_filters);
-    let mut buf = Vec::new();
-    sub.encode(&mut buf).unwrap();
-    stream.write_all(&buf[..]).unwrap();
-
-    loop {
-        let packet = match VariablePacket::decode(&mut stream) {
-            Ok(pk) => pk,
-            Err(err) => {
-                error!("Error in receiving packet {:?}", err);
-                continue;
-            }
-        };
-        trace!("PACKET {:?}", packet);
-
-        if let VariablePacket::SubackPacket(ref ack) = packet {
-            if ack.packet_identifier() != 10 {
-                panic!("SUBACK packet identifier not match");
-            }
-            info!("Subscribed!");
-            break;
-        }
-    }
-
-    let mut stream_clone = stream.try_clone().unwrap();
+    mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/exit", QoS::AtLeastOnce).unwrap();
+    
+    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
+    let pool = mysql::Pool::new(get_url().as_str()).unwrap();
+    thread::sleep_ms(100);
     thread::spawn(move || {
-        let mut last_ping_time = 0;
-        let mut next_ping_time = last_ping_time + (keep_alive as f32 * 0.9) as i64;
+        let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>().unwrap());
+        mqtt_options = mqtt_options.set_keep_alive(100);
+        let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone()).unwrap();
         loop {
-            let current_timestamp = time::get_time().sec;
-            if keep_alive > 0 && current_timestamp >= next_ping_time {
-                let pingreq_packet = PingreqPacket::new();
-
-                let mut buf = Vec::new();
-                pingreq_packet.encode(&mut buf).unwrap();
-                stream_clone.write_all(&buf[..]).unwrap();
-
-                last_ping_time = current_timestamp;
-                next_ping_time = last_ping_time + (keep_alive as f32 * 0.9) as i64;
-                thread::sleep(Duration::new((keep_alive / 2) as u64, 0));
+            select! {
+                recv(rx) -> d => {
+                    if let Ok(d) = d {
+                        mqtt_client.publish(d.topic, QoS::AtLeastOnce, false, d.msg).unwrap();
+                    }
+                }
             }
         }
     });
-    let pool = mysql::Pool::new(get_url().as_str()).unwrap();
 
     let relogin = Regex::new(r"\w+/(\w+)/send/login").unwrap();
     let relogout = Regex::new(r"\w+/(\w+)/send/logout").unwrap();
@@ -193,114 +135,88 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let reset = Regex::new(r"reset").unwrap();
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
     
-    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
     let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone());
-    let mut stream2 = stream.try_clone().unwrap();
-    thread::spawn(move || {
-        let mut pkid = 100;
-        loop {            
-            select! {
-                recv(rx) -> d => {
-                    if let Ok(d) = d {
-                        let publish_packet = PublishPacket::new(TopicName::new(d.topic).unwrap(), QoSWithPacketIdentifier::Level1(pkid), d.msg.clone());
-                        let mut buf = Vec::new();
-                        publish_packet.encode(&mut buf).unwrap();
-                        stream2.write_all(&buf[..]).unwrap();
-                        pkid += 1;
-                        if pkid > 65535 {
-                            pkid = 100;
-                        }
-                    }
-                }
-            }
-        }
-    });
+    
     loop {
-        let mut sender = sender.clone();
-        let packet = match VariablePacket::decode(&mut stream) {
-            Ok(pk) => pk,
-            Err(err) => {
-                error!("Error in receiving packet {}", err);
-                continue;
-            }
-        };
-        trace!("PACKET {:?}", packet);
-
-        match packet {
-            VariablePacket::PingrespPacket(..) => {
-            }
-            VariablePacket::PublishPacket(ref publ) => {
-                let msg = match str::from_utf8(&publ.payload_ref()[..]) {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        error!("Failed to decode publish message {:?}", err);
-                        continue;
+        use rumqtt::Notification::Publish;
+        select! {
+            recv(notifications) -> notification => {
+                if let Ok(x) = notification {
+                    if let Publish(x) = x {
+                        let payload = x.payload;
+                        let msg = match str::from_utf8(&payload[..]) {
+                            Ok(msg) => msg,
+                            Err(err) => {
+                                error!("Failed to decode publish message {:?}", err);
+                                continue;
+                            }
+                        };
+                        let topic_name = x.topic_name.as_str();
+                        let vo : Result<Value> = serde_json::from_str(msg);
+                        if reset.is_match(topic_name) {
+                            info!("reset");
+                            sender.send(RoomEventData::Reset());
+                        }
+                        let vo : Result<Value> = serde_json::from_str(msg);
+                        
+                        if let Ok(v) = vo {
+                            if reinvite.is_match(topic_name) {
+                                let cap = reinvite.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("invite: userid: {} json: {:?}", userid, v);
+                                event_room::invite(userid, v, sender.clone())?;
+                            } else if rechoosehero.is_match(topic_name) {
+                                let cap = rechoosehero.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("choose ng hero: userid: {} json: {:?}", userid, v);
+                                event_room::choose_ng_hero(userid, v, sender.clone())?;
+                            } else if rejoin.is_match(topic_name) {
+                                let cap = rejoin.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("join: userid: {} json: {:?}", userid, v);
+                                event_room::join(userid, v, sender.clone())?;
+                            } else if relogin.is_match(topic_name) {
+                                let cap = relogin.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("login: userid: {} json: {:?}", userid, v);
+                                event_member::login(userid, v, pool.clone(), sender.clone())?;
+                            } else if relogout.is_match(topic_name) {
+                                let cap = relogout.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("logout: userid: {} json: {:?}", userid, v);
+                                event_member::logout(userid, v, pool.clone(), sender.clone())?;
+                            } else if recreate.is_match(topic_name) {
+                                let cap = recreate.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("create: userid: {} json: {:?}", userid, v);
+                                event_room::create(userid, v, sender.clone())?;
+                            } else if reclose.is_match(topic_name) {
+                                let cap = reclose.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("close: userid: {} json: {:?}", userid, v);
+                                event_room::close(userid, v, sender.clone())?;
+                            } else if restart_queue.is_match(topic_name) {
+                                let cap = restart_queue.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("start_queue: userid: {} json: {:?}", userid, v);
+                                event_room::start_queue(userid, v, sender.clone())?;
+                            } else if recancel_queue.is_match(topic_name) {
+                                let cap = recancel_queue.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("cancel_queue: userid: {} json: {:?}", userid, v);
+                                event_room::cancel_queue(userid, v, sender.clone())?;
+                            } else if represtart.is_match(topic_name) {
+                                let cap = represtart.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("represtart: userid: {} json: {:?}", userid, v);
+                                event_room::prestart(userid, v, sender.clone())?;
+                            }
+                        } else {
+                            warn!("Json Parser error");
+                        };
                     }
-                };
-                if reset.is_match(publ.topic_name()) {
-                    info!("reset");
-                    sender.send(RoomEventData::Reset());
                 }
-                let vo : Result<Value> = serde_json::from_str(msg);
-                
-                if let Ok(v) = vo {
-                     if reinvite.is_match(publ.topic_name()) {
-                        let cap = reinvite.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("invite: userid: {} json: {:?}", userid, v);
-                        event_room::invite(&mut stream, userid, v, sender.clone())?;
-                    } else if rechoosehero.is_match(publ.topic_name()) {
-                        let cap = rechoosehero.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("choose ng hero: userid: {} json: {:?}", userid, v);
-                        event_room::choose_ng_hero(&mut stream, userid, v, sender.clone())?;
-                    } else if rejoin.is_match(publ.topic_name()) {
-                        let cap = rejoin.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("join: userid: {} json: {:?}", userid, v);
-                        event_room::join(&mut stream, userid, v, sender.clone())?;
-                    } else if relogin.is_match(publ.topic_name()) {
-                        let cap = relogin.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("login: userid: {} json: {:?}", userid, v);
-                        event_member::login(&mut stream, userid, v, pool.clone(), sender.clone())?;
-                    } else if relogout.is_match(publ.topic_name()) {
-                        let cap = relogout.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("logout: userid: {} json: {:?}", userid, v);
-                        event_member::logout(&mut stream, userid, v, pool.clone(), sender.clone())?;
-                    } else if recreate.is_match(publ.topic_name()) {
-                        let cap = recreate.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("create: userid: {} json: {:?}", userid, v);
-                        event_room::create(&mut stream, userid, v, sender.clone())?;
-                    } else if reclose.is_match(publ.topic_name()) {
-                        let cap = reclose.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("close: userid: {} json: {:?}", userid, v);
-                        event_room::close(&mut stream, userid, v, sender.clone())?;
-                    } else if restart_queue.is_match(publ.topic_name()) {
-                        let cap = restart_queue.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("start_queue: userid: {} json: {:?}", userid, v);
-                        event_room::start_queue(&mut stream, userid, v, sender.clone())?;
-                    } else if recancel_queue.is_match(publ.topic_name()) {
-                        let cap = recancel_queue.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("cancel_queue: userid: {} json: {:?}", userid, v);
-                        event_room::cancel_queue(&mut stream, userid, v, sender.clone())?;
-                    } else if represtart.is_match(publ.topic_name()) {
-                        let cap = represtart.captures(publ.topic_name()).unwrap();
-                        let userid = cap[1].to_string();
-                        info!("represtart: userid: {} json: {:?}", userid, v);
-                        event_room::prestart(&mut stream, userid, v, sender.clone())?;
-                    }
-                } else {
-                    warn!("Json Parser error");
-                };
-                
             }
-            _ => {}
         }
     }
 }

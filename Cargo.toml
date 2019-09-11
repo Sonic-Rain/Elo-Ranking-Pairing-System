@@ -12,7 +12,7 @@ edition = "2018"
 [dependencies]
 crossbeam-channel = "0.3"
 mysql = "*"
-mqtt-protocol = "0.7"
+rumqtt = "*"
 clap = "2"
 log = "*"
 env_logger = "*"

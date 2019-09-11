@@ -1,8 +1,4 @@
-use mqtt;
-use mqtt::packet::*;
 use serde_json::{self, Result, Value};
-use mqtt::{Decodable, Encodable, QualityOfService};
-use mqtt::{TopicFilter, TopicName};
 use std::env;
 use std::io::{self, Write};
 use serde_derive::{Serialize, Deserialize};
@@ -478,7 +474,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
     tx
 }
 
-pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: CreateRoomData = serde_json::from_value(v)?;
@@ -486,7 +482,7 @@ pub fn create(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Se
     Ok(())
 }
 
-pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn close(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: CloseRoomData = serde_json::from_value(v)?;
@@ -494,7 +490,7 @@ pub fn close(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sen
     Ok(())
 }
 
-pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn start_queue(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: StartQueueData = serde_json::from_value(v)?;
@@ -502,7 +498,7 @@ pub fn start_queue(stream: &mut std::net::TcpStream, id: String, v: Value, sende
     Ok(())
 }
 
-pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn cancel_queue(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: CancelQueueData = serde_json::from_value(v)?;
@@ -510,7 +506,7 @@ pub fn cancel_queue(stream: &mut std::net::TcpStream, id: String, v: Value, send
     Ok(())
 }
 
-pub fn prestart(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn prestart(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: PreStartData = serde_json::from_value(v)?;
@@ -518,7 +514,7 @@ pub fn prestart(stream: &mut std::net::TcpStream, id: String, v: Value, sender: 
     Ok(())
 }
 
-pub fn join(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn join(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: JoinRoomData = serde_json::from_value(v)?;
@@ -526,7 +522,7 @@ pub fn join(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Send
     Ok(())
 }
 
-pub fn choose_ng_hero(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: UserNGHeroData = serde_json::from_value(v)?;
@@ -534,7 +530,7 @@ pub fn choose_ng_hero(stream: &mut std::net::TcpStream, id: String, v: Value, se
     Ok(())
 }
 
-pub fn invite(stream: &mut std::net::TcpStream, id: String, v: Value, sender: Sender<RoomEventData>)
+pub fn invite(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), std::io::Error>
 {
     let data: InviteRoomData = serde_json::from_value(v)?;
