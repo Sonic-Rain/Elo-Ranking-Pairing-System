@@ -12,13 +12,6 @@ pub struct User {
 }
 
 #[derive(Clone, Debug)]
-pub struct UserStatus {
-    pub id: String,
-    pub room: Rc<RefCell<RoomData>>,
-    pub group: Rc<RefCell<FightGroup>>,
-}
-
-#[derive(Clone, Debug)]
 pub struct RoomData {
     pub rid: u32,
     pub users: Vec<Rc<RefCell<User>>>,
