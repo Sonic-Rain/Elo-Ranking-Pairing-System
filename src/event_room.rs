@@ -102,7 +102,7 @@ fn show(dur: Duration) {
     );
 }
 
-fn SendGameList(game: &FightGame, msgtx: Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
+fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
     pub struct ListCell {
         pub id: String,
         pub name: String,
@@ -114,7 +114,7 @@ fn SendGameList(game: &FightGame, msgtx: Sender<MqttMsg>, conn: &mut mysql::Pool
         pub team2: Vec<ListCell>,
     }
 
-    for r in &game.room_names {
+    for r in &game.borrow().room_names {
         let sql = format!("select userid,name from user where userid='{}';", r);
         println!("sql: {}", sql);
         let qres = conn.query(sql.clone()).unwrap();
@@ -144,8 +144,8 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
         let mut TotalRoom: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut QueueRoom: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: Vec<Rc<RefCell<FightGroup>>> = vec![];
-        let mut PreStartGroups: Vec<FightGame> = vec![];
-        let mut GameingGroups: Vec<FightGame> = vec![];
+        let mut PreStartGroups: Vec<Rc<RefCell<FightGame>>> = vec![];
+        let mut GameingGroups: Vec<Rc<RefCell<FightGame>>> = vec![];
         let mut RoomMap: BTreeMap<String, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut TotalUsers: Vec<Rc<RefCell<User>>> = vec![];
         let mut TotalUserStatus: BTreeMap<String, UserStatus> = BTreeMap::new();
@@ -193,7 +193,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 for r in &fg.room_names {
                                     msgtx.send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()});
                                 }
-                                PreStartGroups.push(fg.clone());
+                                PreStartGroups.push(Rc::new(RefCell::new(fg)));
                                 fg = Default::default();
                             }
                         }
@@ -201,7 +201,8 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                     // update prestart groups
                     let mut i = 0;
                     while i != PreStartGroups.len() {
-                        match PreStartGroups[i].check_prestart() {
+                        let res = PreStartGroups[i].borrow().check_prestart();
+                        match res {
                             PrestartStatus::Ready => {
                                 let mut start_group = PreStartGroups.remove(i);
                                 game_port += 1;
@@ -212,9 +213,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 if game_id > u64::max_value()-10 {
                                     game_id = 0;
                                 }
-                                start_group.ready();
-                                start_group.update_names();
-                                for r in &start_group.room_names {
+                                start_group.borrow_mut().ready();
+                                start_group.borrow_mut().update_names();
+                                for r in &start_group.borrow().room_names {
                                     msgtx.send(MqttMsg{topic:format!("room/{}/res/start", r), 
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
                                             r, game_port, game_id)});
@@ -227,12 +228,12 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         .spawn()
                                         .expect("sh command failed to start");
                                 std::thread::sleep_ms(10000);
-                                SendGameList(&start_group, msgtx.clone(), &mut conn);
+                                SendGameList(start_group, msgtx.clone(), &mut conn);
                             },
                             PrestartStatus::Cancel => {
                                 let mut start_group = PreStartGroups.remove(i);
-                                start_group.update_names();
-                                for r in &start_group.room_names {
+                                start_group.borrow_mut().update_names();
+                                for r in &start_group.borrow().room_names {
                                     msgtx.send(MqttMsg{topic:format!("room/{}/res/prestart", r), 
                                         msg: format!(r#"{{"msg":"stop queue"}}"#)});
                                 }
