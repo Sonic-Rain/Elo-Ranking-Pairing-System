@@ -2,12 +2,13 @@ use serde_derive::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
     pub id: String,
     pub hero: String,
     pub ng: u16,
     pub rk: u16,
+    pub rid: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -42,6 +43,7 @@ impl RoomData {
     }
 
     pub fn add_user(&mut self, user: Rc<RefCell<User>>) {
+        user.borrow_mut().rid = self.rid;
         self.users.push(Rc::clone(&user));
         self.update_avg();
     }
@@ -50,6 +52,7 @@ impl RoomData {
         let mut i = 0;
         while i != self.users.len() {
             if self.users[i].borrow().id == *id {
+                self.users[i].borrow_mut().rid = 0;
                 self.users.remove(i);
             } else {
                 i += 1;
@@ -72,6 +75,7 @@ pub struct FightGroup {
     pub avg_ng: u16,
     pub avg_rk: u16,
     pub checks: Vec<FightCheck>,
+    pub rids: Vec<u32>,
     pub game_status: u16,
 }
 
@@ -122,18 +126,24 @@ impl FightGroup {
 
     pub fn add_room(&mut self, room: Rc<RefCell<RoomData>>) {
         self.rooms.push(Rc::clone(&room));
+        self.rids.push(room.borrow().rid);
         self.update_avg();
     }
 
-    pub fn rm_room(&mut self, id: &String) {
-        let mut i = 0;
-        while i != self.rooms.len() {
-            if self.rooms[i].borrow().master == *id {
-                self.rooms.remove(i);
-            } else {
-                i += 1;
-            }
+    pub fn rm_room_by_master(&mut self, id: &String) {
+        let pos = self.rooms.iter().position(|x| x.borrow().master == *id);
+        if let Some(x) = pos {
+            let rid = self.rooms[x].borrow().rid;
+            self.rids.retain(|&x| x != rid);
+            self.rooms.remove(x);
         }
+        self.update_avg();
+    }
+
+    pub fn rm_room_by_rid(&mut self, id: u32) {
+        let mut i = 0;
+        self.rids.retain(|&x| x != id);
+        self.rooms.retain(|x| x.borrow().rid != id);
         self.update_avg();
     }
 

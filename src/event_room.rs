@@ -19,7 +19,7 @@ use crate::room::*;
 use crate::msg::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 1;
+const TEAM_SIZE: u16 = 2;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -44,7 +44,7 @@ pub struct JoinRoomData {
     pub cid: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct UserLoginData {
     pub u: User,
 }
@@ -250,6 +250,8 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 for u in &mut TotalUsers {
                                     if u.borrow().id == x.id {
                                         u.borrow_mut().hero = x.hero;
+                                        msgtx.send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)});
                                         break;
                                     }
                                 }
@@ -392,6 +394,16 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                             },
                             RoomEventData::Logout(x) => {
                                 let mut success = false;
+                                for (id, room) in &mut TotalRoom {
+                                    room.borrow_mut().rm_user(&x.id);
+                                }
+                                for i in 0..TotalUsers.len() {
+                                    if TotalUsers[i].borrow().id == x.id {
+                                        TotalUsers.remove(i);
+                                        success = true;
+                                        break;
+                                    }
+                                }
                                 for i in 0..TotalUsers.len() {
                                     if TotalUsers[i].borrow().id == x.id {
                                         TotalUsers.remove(i);

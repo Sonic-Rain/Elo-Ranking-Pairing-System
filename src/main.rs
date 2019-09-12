@@ -87,6 +87,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone()).unwrap();
     mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtLeastOnce).unwrap();
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("room/+/send/close", QoS::AtLeastOnce).unwrap();
@@ -158,7 +159,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
                             sender.send(RoomEventData::Reset());
                         }
                         let vo : Result<Value> = serde_json::from_str(msg);
-                        
                         if let Ok(v) = vo {
                             if reinvite.is_match(topic_name) {
                                 let cap = reinvite.captures(topic_name).unwrap();
