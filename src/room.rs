@@ -9,6 +9,7 @@ pub struct User {
     pub ng: u16,
     pub rk: u16,
     pub rid: u32,
+    pub online: bool,
 }
 
 #[derive(Clone, Debug)]
