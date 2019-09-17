@@ -74,7 +74,7 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
       
         }
     };
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), ng: ng, rk: rk, rid:0, online: true}}));
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ..Default::default()}}));
     Ok(())
 }
 

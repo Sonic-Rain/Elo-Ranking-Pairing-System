@@ -9,6 +9,8 @@ pub struct User {
     pub ng: u16,
     pub rk: u16,
     pub rid: u32,
+    pub gid: u32,
+    pub game_id: u32,
     pub online: bool,
 }
 
@@ -40,6 +42,23 @@ impl RoomData {
         user.borrow_mut().rid = self.rid;
         self.users.push(Rc::clone(&user));
         self.update_avg();
+    }
+
+    pub fn close(&mut self) {
+        for user in &self.users {
+            user.borrow_mut().rid = 0;
+            user.borrow_mut().gid = 0;
+            user.borrow_mut().game_id = 0;
+        }
+        self.ready = 0;
+    }
+
+    pub fn clear_queue(&mut self) {
+        for user in &self.users {
+            user.borrow_mut().gid = 0;
+            user.borrow_mut().game_id = 0;
+        }
+        self.ready = 0;
     }
 
     pub fn rm_user(&mut self, id: &String) {
@@ -90,6 +109,13 @@ impl FightGroup {
                 c.check = -1;
                 return true;
             }
+        }
+        false
+    }
+
+    pub fn clear_queue(&mut self) -> bool {
+        for r in &mut self.rooms {
+            r.borrow_mut().clear_queue();
         }
         false
     }
@@ -145,6 +171,15 @@ impl FightGroup {
         self.checks.clear();
         for room in &self.rooms {
             room.borrow_mut().ready = 3;
+        }
+    }
+
+    pub fn set_group_id(&mut self, gid: u32) {
+        for room in &self.rooms {
+            room.borrow_mut().ready = 1;
+            for u in &room.borrow_mut().users {
+                u.borrow_mut().gid = gid;
+            }
         }
     }
     
@@ -209,6 +244,24 @@ impl FightGame {
             }
         }
         res
+    }
+
+    pub fn set_game_id(&mut self, gid: u32) {
+        for t in &mut self.teams {
+            for room in &mut t.borrow_mut().rooms {
+                room.borrow_mut().ready = 1;
+                for u in &room.borrow_mut().users {
+                    u.borrow_mut().game_id = gid;
+                }
+            }
+        }
+    }
+
+    pub fn clear_queue(&mut self) -> bool {
+        for r in &mut self.teams {
+            r.borrow_mut().clear_queue();
+        }
+        false
     }
 
     pub fn ready(&mut self) {
