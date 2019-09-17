@@ -344,20 +344,21 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 if let Some(u) = u {
                                     let gid = u.borrow().gid;
                                     if gid != 0 {
-                                        let g = ReadyGroups.remove(&gid);
+                                        let g = ReadyGroups.get(&gid);
                                         if let Some(gr) = g {
                                             if x.accept == true {
                                                 gr.borrow_mut().user_ready(&x.id);
                                             } else {
                                                 gr.borrow_mut().user_cancel(&x.id);
+                                                ReadyGroups.remove(&gid);
                                                 let r = QueueRoom.remove(&u.borrow().rid);
                                                 if let Some(r) = r {
                                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
                                                         msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
                                                 }
-                                                info!("QueueRoom: {:#?}", QueueRoom);
                                             }
                                         }
+                                        info!("ReadyGroups: {:#?}", ReadyGroups);
                                     }
                                 }
                             },
