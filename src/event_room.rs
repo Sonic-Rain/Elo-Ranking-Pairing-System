@@ -79,6 +79,12 @@ pub struct PreStartData {
     pub accept: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LeaveData {
+    pub room: String,
+    pub id: String,
+}
+
 pub enum RoomEventData {
     Reset(),
     Login(UserLoginData),
@@ -91,6 +97,7 @@ pub enum RoomEventData {
     StartQueue(StartQueueData),
     CancelQueue(CancelQueueData),
     PreStart(PreStartData),
+    Leave(LeaveData),
 }
 
 // Prints the elapsed time.
@@ -273,14 +280,24 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
+                            RoomEventData::Leave(x) => {
+                                let u = TotalUsers.get(&x.room);
+                                if let Some(u) = u {
+                                        let r = TotalRoom.get(&u.borrow().rid);
+                                        if let Some(r) = r {
+                                            r.borrow_mut().rm_user(&x.id);
+                                            r.borrow().publish_update(&msgtx);
+                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                        }
+                                }
+                            },
                             RoomEventData::ChooseNGHero(x) => {
-                                for (id, u) in &mut TotalUsers {
-                                    if u.borrow().id == x.id {
-                                        u.borrow_mut().hero = x.hero;
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
-                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)}).unwrap();
-                                        break;
-                                    }
+                                let u = TotalUsers.get(&x.id);
+                                if let Some(u) = u {
+                                    u.borrow_mut().hero = x.hero;
+                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
+                                        msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)}).unwrap();
                                 }
                             },
                             RoomEventData::Invite(x) => {

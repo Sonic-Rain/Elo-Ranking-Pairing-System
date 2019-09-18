@@ -104,6 +104,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/leave", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("game/+/send/exit", QoS::AtLeastOnce).unwrap();
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
@@ -135,6 +136,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let rejoin = Regex::new(r"\w+/(\w+)/send/join").unwrap();
     let reset = Regex::new(r"reset").unwrap();
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
+    let releave = Regex::new(r"\w+/(\w+)/send/leave").unwrap();
     
     let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone());
     
