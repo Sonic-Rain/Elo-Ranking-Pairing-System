@@ -35,13 +35,13 @@ pub struct CloseRoomData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InviteRoomData {
     pub room: String,
-    pub cid: String,
+    pub invite: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JoinRoomData {
     pub room: String,
-    pub cid: String,
+    pub join: String,
 }
 
 #[derive(Clone, Debug)]
@@ -284,49 +284,27 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 }
                             },
                             RoomEventData::Invite(x) => {
-                                let mut hasUser = false;
-                                for (id, u) in &TotalUsers {
-                                    if u.borrow().id == x.cid {
-                                        hasUser = true;
-                                        break;
-                                    }
-                                }
-                                if hasUser {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.cid.clone()), 
-                                        msg: format!(r#"{{"rid":"{}","cid":"{}"}}"#, x.room.clone(), x.cid.clone())}).unwrap();
+                                if TotalUsers.contains_key(&x.invite) {
+                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
+                                        msg: format!(r#"{{"room":"{}","invite":"{}"}}"#, x.room.clone(), x.invite.clone())}).unwrap();
                                 }
                                 println!("Invite {:#?}", x);
                             },
                             RoomEventData::Join(x) => {
-                                let mut tu:Rc<RefCell<User>> = Default::default();
-                                let mut hasUser = false;
-                                for (id, u) in &TotalUsers {
-                                    if u.borrow().id == x.cid {
-                                        tu = Rc::clone(u);
-                                        hasUser = true;
-                                        break;
+                                let u = TotalUsers.get(&x.room);
+                                let j = TotalUsers.get(&x.join);
+                                if let Some(u) = u {
+                                    if let Some(j) = j {
+                                        let r = TotalRoom.get(&u.borrow().rid);
+                                        if let Some(r) = r {
+                                            r.borrow_mut().add_user(Rc::clone(j));
+                                            r.borrow().publish_update(&msgtx);
+                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                                msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())}).unwrap();
+                                        }
                                     }
                                 }
-                                let mut hasRoom = false;
-                                if hasUser {
-                                    let r = TotalRoom.get(&get_rid_by_id(&x.room, &TotalUsers));
-                                    match r {
-                                        Some(r) => {
-                                            r.borrow_mut().users.push(tu);
-                                            println!("Join {:#?}", r);
-                                            hasRoom = true;
-                                        },
-                                        _ => {}
-                                    }
-                                }
-                                if hasRoom && hasUser {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.cid.clone()), 
-                                        msg: format!(r#"{{"room":"{}","cid":"{}","accept":true}}"#, x.room.clone(), x.cid.clone())}).unwrap();
-                                }
-                                else {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.cid.clone()), 
-                                        msg: format!(r#"{{"room":"{}","cid":"{}","accept":false}}"#, x.room.clone(), x.cid.clone())}).unwrap();
-                                }
+                                println!("TotalRoom {:#?}", TotalRoom);
                             },
                             RoomEventData::Reset() => {
                                 TotalRoom.clear();

@@ -1,6 +1,8 @@
 use serde_derive::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::msg::*;
+use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
@@ -59,6 +61,20 @@ impl RoomData {
             user.borrow_mut().game_id = 0;
         }
         self.ready = 0;
+    }
+
+    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>) {
+        #[derive(Serialize, Deserialize)]
+        pub struct teamCell {
+            pub room: String,  
+            pub team: Vec<String>,
+        }
+        let mut t = teamCell {room: self.master.clone(), team: vec![]};
+        
+        for user in &self.users {
+            t.team.push(user.borrow().id.clone());
+        }
+        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", self.master), msg: serde_json::to_string(&t).unwrap()}).unwrap();
     }
 
     pub fn rm_user(&mut self, id: &String) {
