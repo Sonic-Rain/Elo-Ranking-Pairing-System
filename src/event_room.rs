@@ -19,7 +19,7 @@ use crate::room::*;
 use crate::msg::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 2;
+const TEAM_SIZE: u16 = 1;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -260,8 +260,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         msg: format!(r#"{{"msg":"stop queue"}}"#)}).unwrap();
                                 }
                                 rm_ids.push(*id);
-                                info!("group: {:#?}", group);
-                                info!("QueueRoom: {:#?}", QueueRoom);
                             },
                             PrestartStatus::Wait => {
                                 
@@ -400,10 +398,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                     if let Some(r) = r {
                                         success = true;
                                         if success {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().rid), 
+                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
                                                 msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
                                         } else {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().rid), 
+                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
                                                 msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
                                         }
                                     }
@@ -426,8 +424,23 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                             },
                             RoomEventData::Logout(x) => {
                                 let mut success = false;
-                                for (id, room) in &mut TotalRoom {
-                                    room.borrow_mut().rm_user(&x.id);
+                                let u = TotalUsers.get(&x.id);
+                                if let Some(u) = u {
+                                    let gid = u.borrow().gid;
+                                    let rid = u.borrow().rid;
+                                    if gid != 0 {
+                                        let g = ReadyGroups.get(&gid);
+                                        if let Some(gr) = g {
+                                            gr.borrow_mut().user_cancel(&x.id);
+                                            ReadyGroups.remove(&gid);
+                                            let r = QueueRoom.remove(&rid);
+                                            if let Some(r) = r {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                            }
+                                            TotalRoom.remove(&rid);
+                                        }
+                                    }
                                 }
                                 let mut u = TotalUsers.remove(&x.id);
                                 if let Some(u) = u {
