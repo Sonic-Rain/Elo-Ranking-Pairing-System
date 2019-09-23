@@ -137,8 +137,9 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let reset = Regex::new(r"reset").unwrap();
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
     let releave = Regex::new(r"\w+/(\w+)/send/leave").unwrap();
+    let restart_game = Regex::new(r"\w+/(\w+)/send/start_game").unwrap();
     
-    let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone());
+    let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone())?;
     
     loop {
         use rumqtt::Notification::Publish;
@@ -210,8 +211,18 @@ fn main() -> std::result::Result<(), std::io::Error> {
                             } else if represtart.is_match(topic_name) {
                                 let cap = represtart.captures(topic_name).unwrap();
                                 let userid = cap[1].to_string();
-                                info!("represtart: userid: {} json: {:?}", userid, v);
+                                info!("prestart: userid: {} json: {:?}", userid, v);
                                 event_room::prestart(userid, v, sender.clone())?;
+                            } else if releave.is_match(topic_name) {
+                                let cap = releave.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("leave: userid: {} json: {:?}", userid, v);
+                                event_room::leave(userid, v, sender.clone())?;
+                            } else if restart_game.is_match(topic_name) {
+                                let cap = restart_game.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("start_game: userid: {} json: {:?}", userid, v);
+                                event_room::start_game(userid, v, sender.clone())?;
                             }
                         } else {
                             warn!("Json Parser error");

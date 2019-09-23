@@ -1,8 +1,9 @@
-use serde_json::{self, Result, Value};
+use serde_json::{self, Value};
 use std::env;
 use std::io::{self, Write};
 use serde_derive::{Serialize, Deserialize};
-use std::io::{Error, ErrorKind};
+use serde_json::json;
+use std::io::{ErrorKind};
 use log::{info, warn, error, trace};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,6 +15,7 @@ use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use std::collections::{HashMap, BTreeMap};
 use std::cell::RefCell;
 use std::rc::Rc;
+use failure::Error;
 
 use crate::room::*;
 use crate::msg::*;
@@ -36,6 +38,7 @@ pub struct CloseRoomData {
 pub struct InviteRoomData {
     pub room: String,
     pub invite: String,
+    pub from: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -85,6 +88,26 @@ pub struct LeaveData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct HeroCell {
+    pub id: String,
+    pub name: String,
+    pub hero: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct StartGameData {
+    pub game: u32,
+    pub action: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct StartGameSendData {
+    pub game: u32,  
+    pub team1: Vec<HeroCell>,
+    pub team2: Vec<HeroCell>,
+}
+
 pub enum RoomEventData {
     Reset(),
     Login(UserLoginData),
@@ -98,6 +121,7 @@ pub enum RoomEventData {
     CancelQueue(CancelQueueData),
     PreStart(PreStartData),
     Leave(LeaveData),
+    StartGame(StartGameData),
 }
 
 // Prints the elapsed time.
@@ -109,35 +133,38 @@ fn show(dur: Duration) {
     );
 }
 
-fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
-    pub struct ListCell {
-        pub id: String,
-        pub name: String,
-        pub hero: String,
-    }
-    pub struct GameCell {
-        pub game: u64,  
-        pub team1: Vec<ListCell>,
-        pub team2: Vec<ListCell>,
-    }
+fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
+    let mut res: StartGameSendData = Default::default();
+    res.game = game.borrow().game_id;
+    for (i, t) in game.borrow().teams.iter().enumerate() {
+        let ids = t.borrow().get_users_id_hero();
+        for (id, hero) in &ids {
+            let sql = format!("select userid,name from user where userid='{}';", id);
+            println!("sql: {}", sql);
+            let qres = conn.query(sql.clone()).unwrap();
+            let mut userid: String = "".to_owned();
+            let mut name: String = "".to_owned();
 
-    for r in &game.borrow().room_names {
-        let sql = format!("select userid,name from user where userid='{}';", r);
-        println!("sql: {}", sql);
-        let qres = conn.query(sql.clone()).unwrap();
-        let mut userid: String = "".to_owned();
-        let mut name: String = "".to_owned();
-
-        let mut count = 0;
-        for row in qres {
-            count += 1;
-            let a = row.unwrap().clone();
-            userid = mysql::from_value(a.get("userid").unwrap());
-            name = mysql::from_value(a.get("name").unwrap());
-            break;
+            let mut count = 0;
+            for row in qres {
+                count += 1;
+                let a = row.unwrap().clone();
+                userid = mysql::from_value(a.get("userid").unwrap());
+                name = mysql::from_value(a.get("name").unwrap());
+                let h: HeroCell = HeroCell {id:id.clone(), name:name, hero:hero.clone() };
+                if i == 0 {
+                    res.team1.push(h);
+                }
+                else {
+                    res.team2.push(h);
+                }
+                break;
+            }
         }
-
     }
+    info!("{:?}", res);
+    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/start_game", res.game), 
+                                        msg: json!(res).to_string()}).unwrap();
 }
 
 fn get_rid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u32 {
@@ -164,7 +191,8 @@ fn get_game_id_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -
     return 0;
 }
 
-pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> {
+pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) 
+    -> Result<Sender<RoomEventData>, std::io::Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update200ms = tick(Duration::from_millis(200));
@@ -227,6 +255,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 }
                                 game_id += 1;
                                 fg.set_game_id(game_id);
+                                info!("game id {}", game_id);
                                 PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
                                 fg = Default::default();
                             }
@@ -250,14 +279,19 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
                                             r, game_port, id.clone())}).unwrap();
                                 }
-                                GameingGroups.insert(id.clone(), group.clone());
-                                println!("GameingGroups {:#?}", GameingGroups);
-                                println!("game_port: {}", game_port);
+                                GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
+                                info!("GameingGroups {:#?}", GameingGroups);
+                                info!("game_port: {}", game_port);
+                                info!("game id {}", group.borrow().game_id);
                                 let cmd = Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
+                                        .arg(format!("-gameid {}", group.borrow().game_id))
                                         .spawn();
+                                        match cmd {
+                                            Ok(_) => {},
+                                            Err(_) => {},
+                                        }
                                 std::thread::sleep_ms(1000);
-                                SendGameList(Rc::clone(group), msgtx.clone(), &mut conn);
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
@@ -280,15 +314,32 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
+                            RoomEventData::StartGame(x) => {
+                                let g = GameingGroups.get(&x.game);
+                                if let Some(g) = g {
+                                    SendGameList(Rc::clone(g), &msgtx, &mut conn);
+                                }
+                            },
                             RoomEventData::Leave(x) => {
                                 let u = TotalUsers.get(&x.room);
                                 if let Some(u) = u {
                                         let r = TotalRoom.get(&u.borrow().rid);
+                                        let mut is_null = false;
                                         if let Some(r) = r {
+                                            let m = r.borrow().master.clone();
                                             r.borrow_mut().rm_user(&x.id);
-                                            r.borrow().publish_update(&msgtx);
+                                            if r.borrow().users.len() > 0 {
+                                                r.borrow().publish_update(&msgtx, m);
+                                            }
+                                            else {
+                                                is_null = true;
+                                            }
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
                                                 msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                        }
+                                        if is_null {
+                                            TotalRoom.remove(&u.borrow().rid);
+                                            QueueRoom.remove(&u.borrow().rid);
                                         }
                                 }
                             },
@@ -301,9 +352,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 }
                             },
                             RoomEventData::Invite(x) => {
-                                if TotalUsers.contains_key(&x.invite) {
+                                if TotalUsers.contains_key(&x.from) {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
-                                        msg: format!(r#"{{"room":"{}","invite":"{}"}}"#, x.room.clone(), x.invite.clone())}).unwrap();
+                                        msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())}).unwrap();
                                 }
                                 println!("Invite {:#?}", x);
                             },
@@ -315,7 +366,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         let r = TotalRoom.get(&u.borrow().rid);
                                         if let Some(r) = r {
                                             r.borrow_mut().add_user(Rc::clone(j));
-                                            r.borrow().publish_update(&msgtx);
+                                            let m = r.borrow().master.clone();
+                                            r.borrow().publish_update(&msgtx, m);
+                                            r.borrow().publish_update(&msgtx, x.join.clone());
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                                 msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())}).unwrap();
                                         }
@@ -423,6 +476,21 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                 if let Some(u) = u {
                                     let gid = u.borrow().gid;
                                     let rid = u.borrow().rid;
+                                    let r = TotalRoom.get(&u.borrow().rid);
+                                    let mut is_null = false;
+                                    if let Some(r) = r {
+                                        let m = r.borrow().master.clone();
+                                        r.borrow_mut().rm_user(&x.id);
+                                        if r.borrow().users.len() > 0 {
+                                            r.borrow().publish_update(&msgtx, m);
+                                        }
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                    }
+                                    if is_null {
+                                        TotalRoom.remove(&u.borrow().rid);
+                                        QueueRoom.remove(&u.borrow().rid);
+                                    }
                                     if gid != 0 {
                                         let g = ReadyGroups.get(&gid);
                                         if let Some(gr) = g {
@@ -458,6 +526,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         rid: room_id,
                                         users: vec![],
                                         master: x.id.clone(),
+                                        last_master: "".to_owned(),
                                         avg_ng: 0,
                                         avg_rk: 0,
                                         ready: 0,
@@ -467,6 +536,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
                                         new_room.add_user(Rc::clone(&u));
                                         let rid = new_room.rid;
                                         let r = Rc::new(RefCell::new(new_room));
+                                        r.borrow().publish_update(&msgtx, x.id.clone());
                                         TotalRoom.insert(
                                             rid,
                                             Rc::clone(&r),
@@ -509,7 +579,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) -> Sender<RoomEventData> 
             }
         }
     });
-    tx
+    Ok(tx)
 }
 
 pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
@@ -573,5 +643,21 @@ pub fn invite(id: String, v: Value, sender: Sender<RoomEventData>)
 {
     let data: InviteRoomData = serde_json::from_value(v)?;
     sender.send(RoomEventData::Invite(data));
+    Ok(())
+}
+
+pub fn leave(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
+{
+    let data: LeaveData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::Leave(data));
+    Ok(())
+}
+
+pub fn start_game(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), std::io::Error>
+{
+    let data: StartGameData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::StartGame(data));
     Ok(())
 }

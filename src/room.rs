@@ -21,6 +21,7 @@ pub struct RoomData {
     pub rid: u32,
     pub users: Vec<Rc<RefCell<User>>>,
     pub master: String,
+    pub last_master: String,
     pub avg_ng: u16,
     pub avg_rk: u16,
     pub ready: i8,
@@ -63,7 +64,7 @@ impl RoomData {
         self.ready = 0;
     }
 
-    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>) {
+    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>, r: String) {
         #[derive(Serialize, Deserialize)]
         pub struct teamCell {
             pub room: String,  
@@ -74,7 +75,7 @@ impl RoomData {
         for user in &self.users {
             t.team.push(user.borrow().id.clone());
         }
-        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", self.master), msg: serde_json::to_string(&t).unwrap()}).unwrap();
+        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", r), msg: serde_json::to_string(&t).unwrap()}).unwrap();
     }
 
     pub fn rm_user(&mut self, id: &String) {
@@ -86,6 +87,10 @@ impl RoomData {
             } else {
                 i += 1;
             }
+        }
+        if self.master == *id && self.users.len() > 0 {
+            self.last_master = self.master.clone();
+            self.master = self.users[0].borrow().id.clone();
         }
         self.update_avg();
     }
@@ -119,6 +124,15 @@ impl FightGroup {
         false
     }
 
+    pub fn get_users_id_hero(&self) -> Vec<(String, String)> {
+        let mut res: Vec<(String, String)> = vec![];
+        for r in &self.rooms {
+            for u in &r.borrow().users {
+                res.push((u.borrow().id.clone(), u.borrow().hero.clone()));
+            }
+        }
+        res
+    }
     pub fn user_cancel(&mut self, id: &String) -> bool {
         for c in &mut self.checks {
             if c.id == *id {
@@ -227,6 +241,7 @@ impl FightGroup {
 pub struct FightGame {
     pub teams: Vec<Rc<RefCell<FightGroup>>>,
     pub room_names: Vec<String>,
+    pub game_id: u32,
     pub user_count: u16,
     pub winteam: i16,
     pub game_status: u16,
@@ -271,6 +286,7 @@ impl FightGame {
                 }
             }
         }
+        self.game_id = gid;
     }
 
     pub fn clear_queue(&mut self) -> bool {
