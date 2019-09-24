@@ -84,6 +84,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
         .unwrap_or_else(generate_client_id);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>().unwrap());
     mqtt_options = mqtt_options.set_keep_alive(100);
+    mqtt_options = mqtt_options.set_clean_session(true);
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone()).unwrap();
     mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce).unwrap();

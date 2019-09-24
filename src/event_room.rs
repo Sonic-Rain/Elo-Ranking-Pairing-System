@@ -291,7 +291,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             Ok(_) => {},
                                             Err(_) => {},
                                         }
-                                std::thread::sleep_ms(1000);
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
