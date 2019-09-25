@@ -89,13 +89,6 @@ pub struct LeaveData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct HeroCell {
-    pub id: String,
-    pub name: String,
-    pub hero: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct StartGameData {
     pub game: u32,
     pub action: String,
@@ -104,8 +97,24 @@ pub struct StartGameData {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct StartGameSendData {
     pub game: u32,  
-    pub team1: Vec<HeroCell>,
-    pub team2: Vec<HeroCell>,
+    pub member: Vec<HeroCell>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct HeroCell {
+    pub id: String,
+    pub team: u16,
+    pub name: String,
+    pub hero: String,
+    pub buff: BTreeMap<String, f32>,
+    pub tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct GameOverData {
+    pub game: u32,  
+    pub win: Vec<String>,
+    pub lose: Vec<String>,
 }
 
 pub enum RoomEventData {
@@ -122,6 +131,7 @@ pub enum RoomEventData {
     PreStart(PreStartData),
     Leave(LeaveData),
     StartGame(StartGameData),
+    GameOver(GameOverData),
 }
 
 // Prints the elapsed time.
@@ -133,7 +143,8 @@ fn show(dur: Duration) {
     );
 }
 
-fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
+fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn)
+    -> Result<(), Error> {
     let mut res: StartGameSendData = Default::default();
     res.game = game.borrow().game_id;
     for (i, t) in game.borrow().teams.iter().enumerate() {
@@ -141,30 +152,26 @@ fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &mu
         for (id, hero) in &ids {
             let sql = format!("select userid,name from user where userid='{}';", id);
             println!("sql: {}", sql);
-            let qres = conn.query(sql.clone()).unwrap();
+            let qres = conn.query(sql.clone())?;
             let mut userid: String = "".to_owned();
             let mut name: String = "".to_owned();
 
             let mut count = 0;
             for row in qres {
                 count += 1;
-                let a = row.unwrap().clone();
+                let a = row?.clone();
                 userid = mysql::from_value(a.get("userid").unwrap());
                 name = mysql::from_value(a.get("name").unwrap());
-                let h: HeroCell = HeroCell {id:id.clone(), name:name, hero:hero.clone() };
-                if i == 0 {
-                    res.team1.push(h);
-                }
-                else {
-                    res.team2.push(h);
-                }
+                let h: HeroCell = HeroCell {id:id.clone(), team: i as u16, name:name, hero:hero.clone(), ..Default::default() };
+                res.member.push(h);
                 break;
             }
         }
     }
     info!("{:?}", res);
     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/start_game", res.game), 
-                                        msg: json!(res).to_string()}).unwrap();
+                                        msg: json!(res).to_string()})?;
+    Ok(())
 }
 
 fn get_rid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u32 {
@@ -191,15 +198,40 @@ fn get_game_id_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -
     return 0;
 }
 
+fn get_user(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> Option<Rc<RefCell<User>>> {
+    let u = users.get(id);
+    if let Some(u) = u {
+        return Some(Rc::clone(u))
+    }
+    None
+}
+
+fn get_users(ids: &Vec<String>, users: &BTreeMap<String, Rc<RefCell<User>>>) -> Result<Vec<Rc<RefCell<User>>>, Error> {
+    let mut res: Vec<Rc<RefCell<User>>> = vec![];
+    for id in ids {
+        let u = get_user(id, users);
+        if let Some(u) = u {
+            res.push(u);
+        }
+    }
+    if ids.len() == res.len() {
+        Ok(res)
+    }
+    else {
+        Err(failure::err_msg("some user not found"))
+    }
+}
+
+
 pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) 
-    -> Result<Sender<RoomEventData>, std::io::Error> {
+    -> Result<Sender<RoomEventData>, Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update200ms = tick(Duration::from_millis(200));
     let update100ms = tick(Duration::from_millis(100));
     
-    thread::spawn(move || {
-        let mut conn = pool.get_conn().unwrap();
+    thread::spawn(move || -> Result<(), Error> {
+        let mut conn = pool.get_conn()?;
         let mut TotalRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<FightGroup>>> = BTreeMap::new();
@@ -251,7 +283,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 fg.update_names();
                                 for r in &fg.room_names {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()}).unwrap();
+                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
                                 }
                                 game_id += 1;
                                 fg.set_game_id(game_id);
@@ -277,7 +309,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 for r in &group.borrow().room_names {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
-                                            r, game_port, id.clone())}).unwrap();
+                                            r, game_port, id.clone())})?;
                                 }
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
                                 info!("GameingGroups {:#?}", GameingGroups);
@@ -297,7 +329,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 group.borrow_mut().clear_queue();
                                 for r in &group.borrow().room_names {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), 
-                                        msg: format!(r#"{{"msg":"stop queue"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"stop queue"}}"#)})?;
                                 }
                                 rm_ids.push(*id);
                             },
@@ -313,6 +345,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                 recv(rx) -> d => {
                     if let Ok(d) = d {
                         match d {
+                            RoomEventData::GameOver(x) => {
+                                
+                            },
                             RoomEventData::StartGame(x) => {
                                 let g = GameingGroups.get(&x.game);
                                 if let Some(g) = g {
@@ -334,7 +369,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                                 is_null = true;
                                             }
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                                msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                         }
                                         if is_null {
                                             TotalRoom.remove(&u.borrow().rid);
@@ -347,13 +382,13 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 if let Some(u) = u {
                                     u.borrow_mut().hero = x.hero;
                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
-                                        msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)}).unwrap();
+                                        msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;
                                 }
                             },
                             RoomEventData::Invite(x) => {
                                 if TotalUsers.contains_key(&x.from) {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
-                                        msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())}).unwrap();
+                                        msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
                                 }
                                 println!("Invite {:#?}", x);
                             },
@@ -369,7 +404,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             r.borrow().publish_update(&msgtx, m);
                                             r.borrow().publish_update(&msgtx, x.join.clone());
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                                msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())}).unwrap();
+                                                msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
                                         }
                                     }
                                 }
@@ -399,7 +434,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                                 let r = QueueRoom.remove(&u.borrow().rid);
                                                 if let Some(r) = r {
                                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
-                                                        msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                                 }
                                             }
                                         }
@@ -428,10 +463,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         success = true;
                                         if success {
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                         } else {
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
+                                                msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                         }
                                     }
                                 }
@@ -446,10 +481,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         success = true;
                                         if success {
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                         } else {
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
+                                                msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                         }
                                     }
                                 }
@@ -463,10 +498,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 if success {
                                     TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
                                 } else {
                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                 }
                             },
                             RoomEventData::Logout(x) => {
@@ -484,7 +519,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             r.borrow().publish_update(&msgtx, m);
                                         }
                                         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                            msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     }
                                     if is_null {
                                         TotalRoom.remove(&u.borrow().rid);
@@ -498,7 +533,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             let r = QueueRoom.remove(&rid);
                                             if let Some(r) = r {
                                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             }
                                             TotalRoom.remove(&rid);
                                         }
@@ -510,10 +545,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 if success {
                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                 } else {
                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                 }
                             },
                             RoomEventData::Create(x) => {
@@ -545,10 +580,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 if success {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                 } else {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                 }
                             },
                             RoomEventData::Close(x) => {
@@ -566,10 +601,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 if success {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                 } else {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)}).unwrap();
+                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                 }
                             },
                         }
@@ -582,7 +617,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
 }
 
 pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: CreateRoomData = serde_json::from_value(v)?;
     sender.send(RoomEventData::Create(CreateRoomData{id: data.id.clone()}));
@@ -590,7 +625,7 @@ pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn close(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: CloseRoomData = serde_json::from_value(v)?;
     sender.send(RoomEventData::Close(CloseRoomData{id: data.id.clone()}));
@@ -598,7 +633,7 @@ pub fn close(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn start_queue(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: StartQueueData = serde_json::from_value(v)?;
     sender.send(RoomEventData::StartQueue(StartQueueData{id: data.id.clone(), action: data.action.clone()}));
@@ -606,7 +641,7 @@ pub fn start_queue(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn cancel_queue(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: CancelQueueData = serde_json::from_value(v)?;
     sender.send(RoomEventData::CancelQueue(data));
@@ -614,7 +649,7 @@ pub fn cancel_queue(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn prestart(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: PreStartData = serde_json::from_value(v)?;
     sender.send(RoomEventData::PreStart(data));
@@ -622,7 +657,7 @@ pub fn prestart(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn join(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: JoinRoomData = serde_json::from_value(v)?;
     sender.send(RoomEventData::Join(data));
@@ -630,7 +665,7 @@ pub fn join(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: UserNGHeroData = serde_json::from_value(v)?;
     sender.send(RoomEventData::ChooseNGHero(data));
@@ -638,7 +673,7 @@ pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn invite(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: InviteRoomData = serde_json::from_value(v)?;
     sender.send(RoomEventData::Invite(data));
@@ -646,17 +681,26 @@ pub fn invite(id: String, v: Value, sender: Sender<RoomEventData>)
 }
 
 pub fn leave(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: LeaveData = serde_json::from_value(v)?;
     sender.send(RoomEventData::Leave(data));
     Ok(())
 }
 
+
 pub fn start_game(id: String, v: Value, sender: Sender<RoomEventData>)
- -> std::result::Result<(), std::io::Error>
+ -> std::result::Result<(), Error>
 {
     let data: StartGameData = serde_json::from_value(v)?;
     sender.send(RoomEventData::StartGame(data));
+    Ok(())
+}
+
+pub fn game_over(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: GameOverData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::GameOver(data));
     Ok(())
 }

@@ -59,6 +59,8 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
             id = mysql::from_value(a.get("id").unwrap());
         }
         if id > 0 {
+            ng = 1000;
+            rk = 1000;
             let sql = format!("insert into user_rank (id, score) values ({}, 1000);", id);
             conn.query(sql.clone()).unwrap();
             let sql = format!("insert into user_ng (id, score) values ({}, 1000);", id);
@@ -74,7 +76,7 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
       
         }
     };
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ..Default::default()}}));
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: ng, rk: rk, ..Default::default()}}));
     Ok(())
 }
 

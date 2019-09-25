@@ -8,7 +8,7 @@ mod msg;
 
 use std::env;
 use std::io::Write;
-use std::io::Error;
+use failure::Error;
 use std::net::TcpStream;
 use std::str;
 use clap::{App, Arg};
@@ -37,7 +37,7 @@ fn get_url() -> String {
     "mysql://erps:erpsgogo@127.0.0.1:3306/erps".into()
 }
 
-fn main() -> std::result::Result<(), std::io::Error> {
+fn main() -> std::result::Result<(), Error> {
     // configure logging
     env::set_var("RUST_LOG", env::var_os("RUST_LOG").unwrap_or_else(|| "info".into()));
     env_logger::init();
@@ -139,6 +139,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
     let releave = Regex::new(r"\w+/(\w+)/send/leave").unwrap();
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game").unwrap();
+    let regame_over = Regex::new(r"\w+/(\w+)/send/game_over").unwrap();
     
     let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone())?;
     
@@ -224,6 +225,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
                                 let userid = cap[1].to_string();
                                 info!("start_game: userid: {} json: {:?}", userid, v);
                                 event_room::start_game(userid, v, sender.clone())?;
+                            } else if regame_over.is_match(topic_name) {
+                                let cap = regame_over.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("game_over: userid: {} json: {:?}", userid, v);
+                                event_room::game_over(userid, v, sender.clone())?;
                             }
                         } else {
                             warn!("Json Parser error");
