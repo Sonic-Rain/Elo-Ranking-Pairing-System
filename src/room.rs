@@ -8,8 +8,8 @@ use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 pub struct User {
     pub id: String,
     pub hero: String,
-    pub ng: u16,
-    pub rk: u16,
+    pub ng: i16,
+    pub rk: i16,
     pub rid: u32,
     pub gid: u32,
     pub game_id: u32,
@@ -22,8 +22,8 @@ pub struct RoomData {
     pub users: Vec<Rc<RefCell<User>>>,
     pub master: String,
     pub last_master: String,
-    pub avg_ng: u16,
-    pub avg_rk: u16,
+    pub avg_ng: i16,
+    pub avg_rk: i16,
     pub ready: i8,
 }
 
@@ -36,8 +36,8 @@ impl RoomData {
             sum_rk += user.borrow().rk;
         }
         if self.users.len() > 0 {
-            self.avg_ng = sum_ng/self.users.len() as u16;
-            self.avg_rk = sum_rk/self.users.len() as u16;
+            self.avg_ng = sum_ng/self.users.len() as i16;
+            self.avg_rk = sum_rk/self.users.len() as i16;
         }
     }
 

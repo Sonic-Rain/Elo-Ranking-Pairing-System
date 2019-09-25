@@ -143,7 +143,7 @@ fn show(dur: Duration) {
     );
 }
 
-fn SendGameList(game: Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn)
+fn SendGameList(game: &Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn)
     -> Result<(), Error> {
     let mut res: StartGameSendData = Default::default();
     res.game = game.borrow().game_id;
@@ -222,6 +222,24 @@ fn get_users(ids: &Vec<String>, users: &BTreeMap<String, Rc<RefCell<User>>>) -> 
     }
 }
 
+fn user_score(u: &Rc<RefCell<User>>, value: i16, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn) -> Result<(), Error> {
+    u.borrow_mut().ng += value;
+    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u.borrow().id), 
+        msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u.borrow().ng, u.borrow().rk)})?;
+    let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
+    println!("sql: {}", sql);
+    let qres = conn.query(sql.clone())?;
+    Ok(())
+}
+
+fn settlement_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
+    for u in win {
+        user_score(u, 10, msgtx, conn);
+    }
+    for u in lose {
+        user_score(u, -10, msgtx, conn);
+    }
+}
 
 pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) 
     -> Result<Sender<RoomEventData>, Error> {
@@ -306,11 +324,12 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 group.borrow_mut().ready();
                                 group.borrow_mut().update_names();
+                                /*
                                 for r in &group.borrow().room_names {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
                                             r, game_port, id.clone())})?;
-                                }
+                                }*/
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
                                 info!("GameingGroups {:#?}", GameingGroups);
                                 info!("game_port: {}", game_port);
@@ -343,20 +362,182 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                     }
                 }
                 recv(rx) -> d => {
-                    if let Ok(d) = d {
-                        match d {
-                            RoomEventData::GameOver(x) => {
-                                
-                            },
-                            RoomEventData::StartGame(x) => {
-                                let g = GameingGroups.get(&x.game);
-                                if let Some(g) = g {
-                                    SendGameList(Rc::clone(g), &msgtx, &mut conn);
-                                }
-                            },
-                            RoomEventData::Leave(x) => {
-                                let u = TotalUsers.get(&x.room);
-                                if let Some(u) = u {
+                    let handle = || -> Result<(), Error> {
+                        if let Ok(d) = d {
+                            match d {
+                                RoomEventData::GameOver(x) => {
+                                    let win = get_users(&x.win, &TotalUsers)?;
+                                    let lose = get_users(&x.lose, &TotalUsers)?;
+                                    settlement_score(&win, &lose, &msgtx, &mut conn);
+                                },
+                                RoomEventData::StartGame(x) => {
+                                    let g = GameingGroups.get(&x.game);
+                                    if let Some(g) = g {
+                                        SendGameList(&g, &msgtx, &mut conn);
+                                        for r in &g.borrow().room_names {
+                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
+                                                msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
+                                                    r, game_port, g.borrow().game_id)})?;
+                                        }
+                                    }
+                                    
+                                },
+                                RoomEventData::Leave(x) => {
+                                    let u = TotalUsers.get(&x.room);
+                                    if let Some(u) = u {
+                                            let r = TotalRoom.get(&u.borrow().rid);
+                                            let mut is_null = false;
+                                            if let Some(r) = r {
+                                                let m = r.borrow().master.clone();
+                                                r.borrow_mut().rm_user(&x.id);
+                                                if r.borrow().users.len() > 0 {
+                                                    r.borrow().publish_update(&msgtx, m);
+                                                }
+                                                else {
+                                                    is_null = true;
+                                                }
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                            }
+                                            if is_null {
+                                                TotalRoom.remove(&u.borrow().rid);
+                                                QueueRoom.remove(&u.borrow().rid);
+                                            }
+                                    }
+                                },
+                                RoomEventData::ChooseNGHero(x) => {
+                                    let u = TotalUsers.get(&x.id);
+                                    if let Some(u) = u {
+                                        u.borrow_mut().hero = x.hero;
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;
+                                    }
+                                },
+                                RoomEventData::Invite(x) => {
+                                    if TotalUsers.contains_key(&x.from) {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
+                                            msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
+                                    }
+                                    println!("Invite {:#?}", x);
+                                },
+                                RoomEventData::Join(x) => {
+                                    let u = TotalUsers.get(&x.room);
+                                    let j = TotalUsers.get(&x.join);
+                                    if let Some(u) = u {
+                                        if let Some(j) = j {
+                                            let r = TotalRoom.get(&u.borrow().rid);
+                                            if let Some(r) = r {
+                                                r.borrow_mut().add_user(Rc::clone(j));
+                                                let m = r.borrow().master.clone();
+                                                r.borrow().publish_update(&msgtx, m);
+                                                r.borrow().publish_update(&msgtx, x.join.clone());
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                                    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
+                                            }
+                                        }
+                                    }
+                                    println!("TotalRoom {:#?}", TotalRoom);
+                                },
+                                RoomEventData::Reset() => {
+                                    TotalRoom.clear();
+                                    QueueRoom.clear();
+                                    ReadyGroups.clear();
+                                    PreStartGroups.clear();
+                                    GameingGroups.clear();
+                                    TotalUsers.clear();
+                                    room_id = 0;
+                                },
+                                RoomEventData::PreStart(x) => {
+                                    let u = TotalUsers.get(&x.room);
+                                    if let Some(u) = u {
+                                        let gid = u.borrow().gid;
+                                        if gid != 0 {
+                                            let g = ReadyGroups.get(&gid);
+                                            if let Some(gr) = g {
+                                                if x.accept == true {
+                                                    gr.borrow_mut().user_ready(&x.id);
+                                                } else {
+                                                    gr.borrow_mut().user_cancel(&x.id);
+                                                    ReadyGroups.remove(&gid);
+                                                    let r = QueueRoom.remove(&u.borrow().rid);
+                                                    if let Some(r) = r {
+                                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                    }
+                                                }
+                                            }
+                                            info!("ReadyGroups: {:#?}", ReadyGroups);
+                                        }
+                                    }
+                                },
+                                RoomEventData::StartQueue(x) => {
+                                    let mut success = false;
+                                    let mut hasRoom = false;
+                                    let u = TotalUsers.get(&x.id);
+                                    let mut rid = 0;
+                                    if let Some(u) = u {
+                                        if u.borrow().rid != 0 {
+                                            hasRoom = true;
+                                            rid = u.borrow().rid;
+                                        }
+                                    }
+                                    if hasRoom {
+                                        let r = TotalRoom.get(&rid);
+                                        if let Some(y) = r {
+                                            QueueRoom.insert(
+                                                y.borrow().rid,
+                                                Rc::clone(y)
+                                            );
+                                            success = true;
+                                            if success {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                            } else {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                            }
+                                        }
+                                    }
+                                    info!("QueueRoom: {:#?}", QueueRoom);
+                                },
+                                RoomEventData::CancelQueue(x) => {
+                                    let mut success = false;
+                                    let u = TotalUsers.get(&x.id);
+                                    if let Some(u) = u {
+                                        let r = QueueRoom.remove(&u.borrow().rid);
+                                        if let Some(r) = r {
+                                            success = true;
+                                            if success {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                            } else {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                            }
+                                        }
+                                    }
+                                    info!("QueueRoom: {:#?}", QueueRoom);
+                                },
+                                RoomEventData::Login(x) => {
+                                    let mut success = true;
+                                    if TotalUsers.contains_key(&x.u.id) {
+                                        success = false;
+                                    }
+                                    if success {
+                                        TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
+                                    } else {
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                    }
+                                },
+                                RoomEventData::Logout(x) => {
+                                    let mut success = false;
+                                    let u = TotalUsers.get(&x.id);
+                                    if let Some(u) = u {
+                                        let gid = u.borrow().gid;
+                                        let rid = u.borrow().rid;
                                         let r = TotalRoom.get(&u.borrow().rid);
                                         let mut is_null = false;
                                         if let Some(r) = r {
@@ -365,9 +546,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             if r.borrow().users.len() > 0 {
                                                 r.borrow().publish_update(&msgtx, m);
                                             }
-                                            else {
-                                                is_null = true;
-                                            }
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
                                                 msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                         }
@@ -375,239 +553,94 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             TotalRoom.remove(&u.borrow().rid);
                                             QueueRoom.remove(&u.borrow().rid);
                                         }
-                                }
-                            },
-                            RoomEventData::ChooseNGHero(x) => {
-                                let u = TotalUsers.get(&x.id);
-                                if let Some(u) = u {
-                                    u.borrow_mut().hero = x.hero;
-                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
-                                        msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;
-                                }
-                            },
-                            RoomEventData::Invite(x) => {
-                                if TotalUsers.contains_key(&x.from) {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
-                                        msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
-                                }
-                                println!("Invite {:#?}", x);
-                            },
-                            RoomEventData::Join(x) => {
-                                let u = TotalUsers.get(&x.room);
-                                let j = TotalUsers.get(&x.join);
-                                if let Some(u) = u {
-                                    if let Some(j) = j {
-                                        let r = TotalRoom.get(&u.borrow().rid);
-                                        if let Some(r) = r {
-                                            r.borrow_mut().add_user(Rc::clone(j));
-                                            let m = r.borrow().master.clone();
-                                            r.borrow().publish_update(&msgtx, m);
-                                            r.borrow().publish_update(&msgtx, x.join.clone());
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                                msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
-                                        }
-                                    }
-                                }
-                                println!("TotalRoom {:#?}", TotalRoom);
-                            },
-                            RoomEventData::Reset() => {
-                                TotalRoom.clear();
-                                QueueRoom.clear();
-                                ReadyGroups.clear();
-                                PreStartGroups.clear();
-                                GameingGroups.clear();
-                                TotalUsers.clear();
-                                room_id = 0;
-                            },
-                            RoomEventData::PreStart(x) => {
-                                let u = TotalUsers.get(&x.room);
-                                if let Some(u) = u {
-                                    let gid = u.borrow().gid;
-                                    if gid != 0 {
-                                        let g = ReadyGroups.get(&gid);
-                                        if let Some(gr) = g {
-                                            if x.accept == true {
-                                                gr.borrow_mut().user_ready(&x.id);
-                                            } else {
+                                        if gid != 0 {
+                                            let g = ReadyGroups.get(&gid);
+                                            if let Some(gr) = g {
                                                 gr.borrow_mut().user_cancel(&x.id);
                                                 ReadyGroups.remove(&gid);
-                                                let r = QueueRoom.remove(&u.borrow().rid);
+                                                let r = QueueRoom.remove(&rid);
                                                 if let Some(r) = r {
                                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
                                                         msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                                 }
+                                                TotalRoom.remove(&rid);
                                             }
                                         }
-                                        info!("ReadyGroups: {:#?}", ReadyGroups);
                                     }
-                                }
-                            },
-                            RoomEventData::StartQueue(x) => {
-                                let mut success = false;
-                                let mut hasRoom = false;
-                                let u = TotalUsers.get(&x.id);
-                                let mut rid = 0;
-                                if let Some(u) = u {
-                                    if u.borrow().rid != 0 {
-                                        hasRoom = true;
-                                        rid = u.borrow().rid;
-                                    }
-                                }
-                                if hasRoom {
-                                    let r = TotalRoom.get(&rid);
-                                    if let Some(y) = r {
-                                        QueueRoom.insert(
-                                            y.borrow().rid,
-                                            Rc::clone(y)
-                                        );
-                                        success = true;
-                                        if success {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                        } else {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                        }
-                                    }
-                                }
-                                info!("QueueRoom: {:#?}", QueueRoom);
-                            },
-                            RoomEventData::CancelQueue(x) => {
-                                let mut success = false;
-                                let u = TotalUsers.get(&x.id);
-                                if let Some(u) = u {
-                                    let r = QueueRoom.remove(&u.borrow().rid);
-                                    if let Some(r) = r {
-                                        success = true;
-                                        if success {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                        } else {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                        }
-                                    }
-                                }
-                                info!("QueueRoom: {:#?}", QueueRoom);
-                            },
-                            RoomEventData::Login(x) => {
-                                let mut success = true;
-                                if TotalUsers.contains_key(&x.u.id) {
-                                    success = false;
-                                }
-                                if success {
-                                    TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
-                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
-                                } else {
-                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                }
-                            },
-                            RoomEventData::Logout(x) => {
-                                let mut success = false;
-                                let u = TotalUsers.get(&x.id);
-                                if let Some(u) = u {
-                                    let gid = u.borrow().gid;
-                                    let rid = u.borrow().rid;
-                                    let r = TotalRoom.get(&u.borrow().rid);
-                                    let mut is_null = false;
-                                    if let Some(r) = r {
-                                        let m = r.borrow().master.clone();
-                                        r.borrow_mut().rm_user(&x.id);
-                                        if r.borrow().users.len() > 0 {
-                                            r.borrow().publish_update(&msgtx, m);
-                                        }
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                    }
-                                    if is_null {
-                                        TotalRoom.remove(&u.borrow().rid);
-                                        QueueRoom.remove(&u.borrow().rid);
-                                    }
-                                    if gid != 0 {
-                                        let g = ReadyGroups.get(&gid);
-                                        if let Some(gr) = g {
-                                            gr.borrow_mut().user_cancel(&x.id);
-                                            ReadyGroups.remove(&gid);
-                                            let r = QueueRoom.remove(&rid);
-                                            if let Some(r) = r {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                            }
-                                            TotalRoom.remove(&rid);
-                                        }
-                                    }
-                                }
-                                let mut u = TotalUsers.remove(&x.id);
-                                if let Some(u) = u {
-                                    success = true;
-                                }
-                                if success {
-                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                } else {
-                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                }
-                            },
-                            RoomEventData::Create(x) => {
-                                let mut success = false;
-                                if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
-                                    room_id += 1;
-                                    
-                                    let mut new_room = RoomData {
-                                        rid: room_id,
-                                        users: vec![],
-                                        master: x.id.clone(),
-                                        last_master: "".to_owned(),
-                                        avg_ng: 0,
-                                        avg_rk: 0,
-                                        ready: 0,
-                                    };
-                                    let mut u = TotalUsers.get(&x.id);
+                                    let mut u = TotalUsers.remove(&x.id);
                                     if let Some(u) = u {
-                                        new_room.add_user(Rc::clone(&u));
-                                        let rid = new_room.rid;
-                                        let r = Rc::new(RefCell::new(new_room));
-                                        r.borrow().publish_update(&msgtx, x.id.clone());
-                                        TotalRoom.insert(
-                                            rid,
-                                            Rc::clone(&r),
-                                        );
                                         success = true;
                                     }
-                                }
-                                if success {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                } else {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                }
-                            },
-                            RoomEventData::Close(x) => {
-                                let mut success = false;
-                                if let Some(y) =  TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers)) {
-                                    let data = TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
-                                    y.borrow_mut().close();
-                                    match data {
-                                        Some(_) => {
-                                            QueueRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
-                                            success = true;
-                                        },
-                                        _ => {}
+                                    if success {
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                    } else {
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
-                                }
-                                if success {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                } else {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                        msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                }
-                            },
+                                },
+                                RoomEventData::Create(x) => {
+                                    let mut success = false;
+                                    if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
+                                        room_id += 1;
+                                        
+                                        let mut new_room = RoomData {
+                                            rid: room_id,
+                                            users: vec![],
+                                            master: x.id.clone(),
+                                            last_master: "".to_owned(),
+                                            avg_ng: 0,
+                                            avg_rk: 0,
+                                            ready: 0,
+                                        };
+                                        let mut u = TotalUsers.get(&x.id);
+                                        if let Some(u) = u {
+                                            new_room.add_user(Rc::clone(&u));
+                                            let rid = new_room.rid;
+                                            let r = Rc::new(RefCell::new(new_room));
+                                            r.borrow().publish_update(&msgtx, x.id.clone());
+                                            TotalRoom.insert(
+                                                rid,
+                                                Rc::clone(&r),
+                                            );
+                                            success = true;
+                                        }
+                                    }
+                                    if success {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                    } else {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                    }
+                                },
+                                RoomEventData::Close(x) => {
+                                    let mut success = false;
+                                    if let Some(y) =  TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers)) {
+                                        let data = TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
+                                        y.borrow_mut().close();
+                                        match data {
+                                            Some(_) => {
+                                                QueueRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
+                                                success = true;
+                                            },
+                                            _ => {}
+                                        }
+                                    }
+                                    if success {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                    } else {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                    }
+                                },
+                            }
                         }
+                        Ok(())
+                    };
+                    if let Err(msg) = handle() {
+                        println!("{:?}", msg);
                     }
                 }
             }

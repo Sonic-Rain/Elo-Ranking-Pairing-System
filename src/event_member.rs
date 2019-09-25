@@ -32,8 +32,8 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
                         join user_ng as a on a.id=c.id 
                         join user_rank as b on b.id=c.id  where userid='{}';"#, data.id);
     let qres2: mysql::QueryResult = conn.query(sql.clone()).unwrap();
-    let mut ng: u16 = 0;
-    let mut rk: u16 = 0;
+    let mut ng: i16 = 0;
+    let mut rk: i16 = 0;
     let mut name: String = "".to_owned();
     
     let mut count = 0;
