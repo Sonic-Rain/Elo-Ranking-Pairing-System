@@ -5,6 +5,7 @@ mod event_member;
 mod event_room;
 mod room;
 mod msg;
+mod elo;
 
 use std::env;
 use std::io::Write;

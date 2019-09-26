@@ -375,8 +375,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     if let Some(g) = g {
                                         SendGameList(&g, &msgtx, &mut conn);
                                         for r in &g.borrow().room_names {
+                                            game_port = 7778;
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
+                                                msg: format!(r#"{{"room":"{}","msg":"start","server":"127.0.0.1:{}","game":{}}}"#, 
                                                     r, game_port, g.borrow().game_id)})?;
                                         }
                                     }
