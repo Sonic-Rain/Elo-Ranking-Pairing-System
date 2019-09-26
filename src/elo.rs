@@ -52,17 +52,15 @@ impl EloRank {
         }
         (wint, loset)
     }
-    pub fn compute_elo_battle_ground(&self, team: &Vec<i32>, win_mount: usize)
+    pub fn compute_elo_battle_ground(&self, team: &Vec<i32>, win_mount: usize, scale: f32)
         -> Vec<i32> {
         let m = mean(team);
         let mut rest = vec![];
+        let mut a = win_mount as f32 *scale + 0.25;
         for (i, score) in team.iter().enumerate() {
             let ewin = self.get_expected(*score as f32, m as f32);
-            let rwin = if i < win_mount {
-                self.rating(ewin as f32, 1.0, *score as f32)
-            } else {
-                self.rating(ewin as f32, 0.0, *score as f32)
-            };
+            let rwin = self.rating(ewin as f32, a, *score as f32);
+            a -= scale;
             rest.push(rwin as i32);
         }
         rest
@@ -87,7 +85,12 @@ mod tests {
         let (wt, lt) = elo.compute_elo_team(&wint, &loset);
         println!("win {:?}, lose {:?} \n => {:?},      {:?}", wint, loset, wt, lt);
 
-        let rt = elo.compute_elo_battle_ground(&wint, 3);
-        println!("battle ground {:?} \n =>           {:?}", wint, rt);
+        let wint = vec![1000,980,990,1010,1020,1005,995,990];
+        let rt = elo.compute_elo_battle_ground(&wint, 4, 0.4);
+        println!("battle 0.4 {:?} \n =>        {:?}", wint, rt);
+        let rt = elo.compute_elo_battle_ground(&wint, 4, 0.5);
+        println!("battle 0.5 {:?} \n =>        {:?}", wint, rt);
+        let rt = elo.compute_elo_battle_ground(&wint, 4, 0.6);
+        println!("battle 0.6 {:?} \n =>        {:?}", wint, rt);
     }
 }
