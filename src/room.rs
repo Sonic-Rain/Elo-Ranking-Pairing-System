@@ -47,7 +47,7 @@ impl RoomData {
         self.update_avg();
     }
 
-    pub fn close(&mut self) {
+    pub fn leave_room(&mut self) {
         for user in &self.users {
             user.borrow_mut().rid = 0;
             user.borrow_mut().gid = 0;
@@ -142,7 +142,12 @@ impl FightGroup {
         }
         false
     }
-
+    pub fn leave_room(&mut self) -> bool {
+        for r in &mut self.rooms {
+            r.borrow_mut().leave_room();
+        }
+        false
+    }
     pub fn clear_queue(&mut self) -> bool {
         for r in &mut self.rooms {
             r.borrow_mut().clear_queue();
@@ -288,7 +293,12 @@ impl FightGame {
         }
         self.game_id = gid;
     }
-
+    pub fn leave_room(&mut self) -> bool {
+        for r in &mut self.teams {
+            r.borrow_mut().leave_room();
+        }
+        false
+    }
     pub fn clear_queue(&mut self) -> bool {
         for r in &mut self.teams {
             r.borrow_mut().clear_queue();

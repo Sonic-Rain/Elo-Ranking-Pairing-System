@@ -117,6 +117,11 @@ pub struct GameOverData {
     pub lose: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct GameCloseData {
+    pub game: u32,
+}
+
 pub enum RoomEventData {
     Reset(),
     Login(UserLoginData),
@@ -132,6 +137,7 @@ pub enum RoomEventData {
     Leave(LeaveData),
     StartGame(StartGameData),
     GameOver(GameOverData),
+    GameClose(GameCloseData),
 }
 
 // Prints the elapsed time.
@@ -365,10 +371,21 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                     let handle = || -> Result<(), Error> {
                         if let Ok(d) = d {
                             match d {
+                                RoomEventData::GameClose(x) => {
+                                    let g = GameingGroups.remove(&x.game);
+                                    if let Some(g) = g {
+                                        g.borrow_mut().leave_room();
+                                    }
+                                },
                                 RoomEventData::GameOver(x) => {
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
                                     settlement_score(&win, &lose, &msgtx, &mut conn);
+                                    let g = GameingGroups.remove(&x.game);
+                                    if let Some(g) = g {
+                                        g.borrow_mut().leave_room();
+                                    }
+                                    game_id -= 1;
                                 },
                                 RoomEventData::StartGame(x) => {
                                     let g = GameingGroups.get(&x.game);
@@ -619,7 +636,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     let mut success = false;
                                     if let Some(y) =  TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers)) {
                                         let data = TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
-                                        y.borrow_mut().close();
+                                        y.borrow_mut().leave_room();
                                         match data {
                                             Some(_) => {
                                                 QueueRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
