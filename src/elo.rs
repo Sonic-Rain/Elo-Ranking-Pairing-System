@@ -1,6 +1,6 @@
 
-struct EloRank {
-    k: f32,
+pub struct EloRank {
+    pub k: f32,
 }
 
 pub fn mean(numbers: &Vec<i32>) -> f32 {

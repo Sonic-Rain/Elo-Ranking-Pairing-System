@@ -19,6 +19,7 @@ use failure::Error;
 
 use crate::room::*;
 use crate::msg::*;
+use crate::elo::*;
 use std::process::Command;
 
 const TEAM_SIZE: u16 = 1;
@@ -238,12 +239,36 @@ fn user_score(u: &Rc<RefCell<User>>, value: i16, msgtx: &Sender<MqttMsg>, conn: 
     Ok(())
 }
 
-fn settlement_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
-    for u in win {
-        user_score(u, 10, msgtx, conn);
+fn get_ng(team : &Vec<Rc<RefCell<User>>>) -> Vec<i32> {
+    let mut res: Vec<i32> = vec![];
+    for u in team {
+        res.push(u.borrow().ng.into());
     }
-    for u in lose {
-        user_score(u, -10, msgtx, conn);
+    res
+}
+
+fn get_rk(team : &Vec<Rc<RefCell<User>>>) -> Vec<i32> {
+    let mut res: Vec<i32> = vec![];
+    for u in team {
+        res.push(u.borrow().rk.into());
+    }
+    res
+}
+
+fn settlement_ng_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>>>, msgtx: &Sender<MqttMsg>, conn: &mut mysql::PooledConn) {
+    if win.len() == 0 || lose.len() == 0 {
+        return;
+    }
+    let win_ng = get_ng(win);
+    let lose_ng = get_ng(lose);
+    let elo = EloRank {k:20.0};
+    let (rw, rl) = elo.compute_elo_team(&win_ng, &lose_ng);
+
+    for (i, u) in win.iter().enumerate() {
+        user_score(u, (rw[i]-win_ng[i]) as i16, msgtx, conn);
+    }
+    for (i, u) in lose.iter().enumerate() {
+        user_score(u, (rl[i]-lose_ng[i]) as i16, msgtx, conn);
     }
 }
 
@@ -309,7 +334,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 for r in &fg.room_names {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
                                 }
-                                game_id += 1;
+                                game_id = 1;
                                 fg.set_game_id(game_id);
                                 info!("game id {}", game_id);
                                 PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
@@ -336,6 +361,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
                                             r, game_port, id.clone())})?;
                                 }*/
+                                GameingGroups.remove(&group.borrow().game_id);
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
                                 info!("GameingGroups {:#?}", GameingGroups);
                                 info!("game_port: {}", game_port);
@@ -376,18 +402,20 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     if let Some(g) = g {
                                         g.borrow_mut().leave_room();
                                     }
+                                    info!("GameingGroups {:#?}", GameingGroups);
                                 },
                                 RoomEventData::GameOver(x) => {
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
-                                    settlement_score(&win, &lose, &msgtx, &mut conn);
+                                    settlement_ng_score(&win, &lose, &msgtx, &mut conn);
                                     let g = GameingGroups.remove(&x.game);
                                     if let Some(g) = g {
                                         g.borrow_mut().leave_room();
                                     }
-                                    game_id -= 1;
+                                    info!("GameingGroups {:#?}", GameingGroups);
                                 },
                                 RoomEventData::StartGame(x) => {
+                                    info!("GameingGroups {:#?}", GameingGroups);
                                     let g = GameingGroups.get(&x.game);
                                     if let Some(g) = g {
                                         SendGameList(&g, &msgtx, &mut conn);
@@ -546,8 +574,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
                                     } else {
+                                        //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
-                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
                                     }
                                 },
                                 RoomEventData::Logout(x) => {
@@ -753,5 +783,13 @@ pub fn game_over(id: String, v: Value, sender: Sender<RoomEventData>)
 {
     let data: GameOverData = serde_json::from_value(v)?;
     sender.send(RoomEventData::GameOver(data));
+    Ok(())
+}
+
+pub fn game_close(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: GameCloseData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::GameClose(data));
     Ok(())
 }

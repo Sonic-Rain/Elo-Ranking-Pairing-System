@@ -103,6 +103,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("room/+/send/prestart", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("room/+/send/start", QoS::AtLeastOnce).unwrap();
 
+    mqtt_client.subscribe("game/+/send/game_close", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce).unwrap();
     mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce).unwrap();
@@ -141,6 +142,7 @@ fn main() -> std::result::Result<(), Error> {
     let releave = Regex::new(r"\w+/(\w+)/send/leave").unwrap();
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game").unwrap();
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over").unwrap();
+    let regame_close = Regex::new(r"\w+/(\w+)/send/game_close").unwrap();
     
     let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone())?;
     
@@ -231,6 +233,11 @@ fn main() -> std::result::Result<(), Error> {
                                 let userid = cap[1].to_string();
                                 info!("game_over: userid: {} json: {:?}", userid, v);
                                 event_room::game_over(userid, v, sender.clone())?;
+                            } else if regame_close.is_match(topic_name) {
+                                let cap = regame_close.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("game_close: userid: {} json: {:?}", userid, v);
+                                event_room::game_close(userid, v, sender.clone())?;
                             }
                         } else {
                             warn!("Json Parser error");
