@@ -22,7 +22,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 1;
+const TEAM_SIZE: u16 = 2;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -469,18 +469,26 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 RoomEventData::Join(x) => {
                                     let u = TotalUsers.get(&x.room);
                                     let j = TotalUsers.get(&x.join);
+                                    let mut sendok = false;
                                     if let Some(u) = u {
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
-                                                r.borrow_mut().add_user(Rc::clone(j));
-                                                let m = r.borrow().master.clone();
-                                                r.borrow().publish_update(&msgtx, m);
-                                                r.borrow().publish_update(&msgtx, x.join.clone());
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                                    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
+                                                if r.borrow().users.len() < TEAM_SIZE as usize {
+                                                    r.borrow_mut().add_user(Rc::clone(j));
+                                                    let m = r.borrow().master.clone();
+                                                    r.borrow().publish_update(&msgtx, m);
+                                                    r.borrow().publish_update(&msgtx, x.join.clone());
+                                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                                        msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
+                                                    sendok = true;
+                                                }
                                             }
                                         }
+                                    }
+                                    if sendok == false {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                            msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())})?;
                                     }
                                     println!("TotalRoom {:#?}", TotalRoom);
                                 },
