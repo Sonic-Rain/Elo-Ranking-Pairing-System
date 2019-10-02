@@ -355,12 +355,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 group.borrow_mut().ready();
                                 group.borrow_mut().update_names();
-                                /*
-                                for r in &group.borrow().room_names {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                        msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
-                                            r, game_port, id.clone())})?;
-                                }*/
+                                
                                 GameingGroups.remove(&group.borrow().game_id);
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
                                 info!("GameingGroups {:#?}", GameingGroups);
@@ -374,6 +369,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             Ok(_) => {},
                                             Err(_) => {},
                                         }
+                                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_singal", group.borrow().game_id), 
+                                    msg: format!(r#"{{"game":{}}}"#, 
+                                        group.borrow().game_id)})?;
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
