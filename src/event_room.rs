@@ -22,7 +22,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 2;
+const TEAM_SIZE: u16 = 3;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -169,7 +169,7 @@ fn SendGameList(game: &Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &m
                 let a = row?.clone();
                 userid = mysql::from_value(a.get("userid").unwrap());
                 name = mysql::from_value(a.get("name").unwrap());
-                let h: HeroCell = HeroCell {id:id.clone(), team: i as u16, name:name, hero:hero.clone(), ..Default::default() };
+                let h: HeroCell = HeroCell {id:id.clone(), team: (i+1) as u16, name:name, hero:hero.clone(), ..Default::default() };
                 res.member.push(h);
                 break;
             }
@@ -418,9 +418,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     if let Some(g) = g {
                                         SendGameList(&g, &msgtx, &mut conn);
                                         for r in &g.borrow().room_names {
-                                            game_port = 7778;
+                                            //game_port = 7778;
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                msg: format!(r#"{{"room":"{}","msg":"start","server":"127.0.0.1:{}","game":{}}}"#, 
+                                                msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
                                                     r, game_port, g.borrow().game_id)})?;
                                         }
                                     }
