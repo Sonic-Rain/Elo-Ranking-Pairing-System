@@ -22,7 +22,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 3;
+const TEAM_SIZE: u16 = 1;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -308,6 +308,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                             if g.user_count == TEAM_SIZE {
                                 g.prestart();
                                 group_id += 1;
+                                info!("new group_id: {}", group_id);
                                 g.set_group_id(group_id);
                                 ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
                                 g = Default::default();
@@ -316,6 +317,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                     }
                     if ReadyGroups.len() >= MATCH_SIZE {
                         let mut fg: FightGame = Default::default();
+                        let mut prestart = false;
                         for (id, rg) in &mut ReadyGroups {
                             if rg.borrow().game_status == 0 && fg.teams.len() < MATCH_SIZE {
                                 fg.teams.push(Rc::clone(rg));
@@ -334,12 +336,15 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 for r in &fg.room_names {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
                                 }
-                                game_id = 1;
+                                prestart = true;
+                                game_id += 1;
                                 fg.set_game_id(game_id);
-                                info!("game id {}", game_id);
                                 PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
                                 fg = Default::default();
                             }
+                        }
+                        if prestart {
+                            info!("ReadyGroups: {:#?}", ReadyGroups);
                         }
                     }
                     // update prestart groups
@@ -358,7 +363,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 
                                 GameingGroups.remove(&group.borrow().game_id);
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
-                                info!("GameingGroups {:#?}", GameingGroups);
                                 info!("game_port: {}", game_port);
                                 info!("game id {}", group.borrow().game_id);
                                 let cmd = Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
@@ -367,7 +371,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         .spawn();
                                         match cmd {
                                             Ok(_) => {},
-                                            Err(_) => {},
+                                            Err(_) => {warn!("Fail open CF1Server")},
                                         }
                                 msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_singal", group.borrow().game_id), 
                                     msg: format!(r#"{{"game":{}}}"#, 
@@ -400,20 +404,56 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     if let Some(g) = g {
                                         g.borrow_mut().leave_room();
                                     }
-                                    info!("GameingGroups {:#?}", GameingGroups);
                                 },
                                 RoomEventData::GameOver(x) => {
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
                                     settlement_ng_score(&win, &lose, &msgtx, &mut conn);
+                                    // remove game
                                     let g = GameingGroups.remove(&x.game);
-                                    if let Some(g) = g {
+                                    match g {
+                                        Some(g) => {
+                                        for u in &g.borrow().user_names {
+                                            let u = get_user(&u, &TotalUsers);
+                                            match u {
+                                                Some(u) => {
+                                                    // remove room
+                                                    let r = TotalRoom.get(&u.borrow().rid);
+                                                    let mut is_null = false;
+                                                    if let Some(r) = r {
+                                                        r.borrow_mut().rm_user(&u.borrow().id);
+                                                        if r.borrow().users.len() == 0 {
+                                                            is_null = true;
+                                                            info!("remove success {}", u.borrow().id);
+                                                        }
+                                                    }
+                                                    else {
+                                                        info!("remove fail {}", u.borrow().id);
+                                                    }
+                                                    if is_null {
+                                                        TotalRoom.remove(&u.borrow().rid);
+                                                        QueueRoom.remove(&u.borrow().rid);
+                                                    }
+                                                    // remove group
+                                                    ReadyGroups.remove(&u.borrow().gid);
+                                                    // remove game
+                                                    PreStartGroups.remove(&u.borrow().game_id);
+                                                    GameingGroups.remove(&u.borrow().game_id);
+                                                },
+                                                None => {
+                                                    info!("remove fail ");
+                                                }
+                                            }
+                                        }
                                         g.borrow_mut().leave_room();
+                                        }
+                                        ,
+                                        None => {
+                                            info!("remove game fail {}", x.game);
+                                        }
                                     }
-                                    info!("GameingGroups {:#?}", GameingGroups);
                                 },
                                 RoomEventData::StartGame(x) => {
-                                    info!("GameingGroups {:#?}", GameingGroups);
                                     let g = GameingGroups.get(&x.game);
                                     if let Some(g) = g {
                                         SendGameList(&g, &msgtx, &mut conn);
@@ -462,7 +502,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
                                             msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
                                     }
-                                    println!("Invite {:#?}", x);
                                 },
                                 RoomEventData::Join(x) => {
                                     let u = TotalUsers.get(&x.room);
@@ -488,7 +527,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                             msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())})?;
                                     }
-                                    println!("TotalRoom {:#?}", TotalRoom);
+                                    //println!("TotalRoom {:#?}", TotalRoom);
                                 },
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
@@ -508,6 +547,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             if let Some(gr) = g {
                                                 if x.accept == true {
                                                     gr.borrow_mut().user_ready(&x.id);
+                                                    info!("PreStart user_ready");
                                                 } else {
                                                     gr.borrow_mut().user_cancel(&x.id);
                                                     ReadyGroups.remove(&gid);
@@ -518,7 +558,10 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                                     }
                                                 }
                                             }
-                                            info!("ReadyGroups: {:#?}", ReadyGroups);
+                                            else
+                                            {
+                                                error!("gid not found {}", gid);
+                                            }
                                         }
                                     }
                                 },
@@ -550,7 +593,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             }
                                         }
                                     }
-                                    info!("QueueRoom: {:#?}", QueueRoom);
                                 },
                                 RoomEventData::CancelQueue(x) => {
                                     let mut success = false;
@@ -568,7 +610,6 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             }
                                         }
                                     }
-                                    info!("QueueRoom: {:#?}", QueueRoom);
                                 },
                                 RoomEventData::Login(x) => {
                                     let mut success = true;

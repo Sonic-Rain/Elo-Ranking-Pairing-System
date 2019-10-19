@@ -81,8 +81,8 @@ impl RoomData {
     pub fn rm_user(&mut self, id: &String) {
         let mut i = 0;
         while i != self.users.len() {
-            if self.users[i].borrow().id == *id {
-                self.users[i].borrow_mut().rid = 0;
+            let id2 =  self.users[i].borrow().id.clone();
+            if id2 == *id {
                 self.users.remove(i);
             } else {
                 i += 1;
@@ -233,7 +233,7 @@ impl FightGroup {
         for c in &self.checks {
             if c.check < 0 {
                 return PrestartStatus::Cancel;
-            } else if c.check !=1 {
+            } else if c.check != 1 {
                 res= PrestartStatus::Wait;
             }
         }
@@ -246,6 +246,7 @@ impl FightGroup {
 pub struct FightGame {
     pub teams: Vec<Rc<RefCell<FightGroup>>>,
     pub room_names: Vec<String>,
+    pub user_names: Vec<String>,
     pub game_id: u32,
     pub user_count: u16,
     pub winteam: i16,
@@ -262,9 +263,13 @@ pub enum PrestartStatus {
 impl FightGame {
     pub fn update_names(&mut self) {
         self.room_names.clear();
+        self.user_names.clear();
         for t in &self.teams {
             for r in &t.borrow().rooms {
                 self.room_names.push(r.borrow().master.clone());
+                for u in &r.borrow().users {
+                    self.user_names.push(u.borrow().id.clone());
+                }
             }
         }
     }
