@@ -19,7 +19,7 @@ use rumqtt::{MqttClient, MqttOptions, QoS};
 use std::thread;
 use std::time::Duration;
 use log::Level;
-use serde_json::{self, Result, Value};
+use serde_json::{self, Value};
 use regex::Regex;
 
 use ::futures::Future;
@@ -83,66 +83,73 @@ fn main() -> std::result::Result<(), Error> {
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
         .unwrap_or_else(generate_client_id);
-    let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>().unwrap());
+    let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
     mqtt_options = mqtt_options.set_clean_session(true);
-    let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone()).unwrap();
-    mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtLeastOnce).unwrap();
+    let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
+    mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtLeastOnce)?;
 
-    mqtt_client.subscribe("room/+/send/create", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/close", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/invite", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/join", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/kick", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/leave", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/prestart", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("room/+/send/start", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/create", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/close", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/invite", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/join", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/kick", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/leave", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/prestart", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/start", QoS::AtLeastOnce)?;
 
-    mqtt_client.subscribe("game/+/send/game_close", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("game/+/send/leave", QoS::AtLeastOnce).unwrap();
-    mqtt_client.subscribe("game/+/send/exit", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/game_close", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/leave", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/exit", QoS::AtLeastOnce)?;
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
-    let pool = mysql::Pool::new(get_url().as_str()).unwrap();
+    let pool = mysql::Pool::new(get_url().as_str())?;
     thread::sleep_ms(100);
-    thread::spawn(move || {
-        let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>().unwrap());
+    thread::spawn(move || -> Result<(), Error> {
+        let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>()?);
         mqtt_options = mqtt_options.set_keep_alive(100);
-        let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone()).unwrap();
+        let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
         loop {
             select! {
                 recv(rx) -> d => {
                     if let Ok(d) = d {
-                        mqtt_client.publish(d.topic, QoS::AtLeastOnce, false, d.msg).unwrap();
+                        let msg_res = mqtt_client.publish(d.topic, QoS::AtLeastOnce, false, d.msg);
+                        match msg_res {
+                            Ok(_) =>{},
+                            Err(x) => {
+                                println!("{}", x);
+                            }
+                        }
                     }
                 }
             }
         }
+        Ok(())
     });
 
-    let relogin = Regex::new(r"\w+/(\w+)/send/login").unwrap();
-    let relogout = Regex::new(r"\w+/(\w+)/send/logout").unwrap();
-    let recreate = Regex::new(r"\w+/(\w+)/send/create").unwrap();
-    let reclose = Regex::new(r"\w+/(\w+)/send/close").unwrap();
-    let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue").unwrap();
-    let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue").unwrap();
-    let represtart = Regex::new(r"\w+/(\w+)/send/prestart").unwrap();
-    let reinvite = Regex::new(r"\w+/(\w+)/send/invite").unwrap();
-    let rejoin = Regex::new(r"\w+/(\w+)/send/join").unwrap();
-    let reset = Regex::new(r"reset").unwrap();
-    let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
-    let releave = Regex::new(r"\w+/(\w+)/send/leave").unwrap();
-    let restart_game = Regex::new(r"\w+/(\w+)/send/start_game").unwrap();
-    let regame_over = Regex::new(r"\w+/(\w+)/send/game_over").unwrap();
-    let regame_close = Regex::new(r"\w+/(\w+)/send/game_close").unwrap();
+    let relogin = Regex::new(r"\w+/(\w+)/send/login")?;
+    let relogout = Regex::new(r"\w+/(\w+)/send/logout")?;
+    let recreate = Regex::new(r"\w+/(\w+)/send/create")?;
+    let reclose = Regex::new(r"\w+/(\w+)/send/close")?;
+    let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue")?;
+    let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue")?;
+    let represtart = Regex::new(r"\w+/(\w+)/send/prestart")?;
+    let reinvite = Regex::new(r"\w+/(\w+)/send/invite")?;
+    let rejoin = Regex::new(r"\w+/(\w+)/send/join")?;
+    let reset = Regex::new(r"reset")?;
+    let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero")?;
+    let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
+    let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
+    let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
+    let regame_close = Regex::new(r"\w+/(\w+)/send/game_close")?;
     
     let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone())?;
     
@@ -161,12 +168,12 @@ fn main() -> std::result::Result<(), Error> {
                             }
                         };
                         let topic_name = x.topic_name.as_str();
-                        let vo : Result<Value> = serde_json::from_str(msg);
+                        let vo : serde_json::Result<Value> = serde_json::from_str(msg);
                         if reset.is_match(topic_name) {
                             info!("reset");
                             sender.send(RoomEventData::Reset());
                         }
-                        let vo : Result<Value> = serde_json::from_str(msg);
+                        let vo : serde_json::Result<Value> = serde_json::from_str(msg);
                         if let Ok(v) = vo {
                             if reinvite.is_match(topic_name) {
                                 let cap = reinvite.captures(topic_name).unwrap();
