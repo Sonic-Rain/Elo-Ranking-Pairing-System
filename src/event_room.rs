@@ -274,7 +274,7 @@ fn settlement_ng_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>
 
 pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) 
     -> Result<Sender<RoomEventData>, Error> {
-    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
+    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(10000);
     let start = Instant::now();
     let update200ms = tick(Duration::from_millis(200));
     let update100ms = tick(Duration::from_millis(100));

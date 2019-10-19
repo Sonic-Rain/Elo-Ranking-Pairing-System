@@ -85,7 +85,8 @@ fn main() -> std::result::Result<(), Error> {
         .unwrap_or_else(generate_client_id);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
-    mqtt_options = mqtt_options.set_clean_session(true);
+    mqtt_options = mqtt_options.set_request_channel_capacity(10000);
+    mqtt_options = mqtt_options.set_notification_channel_capacity(20000);
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
     mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce)?;
@@ -110,12 +111,15 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/leave", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("game/+/send/exit", QoS::AtLeastOnce)?;
     
-    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(1000);
+    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(10000);
     let pool = mysql::Pool::new(get_url().as_str())?;
     thread::sleep_ms(100);
     thread::spawn(move || -> Result<(), Error> {
         let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>()?);
         mqtt_options = mqtt_options.set_keep_alive(100);
+        mqtt_options = mqtt_options.set_request_channel_capacity(10000);
+        mqtt_options = mqtt_options.set_notification_channel_capacity(20000);
+        println!("mqtt_options {:#?}", mqtt_options);
         let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
         loop {
             select! {
