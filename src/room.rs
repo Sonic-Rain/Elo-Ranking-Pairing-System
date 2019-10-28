@@ -251,6 +251,7 @@ pub struct FightGame {
     pub user_count: u16,
     pub winteam: i16,
     pub game_status: u16,
+    pub game_port: u16,
 }
 
 #[derive(PartialEq)]

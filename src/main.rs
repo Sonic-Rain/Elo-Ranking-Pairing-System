@@ -91,6 +91,8 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("member/+/send/status", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtLeastOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtLeastOnce)?;
@@ -154,6 +156,8 @@ fn main() -> std::result::Result<(), Error> {
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
     let regame_close = Regex::new(r"\w+/(\w+)/send/game_close")?;
+    let restatus = Regex::new(r"\w+/(\w+)/send/status")?;
+    let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect")?;
     
     let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone())?;
     
@@ -249,6 +253,16 @@ fn main() -> std::result::Result<(), Error> {
                                 let userid = cap[1].to_string();
                                 info!("game_close: userid: {} json: {:?}", userid, v);
                                 event_room::game_close(userid, v, sender.clone())?;
+                            } else if restatus.is_match(topic_name) {
+                                let cap = restatus.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("status: userid: {} json: {:?}", userid, v);
+                                event_room::status(userid, v, sender.clone())?;
+                            } else if rereconnect.is_match(topic_name) {
+                                let cap = rereconnect.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("reconnect: userid: {} json: {:?}", userid, v);
+                                event_room::reconnect(userid, v, sender.clone())?;
                             }
                         } else {
                             warn!("Json Parser error");

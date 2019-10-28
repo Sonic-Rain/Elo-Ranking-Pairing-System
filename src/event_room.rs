@@ -22,7 +22,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: u16 = 1;
+const TEAM_SIZE: u16 = 5;
 const MATCH_SIZE: usize = 2;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -123,6 +123,16 @@ pub struct GameCloseData {
     pub game: u32,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct StatusData {
+    pub id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ReconnectData {
+    pub id: String,
+}
+
 pub enum RoomEventData {
     Reset(),
     Login(UserLoginData),
@@ -139,6 +149,8 @@ pub enum RoomEventData {
     StartGame(StartGameData),
     GameOver(GameOverData),
     GameClose(GameCloseData),
+    Status(StatusData),
+    Reconnect(ReconnectData),
 }
 
 // Prints the elapsed time.
@@ -360,6 +372,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 }
                                 group.borrow_mut().ready();
                                 group.borrow_mut().update_names();
+                                group.borrow_mut().game_port = game_port;
                                 
                                 GameingGroups.remove(&group.borrow().game_id);
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
@@ -399,6 +412,31 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                     let handle = || -> Result<(), Error> {
                         if let Ok(d) = d {
                             match d {
+                                RoomEventData::Status(x) => {
+                                    let u = get_user(&x.id, &TotalUsers);
+                                    if let Some(u) = u {
+                                        if u.borrow().game_id != 0 {
+                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                                msg: format!(r#"{{"msg":"gaming"}}"#)})?;
+                                        } else {
+                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                                msg: format!(r#"{{"msg":"normal"}}"#)})?;
+                                        }
+                                    } else {
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                                msg: format!(r#"{{"msg":"id not found"}}"#)})?;
+                                    }
+                                },
+                                RoomEventData::Reconnect(x) => {
+                                    let u = get_user(&x.id, &TotalUsers);
+                                    if let Some(u) = u {
+                                        let g = GameingGroups.get(&u.borrow().game_id);
+                                        if let Some(g) = g {
+                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
+                                                msg: format!(r#"{{"server":"59.126.81.58:{}"}}"#, g.borrow().game_port)})?;
+                                        }
+                                    }
+                                },
                                 RoomEventData::GameClose(x) => {
                                     let g = GameingGroups.remove(&x.game);
                                     if let Some(g) = g {
@@ -458,10 +496,9 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     if let Some(g) = g {
                                         SendGameList(&g, &msgtx, &mut conn);
                                         for r in &g.borrow().room_names {
-                                            //game_port = 7778;
                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
                                                 msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
-                                                    r, game_port, g.borrow().game_id)})?;
+                                                    r, g.borrow().game_port, g.borrow().game_id)})?;
                                         }
                                     }
                                     
@@ -631,40 +668,47 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     let mut success = false;
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
-                                        let gid = u.borrow().gid;
-                                        let rid = u.borrow().rid;
-                                        let r = TotalRoom.get(&u.borrow().rid);
-                                        let mut is_null = false;
-                                        if let Some(r) = r {
-                                            let m = r.borrow().master.clone();
-                                            r.borrow_mut().rm_user(&x.id);
-                                            if r.borrow().users.len() > 0 {
-                                                r.borrow().publish_update(&msgtx, m);
-                                            }
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                        }
-                                        if is_null {
-                                            TotalRoom.remove(&u.borrow().rid);
-                                            QueueRoom.remove(&u.borrow().rid);
-                                        }
-                                        if gid != 0 {
-                                            let g = ReadyGroups.get(&gid);
-                                            if let Some(gr) = g {
-                                                gr.borrow_mut().user_cancel(&x.id);
-                                                ReadyGroups.remove(&gid);
-                                                let r = QueueRoom.remove(&rid);
-                                                if let Some(r) = r {
-                                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
-                                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                        if u.borrow().game_id == 0 {
+                                            let gid = u.borrow().gid;
+                                            let rid = u.borrow().rid;
+                                            let r = TotalRoom.get(&u.borrow().rid);
+                                            let mut is_null = false;
+                                            if let Some(r) = r {
+                                                let m = r.borrow().master.clone();
+                                                r.borrow_mut().rm_user(&x.id);
+                                                if r.borrow().users.len() > 0 {
+                                                    r.borrow().publish_update(&msgtx, m);
                                                 }
-                                                TotalRoom.remove(&rid);
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             }
+                                            if is_null {
+                                                TotalRoom.remove(&u.borrow().rid);
+                                                QueueRoom.remove(&u.borrow().rid);
+                                            }
+                                            if gid != 0 {
+                                                let g = ReadyGroups.get(&gid);
+                                                if let Some(gr) = g {
+                                                    gr.borrow_mut().user_cancel(&x.id);
+                                                    ReadyGroups.remove(&gid);
+                                                    let r = QueueRoom.remove(&rid);
+                                                    if let Some(r) = r {
+                                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                    }
+                                                    TotalRoom.remove(&rid);
+                                                }
+                                            }
+                                        } else {
+                                            success = true;
                                         }
                                     }
-                                    let mut u = TotalUsers.remove(&x.id);
-                                    if let Some(u) = u {
-                                        success = true;
+                                    if success {
+                                        success = false;
+                                        let mut u = TotalUsers.remove(&x.id);
+                                        if let Some(u) = u {
+                                            success = true;
+                                        }
                                     }
                                     if success {
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
@@ -838,5 +882,21 @@ pub fn game_close(id: String, v: Value, sender: Sender<RoomEventData>)
 {
     let data: GameCloseData = serde_json::from_value(v)?;
     sender.send(RoomEventData::GameClose(data));
+    Ok(())
+}
+
+pub fn status(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: StatusData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::Status(data));
+    Ok(())
+}
+
+pub fn reconnect(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: ReconnectData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::Reconnect(data));
     Ok(())
 }
