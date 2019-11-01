@@ -11,11 +11,11 @@ edition = "2018"
 
 [dependencies]
 crossbeam-channel = "0.3"
-mysql = "*"
+mysql = "16.1"
 rumqtt = "0.31"
 clap = "2"
-log = "*"
-env_logger = "*"
+log = "0.4.8"
+env_logger = "0.7.1"
 uuid = { version = "0.7", features = ["v4"] }
 time = "0.1"
 bit-vec = "0.5"
