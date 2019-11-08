@@ -24,6 +24,7 @@ use std::process::Command;
 
 const TEAM_SIZE: u16 = 1;
 const MATCH_SIZE: usize = 2;
+const SCORE_INTERVAL: i16 = 100;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -311,11 +312,20 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                         let mut g: FightGroup = Default::default();
                         let mut tq: Vec<Rc<RefCell<RoomData>>> = vec![];
                         tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
-                        tq.sort_by_key(|x| x.borrow().avg_rk);
+                        //tq.sort_by_key(|x| x.borrow().avg_rk);
+                        tq.sort_by_key(|x| x.borrow().avg_ng);
                         for (k, v) in &mut QueueRoom {
+                            let mut Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng as i16);
                             if v.borrow().ready == 0 &&
                                 v.borrow().users.len() as u16 + g.user_count <= TEAM_SIZE {
-                                g.add_room(Rc::clone(&v));
+                               let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng as i16);
+                               //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", g.avg_ng), msg: format!(r#"{{"msg":"Difference = {}"}}"#, Difference)})?;
+                               if g.avg_ng == 0 || Difference <= SCORE_INTERVAL {
+                                   //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", g.avg_ng), msg: format!(r#"{{"msg":"Add Room"}}"#)})?;
+                                   g.add_room(Rc::clone(&v));
+                                   g.update_avg();
+                                   //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", g.avg_ng), msg: format!(r#"{{"msg":"avg_ng = {}"}}"#, g.avg_ng)})?;
+                               }
                             }
                             if g.user_count == TEAM_SIZE {
                                 g.prestart();
@@ -323,6 +333,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 info!("new group_id: {}", group_id);
                                 g.set_group_id(group_id);
                                 ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", group_id), msg: format!(r#"{{"msg":"Group Ready! avg_ng = {}"}}"#, g.avg_ng)})?;
                                 g = Default::default();
                             }
                         }
@@ -330,9 +341,20 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                     if ReadyGroups.len() >= MATCH_SIZE {
                         let mut fg: FightGame = Default::default();
                         let mut prestart = false;
+                        let mut total_ng: i16 = 0; 
                         for (id, rg) in &mut ReadyGroups {
                             if rg.borrow().game_status == 0 && fg.teams.len() < MATCH_SIZE {
-                                fg.teams.push(Rc::clone(rg));
+                                if total_ng == 0 {
+                                    total_ng += rg.borrow().avg_ng as i16;
+                                    fg.teams.push(Rc::clone(rg));
+                                    continue;
+                                }
+                                let difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.teams.len() as i16);
+                                msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneGroup", id), msg: format!(r#"{{"msg":"Difference = {}"}}"#, difference)})?;
+                                if difference <= SCORE_INTERVAL {
+                                    total_ng += rg.borrow().avg_ng as i16;
+                                    fg.teams.push(Rc::clone(rg));
+                                }
                             }
                             if fg.teams.len() == MATCH_SIZE {
                                 for g in &mut fg.teams {
@@ -426,6 +448,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
                                                 msg: format!(r#"{{"msg":"id not found"}}"#)})?;
                                     }
+                                    info!("Status TotalUsers {:#?}", TotalUsers);
                                 },
                                 RoomEventData::Reconnect(x) => {
                                     let u = get_user(&x.id, &TotalUsers);
@@ -440,7 +463,41 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 RoomEventData::GameClose(x) => {
                                     let g = GameingGroups.remove(&x.game);
                                     if let Some(g) = g {
-                                        g.borrow_mut().leave_room();
+                                        for u in &g.borrow().user_names {
+                                            let u = get_user(&u, &TotalUsers);
+                                            match u {
+                                                Some(u) => {
+                                                    // remove room
+                                                    let r = TotalRoom.get(&u.borrow().rid);
+                                                    let mut is_null = false;
+                                                    if let Some(r) = r {
+                                                        r.borrow_mut().rm_user(&u.borrow().id);
+                                                        if r.borrow().users.len() == 0 {
+                                                            is_null = true;
+                                                            info!("remove success {}", u.borrow().id);
+                                                        }
+                                                    }
+                                                    else {
+                                                        info!("remove fail {}", u.borrow().id);
+                                                    }
+                                                    if is_null {
+                                                        TotalRoom.remove(&u.borrow().rid);
+                                                        QueueRoom.remove(&u.borrow().rid);
+                                                    }
+                                                    u.borrow_mut().rid = 0;
+                                                    u.borrow_mut().gid = 0;
+                                                    u.borrow_mut().game_id = 0;
+                                                },
+                                                None => {
+                                                    info!("remove fail ");
+                                                }
+                                            }
+                                        }
+                                        info!("GameClose {}", x.game);
+                                        info!("TotalUsers {:#?}", TotalUsers);
+                                    }
+                                    else {
+                                        info!("GameingGroups {:#?}", GameingGroups);
                                     }
                                 },
                                 RoomEventData::GameOver(x) => {
@@ -666,7 +723,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 },
                                 RoomEventData::Logout(x) => {
                                     let mut success = false;
-                                    let u = TotalUsers.get(&x.id);
+                                    let u = TotalUsers.get(&x.id);                                    
                                     if let Some(u) = u {
                                         if u.borrow().game_id == 0 {
                                             let gid = u.borrow().gid;
@@ -705,9 +762,14 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                     }
                                     if success {
                                         success = false;
-                                        let mut u = TotalUsers.remove(&x.id);
+                                        let mut u = TotalUsers.get(&x.id);
                                         if let Some(u) = u {
-                                            success = true;
+                                            if u.borrow().game_id == 0 {
+                                                success = true;
+                                            }
+                                        }
+                                        if success {
+                                            TotalUsers.remove(&x.id);
                                         }
                                     }
                                     if success {
