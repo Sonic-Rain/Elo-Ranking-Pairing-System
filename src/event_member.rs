@@ -1,5 +1,6 @@
 use serde_json::{self, Result, Value};
 use std::env;
+use std::thread;
 use std::io::{self, Write};
 use serde_derive::{Serialize, Deserialize};
 use failure::Error;
@@ -23,14 +24,17 @@ struct LogoutData {
 }
 
 
-pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
+pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>, sender1: Sender<SqlData>)
  -> std::result::Result<(), Error>
 {
     let data: LoginData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), online: true, ng: 1000, rk: 1000, ..Default::default()}, dataid: data.id}));
+    /*
     let mut conn = pool.get_conn()?;
     let sql = format!(r#"select a.score as ng, b.score as rk, name from user as c 
                         join user_ng as a on a.id=c.id 
                         join user_rank as b on b.id=c.id  where userid='{}';"#, data.id);
+    
     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
     let mut ng: i16 = 0;
     let mut rk: i16 = 0;
@@ -45,40 +49,33 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
         name = mysql::from_value(a.get("name").unwrap());
         break;
     }
-    if count == 0 {
-        let sql = format!("insert into user (userid, name, status) values ('{}', 'default name', 'online');", data.id);
+    if count == 0 { 
+        let sql = format!("replace into user (userid, name, status) values ('{}', 'default name', 'online');", data.id);
         {
             conn.query(sql.clone())?;
-        }
-        let sql = format!("select id from user where userid='{}';", data.id);
-        println!("sql: {}", sql);
-        let qres = conn.query(sql.clone())?;
-        let mut id = -1;
-        for row in qres {
-            let a = row?.clone();
-            id = mysql::from_value(a.get("id").unwrap());
-        }
-        if id > 0 {
-            ng = 1000;
-            rk = 1000;
-            let sql = format!("insert into user_rank (id, score) values ({}, 1000);", id);
-            conn.query(sql.clone())?;
-            let sql = format!("insert into user_ng (id, score) values ({}, 1000);", id);
-            conn.query(sql.clone())?;
-        }
+        } 
+        sender1.send(SqlData::Login(SqlLoginData {id: data.id.clone(), name: name.clone()}));
+        //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: 1000, rk: 1000, ..Default::default()}}));
+        
     }
+    
     let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
     let publish_packet = match qres {
         Ok(_) => {
             //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), ng: ng, rk: rk}}));
         },
         _=> {
-      
+    
         }
     };
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: ng, rk: rk, ..Default::default()}}));
+    if count != 0 {
+        sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: ng, rk: rk, ..Default::default()}}));
+    }
+    */
     Ok(())
+    
 }
+
 
 pub fn logout(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>

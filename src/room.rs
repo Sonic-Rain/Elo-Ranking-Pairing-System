@@ -7,6 +7,7 @@ use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
     pub id: String,
+    pub name: String,
     pub hero: String,
     pub ng: i16,
     pub rk: i16,
@@ -124,11 +125,11 @@ impl FightGroup {
         false
     }
 
-    pub fn get_users_id_hero(&self) -> Vec<(String, String)> {
-        let mut res: Vec<(String, String)> = vec![];
+    pub fn get_users_id_hero(&self) -> Vec<(String, String, String)> {
+        let mut res: Vec<(String, String, String)> = vec![];
         for r in &self.rooms {
             for u in &r.borrow().users {
-                res.push((u.borrow().id.clone(), u.borrow().hero.clone()));
+                res.push((u.borrow().id.clone(), u.borrow().name.clone(), u.borrow().hero.clone()));
             }
         }
         res

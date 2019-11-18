@@ -52,6 +52,7 @@ pub struct JoinRoomData {
 #[derive(Clone, Debug)]
 pub struct UserLoginData {
     pub u: User,
+    pub dataid: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -154,6 +155,16 @@ pub enum RoomEventData {
     Reconnect(ReconnectData),
 }
 
+#[derive(Clone, Debug)]
+pub struct SqlLoginData {
+    pub id: String,
+    pub name: String,
+}
+
+pub enum SqlData {
+    Login(SqlLoginData),
+}
+
 // Prints the elapsed time.
 fn show(dur: Duration) {
     println!(
@@ -169,23 +180,9 @@ fn SendGameList(game: &Rc<RefCell<FightGame>>, msgtx: &Sender<MqttMsg>, conn: &m
     res.game = game.borrow().game_id;
     for (i, t) in game.borrow().teams.iter().enumerate() {
         let ids = t.borrow().get_users_id_hero();
-        for (id, hero) in &ids {
-            let sql = format!("select userid,name from user where userid='{}';", id);
-            println!("sql: {}", sql);
-            let qres = conn.query(sql.clone())?;
-            let mut userid: String = "".to_owned();
-            let mut name: String = "".to_owned();
-
-            let mut count = 0;
-            for row in qres {
-                count += 1;
-                let a = row?.clone();
-                userid = mysql::from_value(a.get("userid").unwrap());
-                name = mysql::from_value(a.get("name").unwrap());
-                let h: HeroCell = HeroCell {id:id.clone(), team: (i+1) as u16, name:name, hero:hero.clone(), ..Default::default() };
-                res.member.push(h);
-                break;
-            }
+        for (id, name, hero) in &ids {
+            let h: HeroCell = HeroCell {id:id.clone(), team: (i+1) as u16, name:name.clone(), hero:hero.clone(), ..Default::default() };
+            res.member.push(h);
         }
     }
     info!("{:?}", res);
@@ -285,13 +282,165 @@ fn settlement_ng_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>
     }
 }
 
-pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool) 
+pub fn HandleSqlRequest(pool: mysql::Pool)
+    -> Result<Sender<SqlData>, Error> {
+        let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = bounded(10000);
+        let start = Instant::now();
+        let update500ms = tick(Duration::from_millis(500));
+        let mut NewUsers: Vec<String> = Vec::new();
+        
+        thread::spawn(move || -> Result<(), Error> {
+            let mut conn = pool.get_conn()?;
+            loop{
+                select! {
+                    
+
+                    recv(rx1) -> d => {
+
+                        let handle = || -> Result<(), Error> {
+                            if let Ok(d) = d {
+                                match d {
+                                    
+                                    SqlData::Login(x) => {
+                                        
+                                        NewUsers.push(x.id.clone());
+                                        println!("!!!!!!!!!!!!!!!!!!!!!!!!!! id: {}", x.id);
+                                        let mut conn = pool.get_conn()?;
+                                        let mut length: usize = 0;
+                                        length = NewUsers.len();
+                                        println!("!!!!!!!!!!!!!!!!!!!!!!!!!! Length: {}", length);
+                                        if length == 10 {
+                                            let sql = format!(r#"insert into user (userid, name, status) values ('{}', 'default name', 'online'), 
+                                                                                                                ('{}', 'default name', 'online'), 
+                                                                                                                ('{}', 'default name', 'online'), 
+                                                                                                                ('{}', 'default name', 'online'),
+                                                                                                                ('{}', 'default name', 'online'),
+                                                                                                                ('{}', 'default name', 'online'),
+                                                                                                                ('{}', 'default name', 'online'),
+                                                                                                                ('{}', 'default name', 'online'),
+                                                                                                                ('{}', 'default name', 'online'), 
+                                                                                                                ('{}', 'default name', 'online'); "#, 
+                                                                                                                NewUsers[0], NewUsers[1], NewUsers[2], NewUsers[3], NewUsers[4],
+                                                                                                                NewUsers[5], NewUsers[6], NewUsers[7], NewUsers[8], NewUsers[9]);
+                                            {
+                                                conn.query(sql.clone())?;
+                                            }
+                                            let mut id = 0;
+                                            let sql = format!("select LAST_INSERT_ID()");
+                                            let qres = conn.query(sql.clone())?;
+                                            let mut id = -1;
+                                            for row in qres {
+                                                let a = row?.clone();
+                                                id = mysql::from_value(a.get("LAST_INSERT_ID()").unwrap());
+                                            }
+                                            
+                                            let sql = format!(r#"insert into user_rank (id, score) values ({}, 1000),
+                                                                                                            ({}, 1000), 
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000), 
+                                                                                                            ({}, 1000);"#, 
+                                                                                                                id, id+1, id+2, id+3, id+4,
+                                                                                                                id+5, id+6, id+7, id+8, id+9);
+                                            {
+                                                conn.query(sql.clone())?;
+                                            }
+                
+                                            let sql = format!(r#"insert into user_ng (id, score) values ({}, 1000),
+                                                                                                            ({}, 1000), 
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000),
+                                                                                                            ({}, 1000), 
+                                                                                                            ({}, 1000); "#, 
+                                                                                                                id, id+1, id+2, id+3, id+4,
+                                                                                                                id+5, id+6, id+7, id+8, id+9);
+                                            {
+                                                conn.query(sql.clone())?;
+                                            }
+                                            NewUsers.clear();
+                                                                                      
+                                            
+                                        }
+                                        /*
+                                        let sql = format!(r#"select a.score as ng, b.score as rk, name from user as c 
+                                                            join user_ng as a on a.id=c.id 
+                                                            join user_rank as b on b.id=c.id  where userid='{}';"#, &x.id);
+                                        
+                                        let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                        let mut ng: i16 = 0;
+                                        let mut rk: i16 = 0;
+                                        let mut name: String = "".to_owned();
+                                        
+                                        let mut count = 0;
+                                        for row in qres2 {
+                                            count += 1;
+                                            break;
+                                        }
+                                        
+                                        //if count == 0 {
+                                            
+                                            let sql = format!("replace into user (userid, name, status) values ('{}', 'default name', 'online');", &x.id);
+                                            {
+                                                conn.query(sql.clone())?;
+                                            }
+
+                                            
+                                            let sql = format!("select id from user where userid='{}';", &x.id);
+                                            println!("sql: {}", sql);
+                                            let qres = conn.query(sql.clone())?;
+                                            let mut id = -1;
+                                            let mut name: String = "".to_owned();
+                                            for row in qres {
+                                                let a = row?.clone();
+                                                id = mysql::from_value(a.get("id").unwrap());
+                                            }
+                                            
+
+                                            let mut ng = 0;
+                                            let mut rk = 0;
+                                            if id > 0 {
+                                                ng = 1000;
+                                                rk = 1000;
+                                                let sql = format!("insert into user_rank (id, score) values ({}, 1000);", id);
+                                                conn.query(sql.clone())?;
+                                                let sql = format!("insert into user_ng (id, score) values ({}, 1000);", id);
+                                                conn.query(sql.clone())?;
+                                            }
+                                            
+                                        //}*/
+                                    }
+    
+                                }
+                            }
+                            Ok(())
+                        };
+                        if let Err(msg) = handle() {
+                            println!("{:?}", msg);
+                        }
+                    }
+                }
+            }
+        });
+    Ok(tx1)
+}
+
+
+pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool) 
     -> Result<Sender<RoomEventData>, Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(10000);
     let start = Instant::now();
     let update200ms = tick(Duration::from_millis(200));
-    let update100ms = tick(Duration::from_millis(100));
+    let update100ms = tick(Duration::from_millis(100));  
     
+
     thread::spawn(move || -> Result<(), Error> {
         let mut conn = pool.get_conn()?;
         let mut TotalRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
@@ -304,6 +453,34 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
         let mut group_id: u32 = 0;
         let mut game_id: u32 = 0;
         let mut game_port: u16 = 7777;
+
+        let sql = format!(r#"select userid, a.score as ng, b.score as rk, name from user as c 
+                            join user_ng as a on a.id=c.id 
+                            join user_rank as b on b.id=c.id;"#);
+        let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+        let mut userid: String = "".to_owned();
+        let mut ng: i16 = 0;
+        let mut rk: i16 = 0;
+        let mut name: String = "".to_owned();
+        let id = 0;
+        for row in qres2 {
+            let a = row?.clone();
+            let user = User {
+                id: mysql::from_value(a.get("userid").unwrap()),
+                hero: mysql::from_value(a.get("name").unwrap()),
+                online: false,
+                ng: mysql::from_value(a.get("ng").unwrap()),
+                rk: mysql::from_value(a.get("rk").unwrap()),
+                ..Default::default()
+            };
+            userid = mysql::from_value(a.get("userid").unwrap());
+            println!("userid: {}", userid);
+            //ng = mysql::from_value(a.get("ng").unwrap());
+            //rk = mysql::from_value(a.get("rk").unwrap());
+            //name = mysql::from_value(a.get("name").unwrap());
+            TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
+        }
+
         loop {
             select! {
                 recv(update200ms) -> _ => {
@@ -707,11 +884,28 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                 },
                                 RoomEventData::Login(x) => {
                                     let mut success = true;
+                                    println!("000000000000000000000000000000: {}", x.u.id);                                    
                                     if TotalUsers.contains_key(&x.u.id) {
-                                        success = false;
+                                        let u2 = TotalUsers.get(&x.u.id);
+                                        if let Some(u2) = u2 {
+                                            u2.borrow_mut().online = true;
+                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()), 
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)})?;
+                                        }
+                                        
                                     }
-                                    if success {
+                                    else {
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
+                                        //thread::sleep(Duration::from_millis(50));
+                                        println!("PPPPPPPPPPPPPPPPPPPPPPPPPP: {}", x.dataid);
+                                        sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
+                                    }
+                                    
+                                    /*
+                                    if success {
+                                        //TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
                                     } else {
@@ -720,10 +914,15 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
                                     }
+                                    */
                                 },
                                 RoomEventData::Logout(x) => {
                                     let mut success = false;
-                                    let u = TotalUsers.get(&x.id);                                    
+                                    let u = TotalUsers.get(&x.id); 
+                                    let u2 = get_user(&x.id, &TotalUsers);
+                                    if let Some(u2) = u2 {
+                                        u2.borrow_mut().online = false;
+                                    }                             
                                     if let Some(u) = u {
                                         if u.borrow().game_id == 0 {
                                             let gid = u.borrow().gid;
@@ -760,6 +959,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             success = true;
                                         }
                                     }
+                                    /*
                                     if success {
                                         success = false;
                                         let mut u = TotalUsers.get(&x.id);
@@ -772,6 +972,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
                                             TotalUsers.remove(&x.id);
                                         }
                                     }
+                                    */
                                     if success {
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok"}}"#)})?;
@@ -847,6 +1048,7 @@ pub fn init(msgtx: Sender<MqttMsg>, pool: mysql::Pool)
             }
         }
     });
+
     Ok(tx)
 }
 

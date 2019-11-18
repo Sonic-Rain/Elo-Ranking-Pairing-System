@@ -28,6 +28,7 @@ use room::PrestartStatus;
 
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use crate::event_room::RoomEventData;
+use crate::event_room::SqlData;
 use crate::msg::*;
 
 fn generate_client_id() -> String {
@@ -159,7 +160,8 @@ fn main() -> std::result::Result<(), Error> {
     let restatus = Regex::new(r"\w+/(\w+)/send/status")?;
     let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect")?;
     
-    let mut sender: Sender<RoomEventData> = event_room::init(tx, pool.clone())?;
+    let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
+    let mut sender: Sender<RoomEventData> = event_room::init(tx, sender1.clone(), pool.clone())?;
     
     loop {
         use rumqtt::Notification::Publish;
@@ -202,7 +204,7 @@ fn main() -> std::result::Result<(), Error> {
                                 let cap = relogin.captures(topic_name).unwrap();
                                 let userid = cap[1].to_string();
                                 info!("login: userid: {} json: {:?}", userid, v);
-                                event_member::login(userid, v, pool.clone(), sender.clone())?;
+                                event_member::login(userid, v, pool.clone(), sender.clone(), sender1.clone())?;
                             } else if relogout.is_match(topic_name) {
                                 let cap = relogout.captures(topic_name).unwrap();
                                 let userid = cap[1].to_string();
