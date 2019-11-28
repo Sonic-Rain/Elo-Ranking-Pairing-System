@@ -22,7 +22,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 1;
+const TEAM_SIZE: i16 = 2;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 2000;
 
@@ -465,10 +465,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                         tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
                         //tq.sort_by_key(|x| x.borrow().avg_rk);
                         tq.sort_by_key(|x| x.borrow().avg_ng);
-                        //println!("QueueRoom!! {}", QueueRoom.len());
+                        println!("QueueRoom!! {}", QueueRoom.len());
                         for (k, v) in &mut QueueRoom {
                             //v.update_avg();
-                            //println!("Room users num: {}, ready = {}", v.borrow().users.len(), v.borrow().ready);
+                            println!("Room users num: {}, ready = {}", v.borrow().users.len(), v.borrow().ready);
                             if v.borrow().ready == 0 &&
                                 v.borrow().users.len() as i16 + g.user_count <= TEAM_SIZE {
                                 
@@ -477,7 +477,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", g.avg_ng), msg: format!(r#"{{"msg":"Difference = {}"}}"#, Difference)})?;
                                if g.avg_ng == 0 || Difference <= SCORE_INTERVAL {
                                    //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", g.avg_ng), msg: format!(r#"{{"msg":"Add Room"}}"#)})?;
-                                   println!("in");
+                                   //println!("in");
                                    g.add_room(Rc::clone(&v));
                                    g.update_avg();
                                    //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", g.avg_ng), msg: format!(r#"{{"msg":"avg_ng = {}"}}"#, g.avg_ng)})?;
@@ -500,7 +500,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                         let mut fg: FightGame = Default::default();
                         let mut prestart = false;
                         let mut total_ng: i16 = 0; 
-                        //println!("ReadyGroup!! {}", ReadyGroups.len());
+                        println!("ReadyGroup!! {}", ReadyGroups.len());
                         for (id, rg) in &mut ReadyGroups {
                             //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneGroup", id), msg: format!(r#"{{"msg":"Avg_NG = {}, game_status = {}", users_len = {}}}"#,rg.borrow().avg_ng, rg.borrow().game_status, rg.borrow().user_count)})?;
                                 
@@ -890,6 +890,16 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     let mut success = false;
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
+                                        
+                                        //let r = QueueRoom.remove(&u.borrow().rid);
+                                        let g = ReadyGroups.get(&u.borrow().gid);
+                                        if let Some(g) = g {
+                                            for r in &g.borrow().rooms {
+                                                r.borrow_mut().ready = 0;
+                                            }
+                                        }
+                                        
+                                        let gr = ReadyGroups.remove(&u.borrow().gid);
                                         let r = QueueRoom.remove(&u.borrow().rid);
                                         if let Some(r) = r {
                                             success = true;
