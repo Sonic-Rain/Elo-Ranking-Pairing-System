@@ -105,6 +105,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("room/+/send/kick", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("room/+/send/leave", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("room/+/send/prestart", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/prestart_get", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("room/+/send/start", QoS::AtLeastOnce)?;
 
     mqtt_client.subscribe("game/+/send/game_close", QoS::AtLeastOnce)?;
@@ -148,6 +149,7 @@ fn main() -> std::result::Result<(), Error> {
     let reclose = Regex::new(r"\w+/(\w+)/send/close")?;
     let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue")?;
     let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue")?;
+    let represtart_get = Regex::new(r"\w+/(\w+)/send/prestart_get")?;
     let represtart = Regex::new(r"\w+/(\w+)/send/prestart")?;
     let reinvite = Regex::new(r"\w+/(\w+)/send/invite")?;
     let rejoin = Regex::new(r"\w+/(\w+)/send/join")?;
@@ -230,7 +232,12 @@ fn main() -> std::result::Result<(), Error> {
                                 let userid = cap[1].to_string();
                                 info!("cancel_queue: userid: {} json: {:?}", userid, v);
                                 event_room::cancel_queue(userid, v, sender.clone())?;
-                            } else if represtart.is_match(topic_name) {
+                            } else if represtart_get.is_match(topic_name) {
+                                let cap = represtart_get.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("prestart_get: userid: {} json: {:?}", userid, v);
+                                event_room::prestart_get(userid, v, sender.clone())?;
+                            }  else if represtart.is_match(topic_name) {
                                 let cap = represtart.captures(topic_name).unwrap();
                                 let userid = cap[1].to_string();
                                 info!("prestart: userid: {} json: {:?}", userid, v);

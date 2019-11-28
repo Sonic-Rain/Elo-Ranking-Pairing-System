@@ -15,6 +15,8 @@ pub struct User {
     pub gid: u32,
     pub game_id: u32,
     pub online: bool,
+    pub start_prestart: bool,
+    pub prestart_get: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -55,6 +57,27 @@ impl RoomData {
             user.borrow_mut().game_id = 0;
         }
         self.ready = 0;
+    }
+
+    pub fn user_prestart(&mut self) {
+        for user in &self.users {
+            user.borrow_mut().start_prestart = true;
+            user.borrow_mut().prestart_get = false;
+        }
+    }
+
+    pub fn check_prestart_get(&mut self) -> bool{
+        let mut res = false;
+        for user in &self.users {
+            if user.borrow().prestart_get == true {
+                res = true;
+            }
+            else {
+                res = false;
+                break;
+            }
+        }
+        res
     }
 
     pub fn clear_queue(&mut self) {
@@ -106,9 +129,9 @@ pub struct FightCheck {
 #[derive(Clone, Debug, Default)]
 pub struct FightGroup {
     pub rooms: Vec<Rc<RefCell<RoomData>>>,
-    pub user_count: u16,
-    pub avg_ng: u16,
-    pub avg_rk: u16,
+    pub user_count: i16,
+    pub avg_ng: i16,
+    pub avg_rk: i16,
     pub checks: Vec<FightCheck>,
     pub rids: Vec<u32>,
     pub game_status: u16,
@@ -166,17 +189,17 @@ impl FightGroup {
     }
 
     pub fn update_avg(&mut self) {
-        let mut sum_ng: u32 = 0;
-        let mut sum_rk: u32 = 0;
+        let mut sum_ng: i32 = 0;
+        let mut sum_rk: i32 = 0;
         self.user_count = 0;
         for room in &self.rooms {
-            sum_ng += room.borrow().avg_ng as u32;
-            sum_rk += room.borrow().avg_rk as u32;
-            self.user_count += room.borrow().users.len() as u16;
+            sum_ng += room.borrow().avg_ng as i32 * room.borrow().users.len() as i32;
+            sum_rk += room.borrow().avg_rk as i32 * room.borrow().users.len() as i32;
+            self.user_count += room.borrow().users.len() as i16;
         }
         if self.user_count > 0 {
-            self.avg_ng = (sum_ng/self.user_count as u32) as u16;
-            self.avg_rk = (sum_rk/self.user_count as u32) as u16;
+            self.avg_ng = (sum_ng/self.user_count as i32) as i16;
+            self.avg_rk = (sum_rk/self.user_count as i32) as i16;
         }
     }
 
@@ -223,6 +246,7 @@ impl FightGroup {
         self.checks.clear();
         for room in &self.rooms {
             room.borrow_mut().ready = 1;
+            room.borrow_mut().user_prestart();
             for u in &room.borrow().users {
                 self.checks.push(FightCheck{id: u.borrow().id.clone(), check: 0});
             }
@@ -274,6 +298,19 @@ impl FightGame {
                 }
             }
         }
+    }
+
+    pub fn check_prestart_get(&self) -> bool {
+        let mut res = false;
+        for c in &self.teams {
+            for r in &c.borrow().rooms {
+                res = r.borrow_mut().check_prestart_get();
+                if res == false {
+                    break;
+                }
+            }
+        }
+        res
     }
 
     pub fn check_prestart(&self) -> PrestartStatus {
