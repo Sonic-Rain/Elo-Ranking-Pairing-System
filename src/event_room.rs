@@ -22,7 +22,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 5;
+const TEAM_SIZE: i16 = 1;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 2000;
 
@@ -616,6 +616,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                 recv(update5000ms) -> _ => {
                     for (id, group) in &mut PreStartGroups {
                         let res1 = group.borrow().check_prestart_get();
+                        println!("check result: {}", res1);
                         if res1 == false {
                             for r in &group.borrow().room_names {
                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;

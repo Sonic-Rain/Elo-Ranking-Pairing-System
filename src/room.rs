@@ -69,6 +69,7 @@ impl RoomData {
     pub fn check_prestart_get(&mut self) -> bool{
         let mut res = false;
         for user in &self.users {
+            println!("User: {}, Prestart_get: {}", user.borrow().id, user.borrow().prestart_get);
             if user.borrow().prestart_get == true {
                 res = true;
             }
@@ -308,6 +309,9 @@ impl FightGame {
                 if res == false {
                     break;
                 }
+            }
+            if res == false {
+                break;
             }
         }
         res
