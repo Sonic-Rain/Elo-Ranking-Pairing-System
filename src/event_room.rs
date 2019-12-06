@@ -22,9 +22,9 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 5;
+const TEAM_SIZE: i16 = 1;
 const MATCH_SIZE: usize = 2;
-const SCORE_INTERVAL: i16 = 10;
+const SCORE_INTERVAL: i16 = 100;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -141,6 +141,36 @@ pub struct ReconnectData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct GameInfoData {
+    pub game: u32,
+    pub users: Vec<UserInfoData>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct UserInfoData {
+    pub id: String,
+    pub hero: String,
+    pub level: u16,
+    pub equ: Vec<String>,
+    pub damage: u16,
+    pub take_damage: u16, 
+    pub heal: u16,
+    pub kill: u16,
+    pub death: u16,
+    pub assist: u16,
+    pub gift: UserGift,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct UserGift {
+    pub A: u16,
+    pub B: u16,
+    pub C: u16,
+    pub D: u16,
+    pub E: u16,
+}
+
 pub enum RoomEventData {
     Reset(),
     Login(UserLoginData),
@@ -157,6 +187,7 @@ pub enum RoomEventData {
     Leave(LeaveData),
     StartGame(StartGameData),
     GameOver(GameOverData),
+    GameInfo(GameInfoData),
     GameClose(GameCloseData),
     Status(StatusData),
     Reconnect(ReconnectData),
@@ -169,14 +200,32 @@ pub struct SqlLoginData {
 }
 
 #[derive(Clone, Debug)]
-pub struct SqlUpdateData {
+pub struct SqlScoreData {
     pub id: String,
     pub score: i16,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct SqlGameInfoData {
+    pub game : u32,
+    pub id: String,
+    pub hero: String,
+    pub level: u16,
+    pub equ: String,
+    pub damage: u16, 
+    pub take_damage: u16,
+    pub heal: u16,
+    pub kill: u16,
+    pub death: u16,
+    pub assist: u16,
+    pub gift: UserGift,
+}
+
+
 pub enum SqlData {
     Login(SqlLoginData),
-    Update(SqlUpdateData),
+    UpdateScore(SqlScoreData),
+    UpdateGameInfo(SqlGameInfoData)
 }
 
 // Prints the elapsed time.
@@ -258,7 +307,7 @@ fn user_score(u: &Rc<RefCell<User>>, value: i16, msgtx: &Sender<MqttMsg>, sender
     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u.borrow().id), 
         msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u.borrow().ng, u.borrow().rk)})?;
     //println!("Update!");
-    sender.send(SqlData::Update(SqlUpdateData {id: u.borrow().id.clone(), score: u.borrow().ng.clone()}));
+    sender.send(SqlData::UpdateScore(SqlScoreData {id: u.borrow().id.clone(), score: u.borrow().ng.clone()}));
         //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
     //println!("sql: {}", sql);
     //let qres = conn.query(sql.clone())?;
@@ -305,6 +354,8 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
         let update1000ms = tick(Duration::from_millis(1000));
         let mut NewUsers: Vec<String> = Vec::new();
         let mut len = 0;
+        let mut UpdateInfo: Vec<SqlGameInfoData> = Vec::new();
+        let mut info_len = 0; 
 
         thread::spawn(move || -> Result<(), Error> {
             let mut conn = pool.get_conn()?;
@@ -365,11 +416,40 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                             {
                                 conn.query(insert_ng.clone())?;
                             }
+                            
+                            
 
                             len = 0;
                             NewUsers.clear();
                         }
 
+                        if info_len > 0 {
+                            
+                            let mut insert_info: String = "insert into game_info (userid, game_id, hero, level, damage, take_damage, heal, kill_cnt, death, assist) values".to_string();
+                            let mut user_info: String = "insert into user_info (userid, game_id, equ, gift_A, gift_B, gift_C, gift_D, gift_E) values".to_string();
+                            for (i, info) in UpdateInfo.iter().enumerate() {
+                                let mut new_user = format!(" ({}, {}, '{}', {}, {}, {}, {}, {}, {}, {})", info.id, info.game, info.hero, info.level, info.damage, info.take_damage, info.heal, info.kill, info.death, info.assist);
+                                insert_info += &new_user;
+                                let mut new_user1 = format!(" ({}, {}, '{}', {}, {}, {}, {}, {})", info.id, info.game, info.equ, info.gift.A, info.gift.B, info.gift.C, info.gift.D, info.gift.E);
+                                user_info += &new_user1;
+                                if i < info_len-1 {
+                                    insert_info += ",";
+                                    user_info += ",";
+                                }
+                            }
+                            insert_info += ";";
+                            user_info += ";";
+                            {
+                                conn.query(insert_info.clone())?;
+                            }
+                            {
+                                conn.query(user_info.clone())?;
+                            }
+                            
+
+                            info_len = 0;
+                            UpdateInfo.clear();
+                        }
 
                     }
 
@@ -385,11 +465,18 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                                         len+=1;
                                         
                                     }
-                                    SqlData::Update(x) => {
+                                    SqlData::UpdateScore(x) => {
                                         //println!("in");
                                         let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", x.score, x.id);
                                         //println!("sql: {}", sql);
                                         let qres = conn.query(sql.clone())?;
+                                    }
+                                    SqlData::UpdateGameInfo(x) => {
+                                        UpdateInfo.push(x.clone());
+                                        //let mut update: String = format!("UPDATE user_info as a JOIN user as b ON a.id=b.id SET damage=a.damage + {}, heal=a.heal+{}, kill_cnt=a.kill_cnt+{}, death=a.death+{}, assist=a.assist+{} WHERE b.userid='{}';", x.damage.clone(), x.heal.clone(), x.kill.clone(), x.death.clone(), x.assist.clone(), x.id);
+                                        info_len += 1;
+                                        //println!("Update: {}", update);
+                                        
                                     }
                                 }
                             }
@@ -454,6 +541,19 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
             //name = mysql::from_value(a.get("name").unwrap());
             TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
         }
+
+        /*
+        let get_game_id = format!("select MAX(game_id) from game_info;");
+        let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
+        
+        for row in qres3 {
+            let a = row?.clone();
+            game_id = mysql::from_value(a.get("MAX(game_id)").unwrap());
+            
+            //println!("game id: {}", game_id);
+        }
+        */
+        println!("game id: {}", game_id);
 
         loop {
             select! {
@@ -591,6 +691,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                 let cmd = Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
                                         .arg(format!("-gameid {}", group.borrow().game_id))
+                                        .arg("-NOSTEAM")
                                         .spawn();
                                         match cmd {
                                             Ok(_) => {},
@@ -751,6 +852,31 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         None => {
                                             info!("remove game fail {}", x.game);
                                         }
+                                    }
+                                },
+                                RoomEventData::GameInfo(x) => {
+                                    println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                                    for u in &x.users {
+                                        let mut update_info: SqlGameInfoData = Default::default();
+                                        update_info.game = x.game.clone();
+                                        update_info.id = u.id.clone();
+                                        update_info.hero = u.hero.clone();
+                                        update_info.level = u.level.clone();
+                                        for (i, e) in u.equ.iter().enumerate() {
+                                            update_info.equ += e;
+                                            if i < u.equ.len()-1 {
+                                                update_info.equ += ", ";
+                                            }
+                                        }
+                                        update_info.damage = u.damage.clone();
+                                        update_info.take_damage = u.take_damage.clone();
+                                        update_info.heal = u.heal.clone();
+                                        update_info.kill = u.kill.clone();
+                                        update_info.death = u.death.clone();
+                                        update_info.assist = u.assist.clone();
+                                        update_info.gift = u.gift.clone();
+                                        
+                                        sender.send(SqlData::UpdateGameInfo(update_info));
                                     }
                                 },
                                 RoomEventData::StartGame(x) => {
@@ -1202,6 +1328,15 @@ pub fn game_over(id: String, v: Value, sender: Sender<RoomEventData>)
     sender.send(RoomEventData::GameOver(data));
     Ok(())
 }
+
+pub fn game_info(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: GameInfoData = serde_json::from_value(v)?;
+    sender.send(RoomEventData::GameInfo(data));
+    Ok(())
+}
+
 
 pub fn game_close(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>

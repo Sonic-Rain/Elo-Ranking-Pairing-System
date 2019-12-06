@@ -110,6 +110,7 @@ fn main() -> std::result::Result<(), Error> {
 
     mqtt_client.subscribe("game/+/send/game_close", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/game_info", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("game/+/send/leave", QoS::AtLeastOnce)?;
@@ -158,6 +159,7 @@ fn main() -> std::result::Result<(), Error> {
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
+    let regame_info = Regex::new(r"\w+/(\w+)/send/game_info")?;
     let regame_close = Regex::new(r"\w+/(\w+)/send/game_close")?;
     let restatus = Regex::new(r"\w+/(\w+)/send/status")?;
     let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect")?;
@@ -257,6 +259,11 @@ fn main() -> std::result::Result<(), Error> {
                                 let userid = cap[1].to_string();
                                 info!("game_over: userid: {} json: {:?}", userid, v);
                                 event_room::game_over(userid, v, sender.clone())?;
+                            } else if regame_info.is_match(topic_name) {
+                                let cap = regame_info.captures(topic_name).unwrap();
+                                let userid = cap[1].to_string();
+                                info!("game_info: userid: {} json: {:?}", userid, v);
+                                event_room::game_info(userid, v, sender.clone())?;
                             } else if regame_close.is_match(topic_name) {
                                 let cap = regame_close.captures(topic_name).unwrap();
                                 let userid = cap[1].to_string();
