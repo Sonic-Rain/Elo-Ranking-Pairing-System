@@ -16,6 +16,7 @@ use clap::{App, Arg};
 use uuid::Uuid;
 use rumqtt::{MqttClient, MqttOptions, QoS};
 
+use std::panic;
 use std::thread;
 use std::time::Duration;
 use log::Level;
@@ -87,7 +88,7 @@ fn main() -> std::result::Result<(), Error> {
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
     mqtt_options = mqtt_options.set_request_channel_capacity(10000);
-    mqtt_options = mqtt_options.set_notification_channel_capacity(20000);
+    mqtt_options = mqtt_options.set_notification_channel_capacity(500000);
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
     mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce)?;
     mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce)?;
@@ -120,10 +121,11 @@ fn main() -> std::result::Result<(), Error> {
     let pool = mysql::Pool::new(get_url().as_str())?;
     thread::sleep_ms(100);
     thread::spawn(move || -> Result<(), Error> {
+        
         let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>()?);
         mqtt_options = mqtt_options.set_keep_alive(100);
         mqtt_options = mqtt_options.set_request_channel_capacity(10000);
-        mqtt_options = mqtt_options.set_notification_channel_capacity(20000);
+        mqtt_options = mqtt_options.set_notification_channel_capacity(10000);
         println!("mqtt_options {:#?}", mqtt_options);
         let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
         loop {
@@ -134,13 +136,14 @@ fn main() -> std::result::Result<(), Error> {
                         match msg_res {
                             Ok(_) =>{},
                             Err(x) => {
-                                println!("{}", x);
+                                panic!("{}", x);
                             }
                         }
                     }
                 }
             }
         }
+        
         Ok(())
     });
 
@@ -288,4 +291,5 @@ fn main() -> std::result::Result<(), Error> {
             }
         }
     }
+    
 }

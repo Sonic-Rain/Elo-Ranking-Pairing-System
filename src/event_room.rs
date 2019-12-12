@@ -6,6 +6,7 @@ use serde_json::json;
 use std::io::{ErrorKind};
 use log::{info, warn, error, trace};
 use std::thread;
+use std::panic;
 use std::time::{Duration, Instant};
 
 use ::futures::Future;
@@ -24,7 +25,7 @@ use std::process::Command;
 
 const TEAM_SIZE: i16 = 1;
 const MATCH_SIZE: usize = 2;
-const SCORE_INTERVAL: i16 = 100;
+const SCORE_INTERVAL: i16 = 200;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -228,6 +229,21 @@ pub enum SqlData {
     UpdateGameInfo(SqlGameInfoData)
 }
 
+#[derive(Clone, Debug)]
+pub struct UpdateRoomData {
+    pub rid: String,
+    pub name: String,
+}
+
+pub struct RemoveRoomData {
+    pub rid: String,
+}
+
+pub enum QueueData {
+    UpdateRoom(UpdateRoomData),
+    RemoveRoom(RemoveRoomData),
+}
+
 // Prints the elapsed time.
 fn show(dur: Duration) {
     println!(
@@ -349,7 +365,7 @@ fn settlement_ng_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>
 
 pub fn HandleSqlRequest(pool: mysql::Pool)
     -> Result<Sender<SqlData>, Error> {
-        let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = bounded(10000);
+        let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = bounded(1000);
         let start = Instant::now();
         let update1000ms = tick(Duration::from_millis(1000));
         let mut NewUsers: Vec<String> = Vec::new();
@@ -492,14 +508,27 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
     Ok(tx1)
 }
 
+pub fn HandleQueue(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
+    -> Result<Sender<QueueData>, Error> {
+    let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = bounded(1000);
+    let start = Instant::now();
+    let update = tick(Duration::from_millis(1000));
+        /*
+    thread::spawn(move || -> Result<(), Error>) {
+        let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
+        let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<FightGroup>>> = BTreeMap::new();
+    });*/
+    Ok(tx)
+}
+
 
 pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool) 
     -> Result<Sender<RoomEventData>, Error> {
-    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(100000);
+    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
     let start = Instant::now();
     let update5000ms = tick(Duration::from_millis(5000));
     let update200ms = tick(Duration::from_millis(200));
-    let update100ms = tick(Duration::from_millis(100));  
+    let update100ms = tick(Duration::from_millis(1000));  
     
 
     thread::spawn(move || -> Result<(), Error> {
@@ -668,12 +697,17 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                     }
                     // update prestart groups
                     let mut rm_ids: Vec<u32> = vec![];
+                    let mut start_cnt: u16 = 0;
                     for (id, group) in &mut PreStartGroups {
-                        
+                        //if start_cnt >= 10 {
+                        //    thread::sleep(Duration::from_millis(1000));
+                        //    break;
+                        //}
                         let res = group.borrow().check_prestart();
                         match res {
                             
                             PrestartStatus::Ready => {
+                                start_cnt += 1;
                                 rm_ids.push(*id);
                                 game_port += 1;
                                 if game_port > 65500 {
@@ -700,6 +734,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                 msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_singal", group.borrow().game_id), 
                                     msg: format!(r#"{{"game":{}}}"#, 
                                         group.borrow().game_id)})?;
+                                
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
@@ -840,13 +875,30 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                     // remove game
                                                     PreStartGroups.remove(&u.borrow().game_id);
                                                     GameingGroups.remove(&u.borrow().game_id);
+
+                                                    u.borrow_mut().rid = 0;
+                                                    u.borrow_mut().gid = 0;
+                                                    u.borrow_mut().game_id = 0;
                                                 },
                                                 None => {
                                                     error!("remove fail ");
                                                 }
                                             }
                                         }
-                                        g.borrow_mut().leave_room();
+                                        //g.borrow_mut().leave_room();
+                                        for u in &g.borrow().user_names {
+                                            let u = get_user(&u, &TotalUsers);
+                                            match u {
+                                                Some(u) => {
+                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", u.borrow().id), 
+                                                    msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)})?;
+                                                },
+                                                None => {
+
+                                                }
+                                            }
+                                        }
+                                        info!("Remove game_id!");
                                         }
                                         ,
                                         None => {
@@ -1223,6 +1275,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                     };
                     if let Err(msg) = handle() {
                         println!("{:?}", msg);
+                        panic!("Error found");
                     }
                 }
             }
