@@ -124,8 +124,8 @@ impl RoomData {
 
 #[derive(Clone, Debug, Default)]
 pub struct FightCheck {
-    id: String,
-    check: i8,
+    pub id: String,
+    pub check: i8,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -143,8 +143,11 @@ pub struct FightGroup {
 impl FightGroup {
     pub fn user_ready(&mut self, id: &String) -> bool {
         for c in &mut self.checks {
+            //println!("c: {}, id: {}", c.id, *id);
             if c.id == *id {
+                //println!("check");
                 c.check = 1;
+                self.check_prestart();
                 return true;
             }
         }
@@ -259,6 +262,7 @@ impl FightGroup {
     pub fn check_prestart(&self) -> PrestartStatus {
         let mut res = PrestartStatus::Ready;
         for c in &self.checks {
+            //println!("check: '{:?}'", c);
             if c.check < 0 {
                 return PrestartStatus::Cancel;
             } else if c.check != 1 {

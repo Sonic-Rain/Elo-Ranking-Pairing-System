@@ -23,7 +23,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 1;
+const TEAM_SIZE: i16 = 2;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 200;
 
@@ -78,6 +78,12 @@ pub struct CancelQueueData {
     pub id: String,
     pub action: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PreGameData {
+    pub rid: Vec<Vec<u32>>,
+}
+
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PreStartData {
@@ -183,6 +189,7 @@ pub enum RoomEventData {
     Join(JoinRoomData),
     StartQueue(StartQueueData),
     CancelQueue(CancelQueueData),
+    UpdateGame(PreGameData),
     PreStart(PreStartData),
     PreStartGet(PreStartGetData),
     Leave(LeaveData),
@@ -229,18 +236,41 @@ pub enum SqlData {
     UpdateGameInfo(SqlGameInfoData)
 }
 
-#[derive(Clone, Debug)]
-pub struct UpdateRoomData {
-    pub rid: String,
-    pub name: String,
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct QueueRoomData {
+    pub rid: u32,
+    pub gid: u32,
+    pub user_len: i16,
+    pub avg_ng: i16,
+    pub avg_rk: i16,
+    pub ready: i8,
+    pub queue_cnt: i16,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ReadyGroupData {
+    pub gid: u32,
+    pub rid: Vec<u32>,
+    pub user_len: i16,
+    pub avg_ng: i16,
+    pub avg_rk: i16,
+    pub game_status: u16,
+    pub queue_cnt: i16,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ReadyGameData {
+    pub gid: Vec<u32>,
+    pub group: Vec<Vec<u32>>,
+    pub team_len: usize,
 }
 
 pub struct RemoveRoomData {
-    pub rid: String,
+    pub rid: u32,
 }
 
 pub enum QueueData {
-    UpdateRoom(UpdateRoomData),
+    UpdateRoom(QueueRoomData),
     RemoveRoom(RemoveRoomData),
 }
 
@@ -433,8 +463,6 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                                 conn.query(insert_ng.clone())?;
                             }
                             
-                            
-
                             len = 0;
                             NewUsers.clear();
                         }
@@ -470,16 +498,13 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                     }
 
                     recv(rx1) -> d => {
-
                         let handle = || -> Result<(), Error> {
                             if let Ok(d) = d {
                                 match d {
                                     
-                                    SqlData::Login(x) => {
-                                        
+                                    SqlData::Login(x) => {                                       
                                         NewUsers.push(x.id.clone());
-                                        len+=1;
-                                        
+                                        len+=1;                                        
                                     }
                                     SqlData::UpdateScore(x) => {
                                         //println!("in");
@@ -489,10 +514,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                                     }
                                     SqlData::UpdateGameInfo(x) => {
                                         UpdateInfo.push(x.clone());
-                                        //let mut update: String = format!("UPDATE user_info as a JOIN user as b ON a.id=b.id SET damage=a.damage + {}, heal=a.heal+{}, kill_cnt=a.kill_cnt+{}, death=a.death+{}, assist=a.assist+{} WHERE b.userid='{}';", x.damage.clone(), x.heal.clone(), x.kill.clone(), x.death.clone(), x.assist.clone(), x.id);
                                         info_len += 1;
-                                        //println!("Update: {}", update);
-                                        
                                     }
                                 }
                             }
@@ -508,16 +530,170 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
     Ok(tx1)
 }
 
-pub fn HandleQueue(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
+pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
     -> Result<Sender<QueueData>, Error> {
     let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = bounded(1000);
     let start = Instant::now();
     let update = tick(Duration::from_millis(1000));
-        /*
-    thread::spawn(move || -> Result<(), Error>) {
-        let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
-        let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<FightGroup>>> = BTreeMap::new();
-    });*/
+        
+    thread::spawn(move || -> Result<(), Error> {
+        let mut QueueRoom: BTreeMap<u32, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
+        let mut group_id = 0;
+        loop {
+            select! {
+                recv(update) -> _ => {
+                    if QueueRoom.len() >= MATCH_SIZE {
+                        let mut g: ReadyGroupData = Default::default();
+                        let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
+                        tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                        //tq.sort_by_key(|x| x.borrow().avg_rk);
+                        tq.sort_by_key(|x| x.borrow().avg_ng);
+                        
+                        for (k, v) in &mut QueueRoom {
+                            
+                            if v.borrow().ready == 0 &&
+                                v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
+                                   
+                                let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
+                                if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                    g.rid.push(v.borrow().rid);
+                                    let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                    g.avg_ng = ng;
+                                    g.user_len += v.borrow().user_len;
+                                    v.borrow_mut().ready = 1;
+                                    v.borrow_mut().gid = group_id + 1;
+                                }
+                                else {
+                                    v.borrow_mut().queue_cnt += 1;
+                                }
+                            }
+                            if g.user_len == TEAM_SIZE {
+                                println!("match team_size!");
+                                group_id += 1;
+                                info!("new group_id: {}", group_id);
+                                g.gid = group_id;
+                                
+                                g.queue_cnt = 1;
+                                ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                
+                                g = Default::default();
+                            }
+
+                        }
+                        if g.user_len < TEAM_SIZE {
+                            for r in g.rid {
+                                let mut room = QueueRoom.get(&r);
+                                if let Some(room) = room {
+                                    room.borrow_mut().ready = 0;
+                                    room.borrow_mut().gid = 0;
+                                }
+                            }
+                        }
+                    }
+
+                    if ReadyGroups.len() >= MATCH_SIZE {
+                        let mut fg: ReadyGameData = Default::default();
+                        //let mut prestart = false;
+                        let mut total_ng: i16 = 0;
+                        let mut rm_ids: Vec<u32> = vec![];
+                        //println!("ReadyGroup!! {}", ReadyGroups.len());
+                        for (id, rg) in &mut ReadyGroups {
+                                
+                            if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
+                                if total_ng == 0 {
+                                    total_ng += rg.borrow().avg_ng as i16;
+                                    fg.group.push(rg.borrow().rid.clone());
+                                    fg.gid.push(*id);
+                                    fg.team_len += 1;
+                                    continue;
+                                }
+                                
+                                let mut difference = 0;
+                                if fg.team_len > 0 {
+                                    difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
+                                }
+                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                    total_ng += rg.borrow().avg_ng as i16;
+                                    fg.group.push(rg.borrow().rid.clone());
+                                    fg.team_len += 1;
+                                    fg.gid.push(*id);
+                                }
+                                else {
+                                    rg.borrow_mut().queue_cnt += 1;
+                                }
+                            }
+                            if fg.team_len == MATCH_SIZE {
+                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                for id in fg.gid {
+                                    rm_ids.push(id);
+                                }
+                                fg = Default::default();
+                            }
+                        }
+                        
+                        for id in rm_ids {
+                            let rg = ReadyGroups.remove(&id);
+                            if let Some(rg) = rg {
+                                for rid in &rg.borrow().rid {
+                                    
+                                    QueueRoom.remove(&rid);
+                                    
+                                }
+                            }
+                        }
+
+                        
+                    }
+
+
+
+                }
+
+                recv(rx) -> d => {
+                    let handle = || -> Result<(), Error> {
+                        if let Ok(d) = d {
+                            match d {
+                                QueueData::UpdateRoom(x) => {
+                                    println!("rid: {}", x.rid);
+                                    QueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
+                                }
+                                QueueData::RemoveRoom(x) => {
+                                    println!("Remove Room!!!  x.rid: {}", &x.rid);
+                                    let r = QueueRoom.get(&x.rid);
+                                    if let Some(r) = r {
+                                        println!("Start Remove!! gid: {}", &r.borrow().gid);
+                                        let mut rg = ReadyGroups.get(&r.borrow().gid);
+                                        if let Some(rg) = rg {
+                                            println!("ReadyGroup Remove!!");
+                                            for rid in &rg.borrow().rid {
+                                                if rid == &x.rid {
+                                                    continue;
+                                                }
+                                                let mut room = QueueRoom.get(rid);
+                                                if let Some(room) = room {
+                                                    
+                                                    room.borrow_mut().gid = 0;
+                                                    room.borrow_mut().ready = 0;
+                                                    println!("gid: {}, rid: {}, ready: {}", room.borrow().gid, room.borrow().rid, room.borrow().ready);
+                                                }
+                                            }
+                                        }
+                                        ReadyGroups.remove(&r.borrow().gid);
+                                    }
+                                    QueueRoom.remove(&x.rid);
+                                }
+                            }
+                        }
+                        Ok(()) 
+                    };
+                    if let Err(msg) = handle() {
+                        println!("{:?}", msg);
+                    }
+                }
+            }
+        }
+    });
     Ok(tx)
 }
 
@@ -525,16 +701,17 @@ pub fn HandleQueue(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
 pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool) 
     -> Result<Sender<RoomEventData>, Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
+    let QueueSender = HandleQueueRequest(msgtx.clone(), tx.clone())?;
     let start = Instant::now();
     let update5000ms = tick(Duration::from_millis(5000));
     let update200ms = tick(Duration::from_millis(200));
     let update100ms = tick(Duration::from_millis(1000));  
-    
+    //let QueueSender = tx1.clone();
 
     thread::spawn(move || -> Result<(), Error> {
         let mut conn = pool.get_conn()?;
         let mut TotalRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
-        let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
+        //let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<FightGroup>>> = BTreeMap::new();
         let mut PreStartGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut GameingGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
@@ -564,7 +741,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                 ..Default::default()
             };
             userid = mysql::from_value(a.get("userid").unwrap());
-            println!("userid: {}", userid);
+            //println!("userid: {}", userid);
             //ng = mysql::from_value(a.get("ng").unwrap());
             //rk = mysql::from_value(a.get("rk").unwrap());
             //name = mysql::from_value(a.get("name").unwrap());
@@ -588,113 +765,6 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
             select! {
                 recv(update200ms) -> _ => {
                     //show(start.elapsed());
-                    if QueueRoom.len() >= MATCH_SIZE {
-                        let mut g: FightGroup = Default::default();
-                        let mut tq: Vec<Rc<RefCell<RoomData>>> = vec![];
-                        tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
-                        //tq.sort_by_key(|x| x.borrow().avg_rk);
-                        tq.sort_by_key(|x| x.borrow().avg_ng);
-                        
-                        for (k, v) in &mut QueueRoom {
-                            
-                            if v.borrow().ready == 0 &&
-                                v.borrow().users.len() as i16 + g.user_count <= TEAM_SIZE {
-                                //println!("queue_cnt: {}, SCORE_INTERVAL: {}", v.borrow().queue_cnt, SCORE_INTERVAL * v.borrow().queue_cnt);
-                                   
-                                let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
-                                if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                    g.add_room(Rc::clone(&v));
-                                    g.update_avg();
-                                }
-                                else {
-                                    v.borrow_mut().queue_cnt += 1;
-                                }
-                            }
-                            if g.user_count == TEAM_SIZE {
-                                println!("match team_size!");
-                                g.prestart();
-                                group_id += 1;
-                                info!("new group_id: {}", group_id);
-                                g.set_group_id(group_id);
-                                for r in &g.rooms {
-                                    r.borrow_mut().queue_cnt = 1;
-                                }
-                                g.queue_cnt = 1;
-                                //g.update_avg();
-                                ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
-                                
-                                //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneRoom", group_id), msg: format!(r#"{{"msg":"Group Ready! room = {}"}}"#, v.borrow().rid)})?;
-                                g = Default::default();
-                            }
-                        }
-                    }
-                    if ReadyGroups.len() >= MATCH_SIZE {
-                        let mut fg: FightGame = Default::default();
-                        let mut prestart = false;
-                        let mut total_ng: i16 = 0;
-                        let mut rm_ids: Vec<u32> = vec![];
-                        //println!("ReadyGroup!! {}", ReadyGroups.len());
-                        for (id, rg) in &mut ReadyGroups {
-                            //msgtx.try_send(MqttMsg{topic:format!("group/{}/res/QueneGroup", id), msg: format!(r#"{{"msg":"Avg_NG = {}, game_status = {}", users_len = {}}}"#,rg.borrow().avg_ng, rg.borrow().game_status, rg.borrow().user_count)})?;
-                                
-                            if rg.borrow().game_status == 0 && fg.teams.len() < MATCH_SIZE {
-                                if total_ng == 0 {
-                                    total_ng += rg.borrow().avg_ng as i16;
-                                    fg.teams.push(Rc::clone(rg));
-                                    continue;
-                                }
-                                
-                                let mut difference = 0;
-                                if fg.teams.len() > 0 {
-                                    difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.teams.len() as i16);
-                                    //println!("msg:Avg_NG = {}, Total_NG = {}, Team_len = {}, Difference = {}", rg.borrow().avg_ng, total_ng, fg.teams.len(), difference);
-                                }
-                                //println!("msg:Avg_NG = {}, Total_NG = {}, Team_len = {}, Difference = {}", rg.borrow().avg_ng, total_ng, fg.teams.len(), difference);
-                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_ng += rg.borrow().avg_ng as i16;
-                                    fg.teams.push(Rc::clone(rg));
-                                }
-                                else {
-                                    rg.borrow_mut().queue_cnt += 1;
-                                }
-                            }
-                            if fg.teams.len() == MATCH_SIZE {
-                                for g in &mut fg.teams {
-                                    
-                                    let gstatus = g.borrow().game_status;
-                                    if gstatus == 0 {
-                                        for r in &mut g.borrow_mut().rooms {
-                                            r.borrow_mut().ready = 2;
-                                        }
-                                        for id in &g.borrow().rids {
-                                            rm_ids.push(*id);
-                                        }
-                                    }
-                                    g.borrow_mut().game_status = 1;
-                                    g.borrow_mut().queue_cnt = 1;
-                                    
-                                }
-                                fg.update_names();
-                                for r in &fg.room_names {
-                                    //thread::sleep_ms(100);
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
-                                }
-                                total_ng = 0;
-                                prestart = true;
-                                game_id += 1;
-                                fg.set_game_id(game_id);
-                                PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
-                                fg = Default::default();
-                            }
-                        }
-                        for id in rm_ids {
-                            QueueRoom.remove(&id);
-                        }
-
-                        if prestart {
-                            info!("ReadyGroups: {:#?}", ReadyGroups);
-                        }
-                    }
                     // update prestart groups
                     let mut rm_ids: Vec<u32> = vec![];
                     let mut start_cnt: u16 = 0;
@@ -704,6 +774,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                         //    break;
                         //}
                         let res = group.borrow().check_prestart();
+                        
                         match res {
                             
                             PrestartStatus::Ready => {
@@ -740,9 +811,37 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                 group.borrow_mut().update_names();
                                 group.borrow_mut().clear_queue();
                                 group.borrow_mut().game_status = 0;
+                                let mut rm_rid: Vec<u32> = vec![]; 
+                                for t in &group.borrow().teams {
+                                    for c in &t.borrow().checks {
+                                        if c.check < 0 {
+                                            let u = TotalUsers.get(&c.id);
+                                            if let Some(u) = u {
+                                                rm_rid.push(u.borrow().rid);
+                                            }
+                                        }
+                                    }
+                                }
                                 for r in &group.borrow().room_names {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), 
                                         msg: format!(r#"{{"msg":"stop queue"}}"#)})?;
+
+                                }
+                                for t in &group.borrow().teams {
+                                    for r in &t.borrow().rooms {
+                                        if !rm_rid.contains(&r.borrow().rid) {
+                                            let mut data = QueueRoomData {
+                                                rid: r.borrow().rid.clone(),
+                                                gid: 0,
+                                                user_len: r.borrow().users.len().clone() as i16,
+                                                avg_ng: r.borrow().avg_ng.clone(),
+                                                avg_rk: r.borrow().avg_rk.clone(),
+                                                ready: 0,
+                                                queue_cnt: 1,
+                                            };
+                                            QueueSender.send(QueueData::UpdateRoom(data));
+                                        }
+                                    }
                                 }
                                 rm_ids.push(*id);
                             },
@@ -787,7 +886,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
                                                 msg: format!(r#"{{"msg":"id not found"}}"#)})?;
                                     }
-                                    info!("Status TotalUsers {:#?}", TotalUsers);
+                                    //info!("Status TotalUsers {:#?}", TotalUsers);
                                 },
                                 RoomEventData::Reconnect(x) => {
                                     let u = get_user(&x.id, &TotalUsers);
@@ -823,7 +922,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                     }
                                                     if is_null {
                                                         TotalRoom.remove(&u.borrow().rid);
-                                                        QueueRoom.remove(&u.borrow().rid);
+                                                        //QueueRoom.remove(&u.borrow().rid);
                                                     }
                                                     u.borrow_mut().rid = 0;
                                                     u.borrow_mut().gid = 0;
@@ -835,7 +934,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             }
                                         }
                                         info!("GameClose {}", x.game);
-                                        info!("TotalUsers {:#?}", TotalUsers);
+                                        //info!("TotalUsers {:#?}", TotalUsers);
                                     }
                                     else {
                                         info!("GameingGroups {:#?}", GameingGroups);
@@ -868,10 +967,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                     }
                                                     if is_null {
                                                         TotalRoom.remove(&u.borrow().rid);
-                                                        QueueRoom.remove(&u.borrow().rid);
+                                                        //QueueRoom.remove(&u.borrow().rid);
                                                     }
                                                     // remove group
-                                                    ReadyGroups.remove(&u.borrow().gid);
+                                                    //ReadyGroups.remove(&u.borrow().gid);
                                                     // remove game
                                                     PreStartGroups.remove(&u.borrow().game_id);
                                                     GameingGroups.remove(&u.borrow().game_id);
@@ -962,7 +1061,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             }
                                             if is_null {
                                                 TotalRoom.remove(&u.borrow().rid);
-                                                QueueRoom.remove(&u.borrow().rid);
+                                                println!("Totalroom rid: {}", &u.borrow().rid);
+                                                QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
+                                                //QueueRoom.remove(&u.borrow().rid);
                                             }
                                     }
                                 },
@@ -1011,7 +1112,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                 },
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
-                                    QueueRoom.clear();
+                                    //QueueRoom.clear();
                                     ReadyGroups.clear();
                                     PreStartGroups.clear();
                                     GameingGroups.clear();
@@ -1022,8 +1123,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     let u = TotalUsers.get(&x.room);
                                     if let Some(u) = u {
                                         let gid = u.borrow().gid;
+                                        println!("gid: {}, id: {}", gid, u.borrow().id);
                                         if u.borrow().prestart_get == true {
-                                                
                                             
                                             if gid != 0 {
                                                 let g = ReadyGroups.get(&gid);
@@ -1034,9 +1135,26 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
                                                                 msg: format!(r#"{{"msg":"start"}}"#)})?;
                                                     } else {
+                                                        println!("accept false!");
                                                         gr.borrow_mut().user_cancel(&x.id);
+                                                        for r in &gr.borrow().rooms {
+                                                            println!("r_rid: {}, u_rid: {}", r.borrow().rid, u.borrow().rid);
+                                                            if r.borrow().rid != u.borrow().rid {
+                                                                let mut data = QueueRoomData {
+                                                                    rid: r.borrow().rid.clone(),
+                                                                    gid: 0,
+                                                                    user_len: r.borrow().users.len().clone() as i16,
+                                                                    avg_ng: r.borrow().avg_ng.clone(),
+                                                                    avg_rk: r.borrow().avg_rk.clone(),
+                                                                    ready: 0,
+                                                                    queue_cnt: 1,
+                                                                };
+                                                                QueueSender.send(QueueData::UpdateRoom(data));
+                                                            }
+                                                        }
                                                         ReadyGroups.remove(&gid);
-                                                        let r = QueueRoom.remove(&u.borrow().rid);
+                                                        let r = TotalRoom.get(&u.borrow().rid);
+                                                        //QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
                                                         if let Some(r) = r {
                                                             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
                                                                 msg: format!(r#"{{"msg":"ok"}}"#)})?;
@@ -1050,6 +1168,40 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             }
                                         }
                                     }
+                                },
+                                RoomEventData::UpdateGame(x) => {
+                                    println!("Update Game!");
+                                    let mut fg: FightGame = Default::default();
+                                    for r in &x.rid {
+                                        let mut g: FightGroup = Default::default();
+                                        for rid in r {
+                                            let room = TotalRoom.get(&rid);
+                                            if let Some(room) = room {
+                                                g.add_room(Rc::clone(&room));
+                                            }
+                                        }
+                                        g.prestart();
+                                        group_id += 1;
+                                        g.set_group_id(group_id);
+                                        g.game_status = 1;
+                                        ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                        let mut rg = ReadyGroups.get(&group_id);
+                                        if let Some(rg) = rg {
+                                            fg.teams.push(Rc::clone(rg));
+                                        }
+                                    }
+
+                                    fg.update_names();
+                                    for r in &fg.room_names {
+                                        //thread::sleep_ms(100);
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
+                                    }
+                                    
+                                    
+                                    game_id += 1;
+                                    fg.set_game_id(game_id);
+                                    PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
+
                                 },
                                 RoomEventData::PreStartGet(x) => {
                                     let mut u = TotalUsers.get(&x.id);
@@ -1073,10 +1225,21 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         let r = TotalRoom.get(&rid);
                                         if let Some(y) = r {
                                             y.borrow_mut().update_avg();
-                                            QueueRoom.insert(
-                                                y.borrow().rid,
-                                                Rc::clone(y)
-                                            );
+                                            let mut data = QueueRoomData {
+                                                rid: y.borrow().rid.clone(),
+                                                gid: 0,
+                                                user_len: y.borrow().users.len().clone() as i16,
+                                                avg_ng: y.borrow().avg_ng.clone(),
+                                                avg_rk: y.borrow().avg_rk.clone(),
+                                                ready: 0,
+                                                queue_cnt: 1,
+                                            };
+                                            println!("Totalroom rid: {}", rid);
+                                            QueueSender.send(QueueData::UpdateRoom(data));
+                                            //QueueRoom.insert(
+                                            //    y.borrow().rid,
+                                            //    Rc::clone(y)
+                                            //);
                                             success = true;
                                             if success {
                                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
@@ -1102,7 +1265,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         }
                                         
                                         let gr = ReadyGroups.remove(&u.borrow().gid);
-                                        let r = QueueRoom.remove(&u.borrow().rid);
+                                        let r = TotalRoom.get(&u.borrow().rid);
+                                        println!("Totalroom rid: {}", &u.borrow().rid);
+                                        QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
                                         if let Some(r) = r {
                                             success = true;
                                             if success {
@@ -1155,11 +1320,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         u2.borrow_mut().online = false;
                                     }                             
                                     if let Some(u) = u {
+                                        let mut is_null = false;
                                         if u.borrow().game_id == 0 {
                                             let gid = u.borrow().gid;
                                             let rid = u.borrow().rid;
                                             let r = TotalRoom.get(&u.borrow().rid);
-                                            let mut is_null = false;
+                                            
                                             if let Some(r) = r {
                                                 let m = r.borrow().master.clone();
                                                 r.borrow_mut().rm_user(&x.id);
@@ -1169,16 +1335,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
                                                     msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             }
-                                            if is_null {
-                                                TotalRoom.remove(&u.borrow().rid);
-                                                QueueRoom.remove(&u.borrow().rid);
-                                            }
+                                            
                                             if gid != 0 {
                                                 let g = ReadyGroups.get(&gid);
                                                 if let Some(gr) = g {
                                                     gr.borrow_mut().user_cancel(&x.id);
                                                     ReadyGroups.remove(&gid);
-                                                    let r = QueueRoom.remove(&rid);
+                                                    //let r = QueueRoom.remove(&rid);
+                                                    println!("Totalroom rid: {}", &u.borrow().rid);
+                                                    QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: rid}));
                                                     if let Some(r) = r {
                                                         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
                                                             msg: format!(r#"{{"msg":"ok"}}"#)})?;
@@ -1188,6 +1353,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             }
                                         } else {
                                             success = true;
+                                        }
+                                        if is_null {
+                                            TotalRoom.remove(&u.borrow().rid);
+                                            //QueueRoom.remove(&u.borrow().rid);
                                         }
                                     }
                                     /*
@@ -1255,7 +1424,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         y.borrow_mut().leave_room();
                                         match data {
                                             Some(_) => {
-                                                QueueRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
+                                                //QueueRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
+                                                println!("Totalroom rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
+                                                QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: get_rid_by_id(&x.id, &TotalUsers)}));
                                                 success = true;
                                             },
                                             _ => {}
