@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use crate::msg::*;
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
+use failure::Error;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
@@ -90,7 +91,7 @@ impl RoomData {
         self.ready = 0;
     }
 
-    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>, r: String) {
+    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>, r: String) -> Result<(), Error>{
         #[derive(Serialize, Deserialize)]
         pub struct teamCell {
             pub room: String,  
@@ -101,7 +102,8 @@ impl RoomData {
         for user in &self.users {
             t.team.push(user.borrow().id.clone());
         }
-        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", r), msg: serde_json::to_string(&t).unwrap()}).unwrap();
+        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", r), msg: serde_json::to_string(&t).unwrap()})?;
+        Ok(())
     }
 
     pub fn rm_user(&mut self, id: &String) {
