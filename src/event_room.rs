@@ -25,7 +25,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 5;
+const TEAM_SIZE: i16 = 1;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 
@@ -151,6 +151,11 @@ pub struct ReconnectData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct DeadData {
+    pub ServerDead: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct GameInfoData {
     pub game: u32,
     pub users: Vec<UserInfoData>,
@@ -202,6 +207,7 @@ pub enum RoomEventData {
     GameClose(GameCloseData),
     Status(StatusData),
     Reconnect(ReconnectData),
+    MainServerDead(DeadData),
 }
 
 #[derive(Clone, Debug)]
@@ -398,7 +404,7 @@ fn settlement_ng_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>
 
 pub fn HandleSqlRequest(pool: mysql::Pool)
     -> Result<Sender<SqlData>, Error> {
-        let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = bounded(1000);
+        let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = bounded(10000);
         let start = Instant::now();
         let update1000ms = tick(Duration::from_millis(2000));
         let mut NewUsers: Vec<String> = Vec::new();
@@ -525,6 +531,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                         };
                         if let Err(msg) = handle() {
                             println!("{:?}", msg);
+                            continue;
                         }
                     }
                 }
@@ -535,151 +542,19 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
 
 pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
     -> Result<Sender<QueueData>, Error> {
-    let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = bounded(1000);
+    let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = bounded(10000);
     let start = Instant::now();
     let update = tick(Duration::from_millis(1000));
         
     thread::spawn(move || -> Result<(), Error> {
         let mut QueueRoom: BTreeMap<u32, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
-        let mut tmp_QueueRoom: Vec<u32> = vec![];
-        let mut tmp_ReadyGroups: Vec<u32> = vec![];
+        
         let mut group_id = 0;
         loop {
             select! {
                 recv(update) -> _ => {
-                    /*
-                    if tmp_QueueRoom.len() >= MATCH_SIZE {
-                        let mut g: ReadyGroupData = Default::default();
-                        let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                        let mut id: Vec<u32> = vec![];
-                        let mut new_now = Instant::now();
-                        for rid in &tmp_QueueRoom {
-                            //if Instant::now().duration_since(new_now) < Duration::from_millis(1000){
-                            //    break;
-                            //}
-                            let mut v = QueueRoom.get(&rid);
-                            if let Some(v) = v {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
-                                    for r in g.rid {
-                                        id.push(r);
-                                    }
-                                    g = Default::default();
-                                    g.rid.push(v.borrow().rid);
-                                    let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                    g.avg_ng = ng;
-                                    g.user_len += v.borrow().user_len;
-                                    v.borrow_mut().ready = 1;
-                                    v.borrow_mut().gid = group_id + 1;
-                                    v.borrow_mut().queue_cnt += 1;
-                                    
-                                }
-    
-                                if v.borrow().ready == 0 &&
-                                    v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
-                                    
-                                    let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
-                                    if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                        g.rid.push(v.borrow().rid);
-                                        let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                        g.avg_ng = ng;
-                                        g.user_len += v.borrow().user_len;
-                                        v.borrow_mut().ready = 1;
-                                        v.borrow_mut().gid = group_id + 1;
-                                    }
-                                    else {
-                                        v.borrow_mut().queue_cnt += 1;
-                                    }
-                                }
-                                if g.user_len == TEAM_SIZE {
-                                    println!("match team_size!");
-                                    group_id += 1;
-                                    info!("new group_id: {}", group_id);
-                                    g.gid = group_id;
-                                    
-                                    g.queue_cnt = 1;
-                                    ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
-                                    
-                                    g = Default::default();
-                                }
-                            }
-                        }
-                        if g.user_len < TEAM_SIZE {
-                            for r in g.rid {
-                                let mut room = QueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
-                                }
-                            }
-                            for r in id {
-                                let mut room = QueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
-                                }
-                            }
-                        }
-                    }
-                    tmp_QueueRoom.clear();
-
-                    if tmp_ReadyGroups.len() >= MATCH_SIZE {
-                        let mut fg: ReadyGameData = Default::default();
-                        //let mut prestart = false;
-                        let mut total_ng: i16 = 0;
-                        let mut rm_ids: Vec<u32> = vec![];
-                        let mut new_now = Instant::now();
-                        for gid in &tmp_ReadyGroups {
-                            //if Instant::now().duration_since(new_now) < Duration::from_millis(2000){
-                            //    break;
-                            //}
-                            let mut rg = ReadyGroups.get(&gid);
-                            if let Some(rg) = rg {
-                                if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                    if total_ng == 0 {
-                                        total_ng += rg.borrow().avg_ng as i16;
-                                        fg.group.push(rg.borrow().rid.clone());
-                                        fg.gid.push(rg.borrow().gid.clone());
-                                        fg.team_len += 1;
-                                        continue;
-                                    }
-                                    
-                                    let mut difference = 0;
-                                    if fg.team_len > 0 {
-                                        difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
-                                    }
-                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                        total_ng += rg.borrow().avg_ng as i16;
-                                        fg.group.push(rg.borrow().rid.clone());
-                                        fg.team_len += 1;
-                                        fg.gid.push(rg.borrow().gid.clone());
-                                    }
-                                    else {
-                                        rg.borrow_mut().queue_cnt += 1;
-                                    }
-                                }
-                                if fg.team_len == MATCH_SIZE {
-                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
-                                    for id in fg.gid {
-                                        rm_ids.push(id);
-                                    }
-                                    fg = Default::default();
-                                }
-                            }
-                        }
-                        for id in rm_ids {
-                            let rg = ReadyGroups.remove(&id);
-                            if let Some(rg) = rg {
-                                for rid in &rg.borrow().rid {
-                                    
-                                    QueueRoom.remove(&rid);
-                                    
-                                }
-                            }
-                        }
-                    }
-                    tmp_ReadyGroups.clear();
-                    */
+                    
                     let mut new_now = Instant::now();
                     if QueueRoom.len() >= MATCH_SIZE {
                         let mut g: ReadyGroupData = Default::default();
@@ -696,10 +571,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         let mut new_now1 = Instant::now();
                         for (k, v) in &mut QueueRoom {
                             
-                            //if Instant::now().duration_since(new_now) < Duration::from_millis(1000) && v.borrow().ready == 0 {
-                            //    tmp_QueueRoom.push(v.borrow().rid);
-                            //    continue;
-                            //}
+                            
 
                             if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
                                 for r in g.rid {
@@ -773,10 +645,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         let mut new_now2 = Instant::now();
                         for (id, rg) in &mut ReadyGroups {
                             
-                            //if Instant::now().duration_since(new_now) < Duration::from_millis(1000) {
-                            //    tmp_ReadyGroups.push(rg.borrow().gid);
-                            //    continue;
-                            //}
+                            
 
                             if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
                                 if total_ng == 0 {
@@ -867,6 +736,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                     };
                     if let Err(msg) = handle() {
                         println!("{:?}", msg);
+                        continue;
                     }
                 }
             }
@@ -876,25 +746,40 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
 }
 
 
-pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool) 
-    -> Result<Sender<RoomEventData>, Error> {
-    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(1000);
-    let QueueSender = HandleQueueRequest(msgtx.clone(), tx.clone())?;
+pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, QueueSender1: Option<Sender<QueueData>>, isBackup: bool) 
+    -> Result<(Sender<RoomEventData>, Sender<QueueData>), Error> {
+    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(10000);
+    let mut tx1: Sender<QueueData>;
+    match QueueSender1.clone() {
+        Some(s) => {
+            tx1 = s;
+            println!("in");
+        },
+        None => {
+            tx1 = HandleQueueRequest(msgtx.clone(), tx.clone())?;
+            println!("2 in");
+        },
+    }
+    
+    
     let start = Instant::now();
     let update5000ms = tick(Duration::from_millis(5000));
     let update200ms = tick(Duration::from_millis(200));
-    let update100ms = tick(Duration::from_millis(1000));  
-    //let QueueSender = tx1.clone();
+    let update1000ms = tick(Duration::from_millis(1000));
+    let QueueSender = tx1.clone();
 
     let tx2 = tx.clone();
     thread::spawn(move || -> Result<(), Error> {
         let mut conn = pool.get_conn()?;
+        let mut isServerLive = true;
+        let mut isBackup = isBackup.clone();
         let mut TotalRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
         //let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<FightGroup>>> = BTreeMap::new();
         let mut PreStartGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut GameingGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
+        let mut LossSend: Vec<MqttMsg> = vec![];
         let mut room_id: u32 = 0;
         let mut group_id: u32 = 0;
         let mut game_id: u32 = 0;
@@ -942,6 +827,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
         
         loop {
             select! {
+                
                 recv(update200ms) -> _ => {
                     //show(start.elapsed());
                     // update prestart groups
@@ -972,6 +858,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                 GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
                                 //info!("game_port: {}", game_port);
                                 //info!("game id {}", group.borrow().game_id);
+                                
                                 let cmd = Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
                                         .arg(format!("-gameid {}", group.borrow().game_id))
@@ -981,9 +868,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             Ok(_) => {},
                                             Err(_) => {warn!("Fail open CF1Server")},
                                         }
-                                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_singal", group.borrow().game_id), 
-                                    msg: format!(r#"{{"game":{}}}"#, 
-                                        group.borrow().game_id)})?;
+                                if !isBackup || (isBackup && isServerLive == false){
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
+                                        msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)})?;
+                                    LossSend.push(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
+                                        msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)});
+                                }
                                 
                             },
                             PrestartStatus::Cancel => {
@@ -1002,8 +892,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     }
                                 }
                                 for r in &group.borrow().room_names {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), 
-                                        msg: format!(r#"{{"msg":"stop queue"}}"#)})?;
+                                    if !isBackup || (isBackup && isServerLive == false) {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), 
+                                            msg: format!(r#"{{"msg":"stop queue"}}"#)})?;
+                                        LossSend.push(MqttMsg{topic:format!("room/{}/res/prestart", r), 
+                                            msg: format!(r#"{{"msg":"stop queue"}}"#)});
+                                    }
 
                                 }
                                 for t in &group.borrow().teams {
@@ -1033,23 +927,25 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                         PreStartGroups.remove(&k);
                     }
                 }
-                
-                recv(update5000ms) -> _ => {
-                    println!("rx len: {}, tx len: {}", rx.len(), tx2.len());
-                    let size = rx.len();
-                    if size > 20 {
-                        for i in 0..size {
-                            if let Ok(x) = rx.recv() {
-                                println!("rx {:?}", x);
-                            }
-                        }
+                recv(update1000ms) -> _ => {
+                    if !isBackup || (isBackup && isServerLive == false) {
+                        //msgtx.try_send(MqttMsg{topic:format!("server/0/res/heartbeat"), 
+                        //                    msg: format!(r#"{{"msg":"live"}}"#)})?;
                     }
+                }
+
+                recv(update5000ms) -> _ => {
+                    //println!("rx len: {}, tx len: {}", rx.len(), tx2.len());
+                    //LossSend.clear();
                     for (id, group) in &mut PreStartGroups {
                         let res1 = group.borrow().check_prestart_get();
                         //println!("check result: {}", res1);
                         if res1 == false {
                             for r in &group.borrow().room_names {
-                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
+                                if !isBackup || (isBackup && isServerLive == false) {
+                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
+                                    LossSend.push(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()});
+                                }
                             }
                             continue;
                         }
@@ -1057,22 +953,30 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                 }
                 
                 recv(rx) -> d => {
+                    
                     let handle = || -> Result<(), Error> {
+                        let mut mqttmsg: MqttMsg = MqttMsg{topic: format!(""), msg: format!("")};
                         if let Ok(d) = d {
                             match d {
                                 RoomEventData::Status(x) => {
                                     let u = get_user(&x.id, &TotalUsers);
                                     if let Some(u) = u {
                                         if u.borrow().game_id != 0 {
-                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
-                                                msg: format!(r#"{{"msg":"gaming"}}"#)})?;
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                                msg: format!(r#"{{"msg":"gaming"}}"#)};
+                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                            //    msg: format!(r#"{{"msg":"gaming"}}"#)})?;
                                         } else {
-                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
-                                                msg: format!(r#"{{"msg":"normal"}}"#)})?;
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                                msg: format!(r#"{{"msg":"normal"}}"#)};
+                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                            //    msg: format!(r#"{{"msg":"normal"}}"#)})?;
                                         }
                                     } else {
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
-                                                msg: format!(r#"{{"msg":"id not found"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                            msg: format!(r#"{{"msg":"id not found"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", x.id), 
+                                        //        msg: format!(r#"{{"msg":"id not found"}}"#)})?;
                                     }
                                     //info!("Status TotalUsers {:#?}", TotalUsers);
                                 },
@@ -1081,8 +985,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     if let Some(u) = u {
                                         let g = GameingGroups.get(&u.borrow().game_id);
                                         if let Some(g) = g {
-                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
-                                                msg: format!(r#"{{"server":"59.126.81.58:{}"}}"#, g.borrow().game_port)})?;
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
+                                                msg: format!(r#"{{"server":"59.126.81.58:{}"}}"#, g.borrow().game_port)};
+                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
+                                            //    msg: format!(r#"{{"server":"59.126.81.58:{}"}}"#, g.borrow().game_port)})?;
                                         }
                                     }
                                 },
@@ -1177,8 +1083,14 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             let u = get_user(&u, &TotalUsers);
                                             match u {
                                                 Some(u) => {
-                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", u.borrow().id), 
-                                                    msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)})?;
+                                                    //mqttmsg = MqttMsg{topic:format!("member/{}/res/status", u.borrow().id), 
+                                                    //    msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)};
+                                                    if !isBackup || (isBackup && isServerLive == false) {
+                                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", u.borrow().id), 
+                                                            msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)})?;
+                                                        LossSend.push(MqttMsg{topic:format!("member/{}/res/status", u.borrow().id), 
+                                                            msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)});
+                                                    }
                                                 },
                                                 None => {
 
@@ -1223,17 +1135,20 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     if let Some(g) = g {
                                         SendGameList(&g, &msgtx, &mut conn);
                                         for r in &g.borrow().room_names {
-                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
-                                                    r, g.borrow().game_port, g.borrow().game_id)})?;
+                                            if !isBackup || (isBackup && isServerLive == false) {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
+                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
+                                                        r, g.borrow().game_port, g.borrow().game_id)})?;
+                                            }
                                         }
                                     }
                                     
                                 },
                                 RoomEventData::Leave(x) => {
-                                    let u = TotalUsers.get(&x.room);
+                                    let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                             let r = TotalRoom.get(&u.borrow().rid);
+                                            //println!("id: {}, rid: {}", u.borrow().id, &get_rid_by_id(&u.borrow().id, &TotalUsers));
                                             let mut is_null = false;
                                             if let Some(r) = r {
                                                 let m = r.borrow().master.clone();
@@ -1244,8 +1159,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                 else {
                                                     is_null = true;
                                                 }
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                    msg: format!(r#"{{"msg":"ok", "id": "{}"}}"#, x.id)};
+                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             }
                                             if is_null {
                                                 TotalRoom.remove(&u.borrow().rid);
@@ -1253,20 +1170,26 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                 QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
                                                 //QueueRoom.remove(&u.borrow().rid);
                                             }
+                                            u.borrow_mut().rid = 0;
+                                            //println!("id: {}, rid: {}", u.borrow().id, &get_rid_by_id(&u.borrow().id, &TotalUsers));
                                     }
                                 },
                                 RoomEventData::ChooseNGHero(x) => {
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
-                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)}
+                                        //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
+                                        //    msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;
                                     }
                                 },
                                 RoomEventData::Invite(x) => {
                                     if TotalUsers.contains_key(&x.from) {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
-                                            msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
+                                            msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
+                                        //    msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
                                     }
                                 },
                                 RoomEventData::Join(x) => {
@@ -1283,8 +1206,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                     let m = r.borrow().master.clone();
                                                     r.borrow().publish_update(&msgtx, m)?;
                                                     r.borrow().publish_update(&msgtx, x.join.clone())?;
-                                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                                        msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)})?;
+                                                    mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                                        msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)};
+                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                                    //    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)})?;
                                                     //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                                     //    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
                                                     sendok = true;
@@ -1293,8 +1218,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         }
                                     }
                                     if sendok == false {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                            msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())})?;
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                            msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                        //    msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())})?;
                                     }
                                     //println!("TotalRoom {:#?}", TotalRoom);
                                 },
@@ -1320,8 +1247,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                     if x.accept == true {
                                                         gr.borrow_mut().user_ready(&x.id);
                                                         //info!("PreStart user_ready");
-                                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
-                                                                msg: format!(r#"{{"msg":"start"}}"#)})?;
+                                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
+                                                            msg: format!(r#"{{"msg":"start"}}"#)};
+                                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
+                                                        //        msg: format!(r#"{{"msg":"start"}}"#)})?;
                                                     } else {
                                                         println!("accept false!");
                                                         gr.borrow_mut().user_cancel(&x.id);
@@ -1344,8 +1273,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                         let r = TotalRoom.get(&u.borrow().rid);
                                                         //QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
                                                         if let Some(r) = r {
-                                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
-                                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                            mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                                msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                            //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                            //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                                         }
                                                     }
                                                 }
@@ -1382,7 +1313,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     fg.update_names();
                                     for r in &fg.room_names {
                                         //thread::sleep_ms(100);
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
+                                        if !isBackup || (isBackup && isServerLive == false) {
+                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r), msg: r#"{"msg":"prestart"}"#.to_string()})?;
+                                        }
                                     }
                                     
                                     
@@ -1430,11 +1363,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             //);
                                             success = true;
                                             if success {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             } else {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"fail"}}"#)}
+                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                             }
                                         }
                                     }
@@ -1459,11 +1396,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         if let Some(r) = r {
                                             success = true;
                                             if success {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
+                                                //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             } else {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
+                                                    msg: format!(r#"{{"msg":"fail"}}"#)};
+                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
+                                                //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                             }
                                         }
                                     }
@@ -1474,8 +1415,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         let u2 = TotalUsers.get(&x.u.id);
                                         if let Some(u2) = u2 {
                                             u2.borrow_mut().online = true;
-                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()), 
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)})?;
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()), 
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)};
+                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()), 
+                                            //    msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)})?;
                                         }
                                         
                                     }
@@ -1483,8 +1426,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         //thread::sleep(Duration::from_millis(50));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)})?;
                                     }
                                     
                                     /*
@@ -1520,8 +1465,17 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                 if r.borrow().users.len() > 0 {
                                                     r.borrow().publish_update(&msgtx, m)?;
                                                 }
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                else {
+                                                    is_null = true;
+                                                }
+                                                //mqttmsg = MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                //    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                if !isBackup || (isBackup && isServerLive == false) {
+                                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                    LossSend.push(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
+                                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                                }
                                             }
                                             
                                             if gid != 0 {
@@ -1529,16 +1483,25 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                                 if let Some(gr) = g {
                                                     gr.borrow_mut().user_cancel(&x.id);
                                                     ReadyGroups.remove(&gid);
-                                                    //let r = QueueRoom.remove(&rid);
+                                                    let r = TotalRoom.get(&rid);
                                                     //println!("Totalroom rid: {}", &u.borrow().rid);
                                                     QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: rid}));
                                                     if let Some(r) = r {
-                                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
-                                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                        //mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                        //    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                        if !isBackup || (isBackup && isServerLive == false) {
+                                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                            LossSend.push(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master), 
+                                                                msg: format!(r#"{{"msg":"ok"}}"#)});
+                                                        }
                                                     }
-                                                    TotalRoom.remove(&rid);
+                                                    //TotalRoom.remove(&rid);
                                                 }
                                             }
+                                            //println!("{:?}", TotalRoom);
+                                            //TotalRoom.remove(&u.borrow().rid);
+                                            success = true;
                                         } else {
                                             success = true;
                                         }
@@ -1547,6 +1510,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                             //QueueRoom.remove(&u.borrow().rid);
                                         }
                                     }
+                                    
                                     /*
                                     if success {
                                         success = false;
@@ -1562,15 +1526,20 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                     }
                                     */
                                     if success {
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
-                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
-                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
                                 },
                                 RoomEventData::Create(x) => {
                                     let mut success = false;
+                                    //println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
                                     if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
                                         room_id += 1;
                                         
@@ -1598,11 +1567,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         }
                                     }
                                     if success {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
                                 },
                                 RoomEventData::Close(x) => {
@@ -1621,27 +1594,57 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool)
                                         }
                                     }
                                     if success {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                            msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"fail"}}"#)};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                        //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
                                 },
+                                RoomEventData::MainServerDead(x) => {
+                                    isServerLive = false;
+                                    isBackup = false;
+                                    //for msg in LossSend {
+                                    //    msgtx.try_send(msg.clone())?;
+                                    //}
+                                }
                             }
+                        }
+                        //println!("isBackup: {}, isServerLive: {}", isBackup, isServerLive);
+                        LossSend.push(mqttmsg.clone());
+                        if !isBackup || (isBackup && isServerLive == false) {
+                            //println!("send");
+                            msgtx.try_send(mqttmsg.clone())?;
+                        }
+                        if msgtx.is_full() {
+                            println!("FULL!!");
+                            //thread::sleep(Duration::from_millis(5000));
+                            
                         }
                         Ok(())
                     };
                     if let Err(msg) = handle() {
-                        println!("{:?}", msg);
+                        
+                        println!("Error msgtx len: {}", msgtx.len());
+                        println!("Error rx len: {}", rx.len());
+                        println!("init {:?}", msg);
+                        continue;
+                        
                         panic!("Error found");
+                        
+                        
                     }
+                    
                 }
             }
         }
     });
 
-    Ok(tx)
+    Ok((tx, tx1))
 }
 
 pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
@@ -1771,5 +1774,12 @@ pub fn reconnect(id: String, v: Value, sender: Sender<RoomEventData>)
 {
     let data: ReconnectData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::Reconnect(data));
+    Ok(())
+}
+
+pub fn server_dead(id: String, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    sender.try_send(RoomEventData::MainServerDead(DeadData{ServerDead: id}));
     Ok(())
 }
