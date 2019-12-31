@@ -36,7 +36,8 @@ use crate::event_room::QueueData;
 use crate::msg::*;
 
 fn generate_client_id() -> String {
-    format!("/MQTT/rust/{}", Uuid::new_v4())
+    let s = format!("Elo_Pub_{}", Uuid::new_v4());
+    (&s[..16]).to_string()
 }
 
 fn get_url() -> String {
@@ -93,45 +94,45 @@ fn main() -> std::result::Result<(), Error> {
     let client_id = matches
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
-        .unwrap_or_else(generate_client_id);
+        .unwrap_or("Elo Rank Server".to_owned());
     let mut isBackup: bool = matches.value_of("BACKUP").unwrap_or("false").to_owned().parse().unwrap();
     println!("Backup: {}", isBackup);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
     mqtt_options = mqtt_options.set_request_channel_capacity(10000);
-    mqtt_options = mqtt_options.set_notification_channel_capacity(500000);
+    mqtt_options = mqtt_options.set_notification_channel_capacity(10000);
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
     
     // Server message
-    mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtLeastOnce).unwrap();
+    mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
 
     // Client message
-    mqtt_client.subscribe("member/+/send/login", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("member/+/send/logout", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("member/+/send/status", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;
 
-    mqtt_client.subscribe("room/+/send/create", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/close", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/invite", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/join", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/kick", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/leave", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/prestart", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/prestart_get", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("room/+/send/start", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/invite", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/join", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/kick", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/leave", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/prestart", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/prestart_get", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/start", QoS::AtMostOnce)?;
 
-    mqtt_client.subscribe("game/+/send/game_close", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("game/+/send/game_over", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("game/+/send/game_info", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("game/+/send/start_game", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("game/+/send/choose", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("game/+/send/leave", QoS::AtLeastOnce)?;
-    mqtt_client.subscribe("game/+/send/exit", QoS::AtLeastOnce)?;
+    mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/choose", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/leave", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/exit", QoS::AtMostOnce)?;
     
     let mut isServerLive = true;
     
@@ -151,40 +152,33 @@ fn main() -> std::result::Result<(), Error> {
             mqtt_options = mqtt_options.set_keep_alive(100);
             mqtt_options = mqtt_options.set_request_channel_capacity(10000);
             mqtt_options = mqtt_options.set_notification_channel_capacity(10000);
-            mqtt_options = mqtt_options.set_reconnect_opts(ReconnectOptions::Always(5));
+            //mqtt_options = mqtt_options.set_reconnect_opts(ReconnectOptions::Always(1));
             println!("mqtt_options {:#?}", mqtt_options);
             let update = tick(Duration::from_millis(1000));
             let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
             loop {
-                
                 select! {
-                    recv(update) -> _ => {
-                        
-                        let size = rx1.len();
-                        if size > 900 {
-                            println!("publish rx len: {}", rx1.len());
-                        }
-                    },
                     recv(rx1) -> d => {
-                        let handle = || -> Result<(), Error> {
+                        let handle = || -> Result<(), Error> 
+                        {
                             if let Ok(d) = d {
                                 if d.topic == "server/0/res/dead" {
                                     isServerLive = false;
                                     isBackup = false;
                                 }
-                                //println!("mqtt: isServerLive {}", isServerLive);
-                                
-                                let msg_res = mqtt_client.publish(d.topic, QoS::AtLeastOnce, false, d.msg);
-                                match msg_res {
-                                    Ok(_) =>{},
-                                    Err(x) => {
-                                        panic!("??? {}", x);
+                                if d.topic.len() > 2 {
+                                    let msg_res = mqtt_client.publish(d.topic, QoS::AtMostOnce, false, d.msg);
+                                    match msg_res {
+                                        Ok(_) =>{},
+                                        Err(x) => {
+                                            panic!("??? {}", x);
+                                        }
                                     }
                                 }
-                                
                             }
                             Ok(())
                         };
+                        
                         if let Err(msg) = handle() {
                             panic!("mqtt {:?}", msg);
                             let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
