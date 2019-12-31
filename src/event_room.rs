@@ -178,11 +178,11 @@ pub struct UserInfoData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct UserGift {
-    pub A: u16,
-    pub B: u16,
-    pub C: u16,
-    pub D: u16,
-    pub E: u16,
+    pub a: u16,
+    pub b: u16,
+    pub c: u16,
+    pub d: u16,
+    pub e: u16,
 }
 
 #[derive(Debug)]
@@ -483,7 +483,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                             for (i, info) in UpdateInfo.iter().enumerate() {
                                 let mut new_user = format!(" ({}, {}, '{}', {}, {}, {}, {}, {}, {}, {})", info.id, info.game, info.hero, info.level, info.damage, info.take_damage, info.heal, info.kill, info.death, info.assist);
                                 insert_info += &new_user;
-                                let mut new_user1 = format!(" ({}, {}, '{}', {}, {}, {}, {}, {})", info.id, info.game, info.equ, info.gift.A, info.gift.B, info.gift.C, info.gift.D, info.gift.E);
+                                let mut new_user1 = format!(" ({}, {}, '{}', {}, {}, {}, {}, {})", info.id, info.game, info.equ, info.gift.a, info.gift.b, info.gift.c, info.gift.d, info.gift.e);
                                 user_info += &new_user1;
                                 if i < info_len-1 {
                                     insert_info += ",";
@@ -936,7 +936,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
 
                 recv(update5000ms) -> _ => {
                     //println!("rx len: {}, tx len: {}", rx.len(), tx2.len());
-                    //LossSend.clear();
+                    LossSend.clear();
                     for (id, group) in &mut PreStartGroups {
                         let res1 = group.borrow().check_prestart_get();
                         //println!("check result: {}", res1);
@@ -1608,9 +1608,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 RoomEventData::MainServerDead(x) => {
                                     isServerLive = false;
                                     isBackup = false;
-                                    //for msg in LossSend {
-                                    //    msgtx.try_send(msg.clone())?;
-                                    //}
+                                    for msg in LossSend.clone() {
+                                        msgtx.try_send(msg.clone())?;
+                                    }
                                 }
                             }
                         }
