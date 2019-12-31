@@ -1615,10 +1615,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                             }
                         }
                         //println!("isBackup: {}, isServerLive: {}", isBackup, isServerLive);
-                        LossSend.push(mqttmsg.clone());
-                        if !isBackup || (isBackup && isServerLive == false) {
-                            //println!("send");
-                            msgtx.try_send(mqttmsg.clone())?;
+                        if mqttmsg.topic != "" {
+                            LossSend.push(mqttmsg.clone());
+                            if !isBackup || (isBackup && isServerLive == false) {
+                                //println!("send");
+                                msgtx.try_send(mqttmsg.clone())?;
+                            }
                         }
                         if msgtx.is_full() {
                             println!("FULL!!");
