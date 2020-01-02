@@ -594,7 +594,13 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                                 let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
                                 if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
                                     g.rid.push(v.borrow().rid);
-                                    let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                    let mut ng ;
+                                    if (g.user_len + v.borrow().user_len > 0){
+                                        ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                    } else {
+                                        g = Default::default();
+                                        continue;
+                                    }
                                     g.avg_ng = ng;
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
@@ -859,7 +865,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 //info!("game_port: {}", game_port);
                                 //info!("game id {}", group.borrow().game_id);
                                 
-                                let cmd = Command::new("/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
+                                let cmd = Command::new("/root/LinuxNoEditor/CF1/Binaries/Linux/CF1Server")
                                         .arg(format!("-Port={}", game_port))
                                         .arg(format!("-gameid {}", group.borrow().game_id))
                                         .arg("-NOSTEAM")
@@ -986,9 +992,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         let g = GameingGroups.get(&u.borrow().game_id);
                                         if let Some(g) = g {
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
-                                                msg: format!(r#"{{"server":"59.126.81.58:{}"}}"#, g.borrow().game_port)};
+                                                msg: format!(r#"{{"server":"172.104.78.55:{}"}}"#, g.borrow().game_port)};
                                             //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
-                                            //    msg: format!(r#"{{"server":"59.126.81.58:{}"}}"#, g.borrow().game_port)})?;
+                                            //    msg: format!(r#"{{"server":"172.104.78.55:{}"}}"#, g.borrow().game_port)})?;
                                         }
                                     }
                                 },
@@ -1137,7 +1143,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         for r in &g.borrow().room_names {
                                             if !isBackup || (isBackup && isServerLive == false) {
                                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"59.126.81.58:{}","game":{}}}"#, 
+                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"172.104.78.55:{}","game":{}}}"#, 
                                                         r, g.borrow().game_port, g.borrow().game_id)})?;
                                             }
                                         }
@@ -1238,7 +1244,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let u = TotalUsers.get(&x.room);
                                     if let Some(u) = u {
                                         let gid = u.borrow().gid;
-                                        //println!("gid: {}, id: {}", gid, u.borrow().id);
+                                        println!("gid: {}, id: {}", gid, u.borrow().id);
                                         if u.borrow().prestart_get == true {
                                             
                                             if gid != 0 {
@@ -1248,7 +1254,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                         gr.borrow_mut().user_ready(&x.id);
                                                         //info!("PreStart user_ready");
                                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
-                                                            msg: format!(r#"{{"msg":"start"}}"#)};
+                                                            msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
                                                         //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
                                                         //        msg: format!(r#"{{"msg":"start"}}"#)})?;
                                                     } else {
@@ -1507,6 +1513,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         }
                                         if is_null {
                                             TotalRoom.remove(&u.borrow().rid);
+                                            //println!("Totalroom rid: {}", &u.borrow().rid);
+                                            QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
                                             //QueueRoom.remove(&u.borrow().rid);
                                         }
                                     }
