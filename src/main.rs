@@ -10,7 +10,7 @@ mod elo;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::env;
-use std::io::Write;
+use std::io::{self, Write};
 use failure::Error;
 use std::net::TcpStream;
 use std::str;
@@ -18,9 +18,12 @@ use clap::{App, Arg};
 use uuid::Uuid;
 use rumqtt::{MqttClient, MqttOptions, QoS, ReconnectOptions};
 
+use serde_derive::{Serialize, Deserialize};
 use std::panic;
 use std::thread;
 use std::time::Duration;
+use std::fs::File;
+use std::io::prelude::*;
 use log::Level;
 use serde_json::{self, Value};
 use regex::Regex;
@@ -29,25 +32,53 @@ use ::futures::Future;
 use mysql;
 use room::PrestartStatus;
 
+extern crate toml;
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use crate::event_room::RoomEventData;
 use crate::event_room::SqlData;
 use crate::event_room::QueueData;
 use crate::msg::*;
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct ServerSetting {
+    IP: Option<String>,
+    PORT: Option<String>,
+    MYSQL_ACCOUNT: Option<String>,
+    MYSQL_PASSWORD: Option<String>,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Setting {
+    server_setting: Option<ServerSetting>,
+}
+
 fn generate_client_id() -> String {
     let s = format!("Elo_Pub_{}", Uuid::new_v4());
     (&s[..16]).to_string()
 }
 
-fn get_url() -> String {
-    "mysql://erps:erpsgogo@127.0.0.1:3306/erps".into()
+fn get_url(setting: Setting) -> String {
+    let s = format!("mysql://{}:{}@{}:3306/erps", setting.server_setting.clone().unwrap().MYSQL_ACCOUNT.unwrap(), setting.server_setting.clone().unwrap().MYSQL_PASSWORD.unwrap(), setting.server_setting.clone().unwrap().IP.unwrap());
+    println!("mysql!: {}", s);
+    s
 }
 
 fn main() -> std::result::Result<(), Error> {
     // configure logging
     env::set_var("RUST_LOG", env::var_os("RUST_LOG").unwrap_or_else(|| "info".into()));
     env_logger::init();
+
+    let file_path = "src/setting.toml";
+    let mut file = match File::open(file_path) {
+        Ok(f) => f,
+        Err(e) => panic!("no such file {} exception:{}", file_path, e)
+    };
+    let mut str_val = String::new();
+    match file.read_to_string(&mut str_val) {
+        Ok(s) => s
+        ,
+        Err(e) => panic!("Error Reading file: {}", e)
+    };
+    let setting: Setting = toml::from_str(&str_val).unwrap();
 
     let matches = App::new("erps")
         .author("damody <t1238142000@gmail.com>")
@@ -89,8 +120,8 @@ fn main() -> std::result::Result<(), Error> {
             .help("backup"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or("172.104.78.55").to_owned();
-    let server_port = matches.value_of("PORT").unwrap_or("1883").to_owned();
+    let server_addr = matches.value_of("SERVER").unwrap_or(&setting.server_setting.clone().unwrap().IP.unwrap()).to_owned();
+    let server_port = matches.value_of("PORT").unwrap_or(&setting.server_setting.clone().unwrap().PORT.unwrap()).to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
@@ -99,46 +130,46 @@ fn main() -> std::result::Result<(), Error> {
     println!("Backup: {}", isBackup);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
-    mqtt_options = mqtt_options.set_request_channel_capacity(10000);
-    mqtt_options = mqtt_options.set_notification_channel_capacity(10000);
+    mqtt_options = mqtt_options.set_request_channel_capacity(100);
+    mqtt_options = mqtt_options.set_notification_channel_capacity(100);
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
     
     // Server message
     mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
 
     // Client message
-    mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce).unwrap();
 
-    mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/invite", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/join", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/kick", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/leave", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/prestart", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/prestart_get", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/start", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/invite", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/join", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/kick", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/leave", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/prestart", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/prestart_get", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("room/+/send/start", QoS::AtMostOnce).unwrap();
 
-    mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/choose", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/leave", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/exit", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/choose", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/leave", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/exit", QoS::AtMostOnce).unwrap();
     
     let mut isServerLive = true;
     
     
-    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(10000);
-    let pool = mysql::Pool::new(get_url().as_str())?;
+    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = crossbeam::unbounded();
+    let pool = mysql::Pool::new(get_url(setting).as_str())?;
     thread::sleep_ms(100);
     
     for _ in 0..8 {
@@ -150,10 +181,10 @@ fn main() -> std::result::Result<(), Error> {
             
             let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>()?);
             mqtt_options = mqtt_options.set_keep_alive(100);
-            mqtt_options = mqtt_options.set_request_channel_capacity(10000);
-            mqtt_options = mqtt_options.set_notification_channel_capacity(10000);
+            mqtt_options = mqtt_options.set_request_channel_capacity(100);
+            mqtt_options = mqtt_options.set_notification_channel_capacity(100);
             //mqtt_options = mqtt_options.set_reconnect_opts(ReconnectOptions::Always(1));
-            println!("mqtt_options {:#?}", mqtt_options);
+            //println!("mqtt_options {:#?}", mqtt_options);
             let update = tick(Duration::from_millis(1000));
             let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
             loop {
@@ -191,67 +222,65 @@ fn main() -> std::result::Result<(), Error> {
         });
     }
     
-    let server = Regex::new(r"\w+/(\w+)/res/(\w+)")?;
+    let server = Regex::new(r"\w+/(\w+)/res/(\w+)").unwrap();
     let check_server = tick(Duration::from_millis(1000));
     
 
-    let relogin = Regex::new(r"\w+/(\w+)/send/login")?;
-    let relogout = Regex::new(r"\w+/(\w+)/send/logout")?;
-    let recreate = Regex::new(r"\w+/(\w+)/send/create")?;
-    let reclose = Regex::new(r"\w+/(\w+)/send/close")?;
-    let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue")?;
-    let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue")?;
-    let represtart_get = Regex::new(r"\w+/(\w+)/send/prestart_get")?;
-    let represtart = Regex::new(r"\w+/(\w+)/send/prestart")?;
-    let reinvite = Regex::new(r"\w+/(\w+)/send/invite")?;
-    let rejoin = Regex::new(r"\w+/(\w+)/send/join")?;
-    let reset = Regex::new(r"reset")?;
-    let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero")?;
-    let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
-    let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
-    let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
-    let regame_info = Regex::new(r"\w+/(\w+)/send/game_info")?;
-    let regame_close = Regex::new(r"\w+/(\w+)/send/game_close")?;
-    let restatus = Regex::new(r"\w+/(\w+)/send/status")?;
-    let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect")?;
+    let relogin = Regex::new(r"\w+/(\w+)/send/login").unwrap();
+    let relogout = Regex::new(r"\w+/(\w+)/send/logout").unwrap();
+    let recreate = Regex::new(r"\w+/(\w+)/send/create").unwrap();
+    let reclose = Regex::new(r"\w+/(\w+)/send/close").unwrap();
+    let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue").unwrap();
+    let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue").unwrap();
+    let represtart_get = Regex::new(r"\w+/(\w+)/send/prestart_get").unwrap();
+    let represtart = Regex::new(r"\w+/(\w+)/send/prestart").unwrap();
+    let reinvite = Regex::new(r"\w+/(\w+)/send/invite").unwrap();
+    let rejoin = Regex::new(r"\w+/(\w+)/send/join").unwrap();
+    let reset = Regex::new(r"reset").unwrap();
+    let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero").unwrap();
+    let releave = Regex::new(r"\w+/(\w+)/send/leave").unwrap();
+    let restart_game = Regex::new(r"\w+/(\w+)/send/start_game").unwrap();
+    let regame_over = Regex::new(r"\w+/(\w+)/send/game_over").unwrap();
+    let regame_info = Regex::new(r"\w+/(\w+)/send/game_info").unwrap();
+    let regame_close = Regex::new(r"\w+/(\w+)/send/game_close").unwrap();
+    let restatus = Regex::new(r"\w+/(\w+)/send/status").unwrap();
+    let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect").unwrap();
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
-    let (mut sender, mut QueueSender): (Sender<RoomEventData>, Sender<QueueData>) = event_room::init(tx.clone(), sender1.clone(), pool.clone(), None, isBackup)?;
+    let mut sender: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), isBackup)?;
     let update = tick(Duration::from_millis(500));
     let mut is_live = true;
     let mut sender = sender.clone();
-    let mut QueueSender = QueueSender.clone();
     
     loop {
         use rumqtt::Notification::Publish;
         
         select! {
             
-            recv (check_server) -> _ => {
-                if isBackup {
-                    //println!("isServerLive {}", isServerLive);
-                    if isServerLive == true {
-                        isServerLive = false;
-                    }
-                    else {
-                        println!("Main Server dead!!");
-                        event_room::server_dead("0".to_string(), sender.clone())?;
-                        isBackup = false;
-                    }
-                }
-            },
+            // recv (check_server) -> _ => {
+            //     if isBackup {
+            //         //println!("isServerLive {}", isServerLive);
+            //         if isServerLive == true {
+            //             isServerLive = false;
+            //         }
+            //         else {
+            //             println!("Main Server dead!!");
+            //             event_room::server_dead("0".to_string(), sender.clone())?;
+            //             isBackup = false;
+            //         }
+            //     }
+            // },
             recv(notifications) -> notification => {
                 if !is_live{
                     println!("Reconnect!");
                     
-                    let (mut sender1, mut QueueSender1): (Sender<RoomEventData>, Sender<QueueData>) = event_room::init(tx.clone(), sender1.clone(), pool.clone(), Some(QueueSender.clone()), isBackup)?;
+                    let mut sender1: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), isBackup)?;
                     sender = sender1.clone();
-                    QueueSender = QueueSender1.clone();
+                    
                     
                     thread::sleep(Duration::from_millis(2000));
                     
-                    println!("Refresh tx len: {}, queue len: {}", sender.len(), QueueSender.len());
                 }
                 let handle = || -> Result<(), Error> {
                     
@@ -267,6 +296,7 @@ fn main() -> std::result::Result<(), Error> {
                             };
                             let topic_name = x.topic_name.as_str();
                             let vo : serde_json::Result<Value> = serde_json::from_str(msg);
+                            //println!("topic: {}", topic_name);
                             if server.is_match(topic_name) {
                                 //println!("topic: {}", topic_name);
                                 isServerLive = true;
