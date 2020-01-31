@@ -169,7 +169,7 @@ fn main() -> std::result::Result<(), Error> {
     
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = crossbeam::unbounded();
-    let pool = mysql::Pool::new(get_url(setting).as_str())?;
+    let pool = mysql::Pool::new(get_url(setting.clone()).as_str())?;
     thread::sleep_ms(100);
     
     for _ in 0..8 {
@@ -248,7 +248,7 @@ fn main() -> std::result::Result<(), Error> {
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
-    let mut sender: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), isBackup)?;
+    let mut sender: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), setting.server_setting.clone().unwrap().IP.unwrap(), isBackup)?;
     let update = tick(Duration::from_millis(500));
     let mut is_live = true;
     let mut sender = sender.clone();
@@ -275,7 +275,7 @@ fn main() -> std::result::Result<(), Error> {
                 if !is_live{
                     println!("Reconnect!");
                     
-                    let mut sender1: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), isBackup)?;
+                    let mut sender1: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), setting.server_setting.clone().unwrap().IP.unwrap(), isBackup)?;
                     sender = sender1.clone();
                     
                     

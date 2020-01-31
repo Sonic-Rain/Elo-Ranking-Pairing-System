@@ -1011,7 +1011,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
 
 
 
-pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, isBackup: bool) 
+pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, server_addr: String, isBackup: bool) 
     -> Result<Sender<RoomEventData>, Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = crossbeam::unbounded();
     let mut QueueSender: BTreeMap<String, Sender<QueueData>> = BTreeMap::new();
@@ -1357,7 +1357,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         let g = GameingGroups.get(&u.borrow().game_id);
                                         if let Some(g) = g {
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
-                                                msg: format!(r#"{{"server":"127.0.0.1:{}"}}"#, g.borrow().game_port)};
+                                                msg: format!(r#"{{"server":"{}:{}"}}"#, server_addr, g.borrow().game_port)};
                                             //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id), 
                                             //    msg: format!(r#"{{"server":"114.32.129.195:{}"}}"#, g.borrow().game_port)})?;
                                         }
@@ -1534,8 +1534,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         for r in &g.borrow().room_names {
                                             if !isBackup || (isBackup && isServerLive == false) {
                                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"127.0.0.1:{}","game":{}}}"#, 
-                                                        r, g.borrow().game_port, g.borrow().game_id)})?;
+                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"{}:{}","game":{}}}"#, 
+                                                        r, server_addr, g.borrow().game_port, g.borrow().game_id)})?;
                                             }
                                         }
                                     }
