@@ -1,5 +1,6 @@
 [server_setting]
-IP = "127.0.0.1"
+SERVER_IP = "127.0.0.1"
 PORT = "1883"
+SQL_IP = "127.0.0.1"
 MYSQL_ACCOUNT = "erps"
 MYSQL_PASSWORD = "erpsgogo"

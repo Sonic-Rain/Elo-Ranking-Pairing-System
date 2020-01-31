@@ -39,10 +39,58 @@ use crate::event_room::SqlData;
 use crate::event_room::QueueData;
 use crate::msg::*;
 
+#[doc(include = "char.md")]
+#[cfg(any(
+    all(
+        target_os = "linux",
+        any(
+            target_arch = "aarch64",
+            target_arch = "arm",
+            target_arch = "hexagon",
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+            target_arch = "s390x",
+        )
+    ),
+    all(target_os = "android", any(target_arch = "aarch64", target_arch = "arm")),
+    all(target_os = "l4re", target_arch = "x86_64"),
+    all(
+        target_os = "freebsd",
+        any(
+            target_arch = "aarch64",
+            target_arch = "arm",
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+        )
+    ),
+    all(
+        target_os = "netbsd",
+        any(
+            target_arch = "aarch64",
+            target_arch = "arm",
+            target_arch = "powerpc",
+        )
+    ),
+    all(target_os = "openbsd", target_arch = "aarch64"),
+    all(
+        target_os = "vxworks",
+        any(
+            target_arch = "aarch64",
+            target_arch = "arm",
+            target_arch = "powerpc",
+            target_arch = "powerpc64",
+        )
+    ),
+    all(target_os = "fuchsia", target_arch = "aarch64"),
+))]
+#[stable(feature = "raw_os", since = "1.1.0")]
+pub type c_char = u8;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct ServerSetting {
-    IP: Option<String>,
+    SERVER_IP: Option<String>,
     PORT: Option<String>,
+    SQL_IP: Option<String>,
     MYSQL_ACCOUNT: Option<String>,
     MYSQL_PASSWORD: Option<String>,
 }
@@ -57,7 +105,7 @@ fn generate_client_id() -> String {
 }
 
 fn get_url(setting: Setting) -> String {
-    let s = format!("mysql://{}:{}@{}:3306/erps", setting.server_setting.clone().unwrap().MYSQL_ACCOUNT.unwrap(), setting.server_setting.clone().unwrap().MYSQL_PASSWORD.unwrap(), setting.server_setting.clone().unwrap().IP.unwrap());
+    let s = format!("mysql://{}:{}@{}:3306/erps", setting.server_setting.clone().unwrap().MYSQL_ACCOUNT.unwrap(), setting.server_setting.clone().unwrap().MYSQL_PASSWORD.unwrap(), setting.server_setting.clone().unwrap().SQL_IP.unwrap());
     println!("mysql!: {}", s);
     s
 }
@@ -120,7 +168,7 @@ fn main() -> std::result::Result<(), Error> {
             .help("backup"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or(&setting.server_setting.clone().unwrap().IP.unwrap()).to_owned();
+    let server_addr = matches.value_of("SERVER").unwrap_or(&setting.server_setting.clone().unwrap().SERVER_IP.unwrap()).to_owned();
     let server_port = matches.value_of("PORT").unwrap_or(&setting.server_setting.clone().unwrap().PORT.unwrap()).to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")
@@ -223,7 +271,19 @@ fn main() -> std::result::Result<(), Error> {
     }
     
     let server = Regex::new(r"\w+/(\w+)/res/(\w+)").unwrap();
+    #[cfg(target_os = "linux")]
     let check_server = tick(Duration::from_millis(1000));
+
+    #[cfg(not(target_os = "linux"))]
+    let (txxx, check_server) = crossbeam_channel::unbounded();
+    #[cfg(not(target_os = "linux"))]
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            txxx.try_send(std::time::Instant::now()).unwrap();
+            //println!("update5000ms: rx len: {}, tx len: {}", rx.len(), txxx.len());
+        }
+    });
     
 
     let relogin = Regex::new(r"\w+/(\w+)/send/login").unwrap();
@@ -248,7 +308,7 @@ fn main() -> std::result::Result<(), Error> {
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
-    let mut sender: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), setting.server_setting.clone().unwrap().IP.unwrap(), isBackup)?;
+    let mut sender: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), server_addr.clone(), isBackup)?;
     let update = tick(Duration::from_millis(500));
     let mut is_live = true;
     let mut sender = sender.clone();
@@ -258,24 +318,24 @@ fn main() -> std::result::Result<(), Error> {
         
         select! {
             
-            // recv (check_server) -> _ => {
-            //     if isBackup {
-            //         //println!("isServerLive {}", isServerLive);
-            //         if isServerLive == true {
-            //             isServerLive = false;
-            //         }
-            //         else {
-            //             println!("Main Server dead!!");
-            //             event_room::server_dead("0".to_string(), sender.clone())?;
-            //             isBackup = false;
-            //         }
-            //     }
-            // },
+            recv (check_server) -> _ => {
+                if isBackup {
+                    //println!("isServerLive {}", isServerLive);
+                    if isServerLive == true {
+                        isServerLive = false;
+                    }
+                    else {
+                        println!("Main Server dead!!");
+                        event_room::server_dead("0".to_string(), sender.clone())?;
+                        isBackup = false;
+                    }
+                }
+            },
             recv(notifications) -> notification => {
                 if !is_live{
                     println!("Reconnect!");
                     
-                    let mut sender1: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), setting.server_setting.clone().unwrap().IP.unwrap(), isBackup)?;
+                    let mut sender1: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), server_addr.clone(), isBackup)?;
                     sender = sender1.clone();
                     
                     

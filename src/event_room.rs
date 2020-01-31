@@ -483,13 +483,17 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
     -> Result<Sender<SqlData>, Error> {
         let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = crossbeam::unbounded();
         let start = Instant::now();
-        //let update1000ms = tick(Duration::from_millis(2000));
         let mut NewUsers: Vec<String> = Vec::new();
         let mut len = 0;
         let mut UpdateInfo: Vec<SqlGameInfoData> = Vec::new();
         let mut info_len = 0; 
 
+        #[cfg(target_os = "linux")]
+        let update1000ms = tick(Duration::from_millis(2000));
+
+        #[cfg(not(target_os = "linux"))]
         let (txxx, update1000ms) = crossbeam_channel::unbounded();
+        #[cfg(not(target_os = "linux"))]
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -677,9 +681,13 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
     -> Result<Sender<QueueData>, Error> {
     let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = crossbeam::unbounded();
     let start = Instant::now();
-    //let update = tick(Duration::from_millis(1000));
-    
+
+    #[cfg(target_os = "linux")]
+    let update = tick(Duration::from_millis(1000));    
+
+    #[cfg(not(target_os = "linux"))]
     let (txxx, update) = crossbeam_channel::unbounded();
+    #[cfg(not(target_os = "linux"))]
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -1058,7 +1066,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
     //         println!("2 in");
     //     },
     // }
+    #[cfg(target_os = "linux")]
+    let update5000ms = tick(Duration::from_millis(5000));
+    #[cfg(target_os = "linux")]
+    let update200ms = tick(Duration::from_millis(200));
+    
+
+    #[cfg(not(target_os = "linux"))]
     let (txxx, update5000ms) = crossbeam_channel::unbounded();
+    #[cfg(not(target_os = "linux"))]
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(5000));
@@ -1066,7 +1082,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
             //println!("update5000ms: rx len: {}, tx len: {}", rx.len(), txxx.len());
         }
     });
+    #[cfg(not(target_os = "linux"))]
     let (txxx, update200ms) = crossbeam_channel::unbounded();
+    #[cfg(not(target_os = "linux"))]
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(200));
