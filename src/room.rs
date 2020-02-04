@@ -11,6 +11,7 @@ pub struct User {
     pub id: String,
     pub name: String,
     pub hero: String,
+    pub honor: i32,
     pub ng1v1: i16,
     pub ng5v5: i16,
     pub rk1v1: i16,
@@ -36,6 +37,7 @@ pub struct RoomData {
     pub avg_rk1v1: i16,
     pub avg_ng5v5: i16,
     pub avg_rk5v5: i16,
+    pub avg_honor: i32,
     pub ready: i8,
     pub queue_cnt: i16,
 }
@@ -46,18 +48,21 @@ impl RoomData {
         let mut sum_rk1v1 = 0;
         let mut sum_ng5v5 = 0;
         let mut sum_rk5v5 = 0;
+        let mut sum_honor = 0;
         
         for user in &self.users {
             sum_ng1v1 += user.borrow().ng1v1;
             sum_rk1v1 += user.borrow().rk1v1;
             sum_ng5v5 += user.borrow().ng5v5;
             sum_rk5v5 += user.borrow().rk5v5;
+            sum_honor += user.borrow().honor;
         }
         if self.users.len() > 0 {
             self.avg_ng1v1 = sum_ng1v1/self.users.len() as i16;
             self.avg_rk1v1 = sum_rk1v1/self.users.len() as i16;
             self.avg_ng5v5 = sum_ng5v5/self.users.len() as i16 + 50 * (self.users.len() as i16 - 1);
             self.avg_rk5v5 = sum_rk5v5/self.users.len() as i16 + 50 * (self.users.len() as i16 - 1);
+            self.avg_honor = sum_honor/self.users.len() as i32;
         }
     }
 
@@ -153,6 +158,7 @@ pub struct FightGroup {
     pub avg_rk1v1: i16,
     pub avg_ng5v5: i16,
     pub avg_rk5v5: i16,
+    pub avg_honor: i32,
     pub mode: String,
     pub checks: Vec<FightCheck>,
     pub rids: Vec<u32>,
@@ -219,6 +225,7 @@ impl FightGroup {
         let mut sum_rk1v1: i32 = 0;
         let mut sum_ng5v5: i32 = 0;
         let mut sum_rk5v5: i32 = 0;
+        let mut sum_honor: i32 = 0;
         
         self.user_count = 0;
         for room in &self.rooms {
@@ -226,6 +233,7 @@ impl FightGroup {
             sum_rk1v1 += room.borrow().avg_rk1v1 as i32 * room.borrow().users.len() as i32;
             sum_ng5v5 += room.borrow().avg_ng5v5 as i32 * room.borrow().users.len() as i32;
             sum_rk5v5 += room.borrow().avg_rk5v5 as i32 * room.borrow().users.len() as i32;
+            sum_honor += room.borrow().avg_honor as i32 * room.borrow().users.len() as i32;
             
             self.user_count += room.borrow().users.len() as i16;
         }
@@ -234,6 +242,7 @@ impl FightGroup {
             self.avg_rk1v1 = (sum_rk1v1/self.user_count as i32) as i16;
             self.avg_ng5v5 = (sum_ng5v5/self.user_count as i32) as i16;
             self.avg_rk5v5 = (sum_rk5v5/self.user_count as i32) as i16;
+            self.avg_honor = (sum_honor/self.user_count as i32);
         }
     }
 

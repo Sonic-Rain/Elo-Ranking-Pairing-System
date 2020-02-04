@@ -29,6 +29,7 @@ use std::process::Command;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct GameSetting {
     SCORE_INTERVAL: Option<i16>,
+    HONOR_THRESHOLD: Option<i32>,
     BLOCK_RECENT_PLAYER_OF_GAMES: Option<usize>,
 }
 
@@ -280,6 +281,7 @@ pub struct QueueRoomData {
     pub avg_rk1v1: i16,
     pub avg_ng5v5: i16,
     pub avg_rk5v5: i16,
+    pub honor: bool,
     pub mode: String,
     pub ready: i8,
     pub queue_cnt: i16,
@@ -298,6 +300,7 @@ pub struct ReadyGroupData {
     pub avg_rk1v1: i16,
     pub avg_ng5v5: i16,
     pub avg_rk5v5: i16,
+    pub honor: bool,
     pub game_status: u16,
     pub queue_cnt: i16,
     pub block: Vec<String>,
@@ -308,6 +311,7 @@ pub struct ReadyGroupData {
 pub struct ReadyGameData {
     pub user_name: Vec<String>,
     pub gid: Vec<u32>,
+    pub honor: bool,
     pub group: Vec<Vec<u32>>,
     pub team_len: usize,
     pub block: Vec<String>,
@@ -481,6 +485,10 @@ fn settlement_ng_score(win: &Vec<Rc<RefCell<User>>>, lose: &Vec<Rc<RefCell<User>
 
 pub fn HandleSqlRequest(pool: mysql::Pool)
     -> Result<Sender<SqlData>, Error> {
+        #[cfg(target_os = "linux")]
+        let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = bounded(10000);
+    
+        #[cfg(not(target_os = "linux"))]
         let (tx1, rx1): (Sender<SqlData>, Receiver<SqlData>) = crossbeam::unbounded();
         let start = Instant::now();
         let mut NewUsers: Vec<String> = Vec::new();
@@ -591,6 +599,21 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                                 conn.query(insert_ng1.clone())?;
                             }
 
+                            let mut insert_honor: String = "insert into user_honor (id, honor) values".to_string();
+                            for i in 0..len {
+                                let mut new_user = format!(" ({}, 0)", id+i);
+                                insert_honor += &new_user;
+                                if i < len-1 {
+                                    insert_honor += ",";
+                                }
+                            }
+                            insert_honor += ";";
+                            println!("{}", insert_honor);
+                            {
+                                conn.query(insert_honor.clone())?;
+                            }
+
+
                             len = 0;
                             NewUsers.clear();
                         }
@@ -677,8 +700,12 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
     Ok(tx1)
 }
 
-pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>, mode: String, team_size: i16, match_size: usize)
+pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>, mode: String, team_size: i16, match_size: usize, score_interval: i16)
     -> Result<Sender<QueueData>, Error> {
+    #[cfg(target_os = "linux")]
+    let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = bounded(10000);
+    
+    #[cfg(not(target_os = "linux"))]
     let (tx, rx):(Sender<QueueData>, Receiver<QueueData>) = crossbeam::unbounded();
     let start = Instant::now();
 
@@ -757,6 +784,9 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                         break;
                                     }
                                 }
+                                if (g.honor != v.borrow().honor) {
+                                    block = true;
+                                }
                                 if block {
                                     continue;
                                 }
@@ -782,7 +812,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                     room_score = v.borrow().avg_rk5v5;
                                 }
 
-                                if g.user_len > 0 && g.user_len < team_size && (group_score + v.borrow().queue_cnt*SCORE_INTERVAL) < room_score {
+                                if g.user_len > 0 && g.user_len < team_size && (group_score + v.borrow().queue_cnt*score_interval) < room_score {
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -792,7 +822,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                     g.block = [g.block.as_slice(), v.borrow().block.clone().as_slice()].concat();
                                     g.blacklist = [g.blacklist.as_slice(), v.borrow().blacklist.clone().as_slice()].concat();
                                     g.user_name = [g.user_name.as_slice(), v.borrow().user_name.as_slice()].concat();
-                                
+                                    g.honor = v.borrow().honor.clone();
                                     let mut ng = (group_score * g.user_len + room_score * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     if mode == "ng1p2t" {
                                         g.avg_ng1v1 = ng;
@@ -803,22 +833,25 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                     } else if mode == "rk5p2t" {
                                         g.avg_rk5v5 = ng;
                                     }
+                                    
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
                                     v.borrow_mut().gid = group_id + 1;
                                     v.borrow_mut().queue_cnt += 1;
-                                    
+                                    continue;
                                 }
 
                                 if v.borrow().ready == 0 &&
                                     v.borrow().user_len as i16 + g.user_len <= team_size {
                                     
                                     let Difference: i16 = i16::abs(room_score - group_score);
-                                    if group_score == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                    if group_score == 0 || Difference <= score_interval * v.borrow().queue_cnt {
                                         g.rid.push(v.borrow().rid);
                                         g.block = [g.block.as_slice(), v.borrow().block.clone().as_slice()].concat();
                                         g.user_name = [g.user_name.as_slice(), v.borrow().user_name.as_slice()].concat();
-                                        
+                                        if g.user_len == 0 {
+                                            g.honor = v.borrow().honor.clone();
+                                        }
                                         let mut score = (group_score * g.user_len + room_score * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                         if mode == "ng1p2t" {
                                             g.avg_ng1v1 = score;
@@ -902,7 +935,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                     break;
                                 }   
                             }
-
+                            
                             if block {
                                 continue;
                             }
@@ -926,6 +959,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                     fg.gid.push(*id);
                                     fg.team_len += 1;
                                     fg.block = [fg.block.as_slice(), rg.borrow().block.clone().as_slice()].concat();
+                                    
                                     continue;
                                 }
                                 
@@ -933,7 +967,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                 if fg.team_len > 0 {
                                     difference = i16::abs(group_score as i16 - total_score/fg.team_len as i16);
                                 }
-                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                if difference <= score_interval * rg.borrow().queue_cnt {
                                     total_score += group_score as i16;
                                     fg.group.push(rg.borrow().rid.clone());
                                     fg.block = [fg.block.as_slice(), rg.borrow().block.clone().as_slice()].concat();
@@ -1021,6 +1055,10 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
 
 pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, server_addr: String, isBackup: bool) 
     -> Result<Sender<RoomEventData>, Error> {
+    #[cfg(target_os = "linux")]
+    let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(10000);
+    
+    #[cfg(not(target_os = "linux"))]
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = crossbeam::unbounded();
     let mut QueueSender: BTreeMap<String, Sender<QueueData>> = BTreeMap::new();
     
@@ -1038,10 +1076,11 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
     let config: Config = toml::from_str(&str_val).unwrap();
     
     let score_interval = config.game_setting.clone().unwrap().SCORE_INTERVAL.unwrap();
+    let honor_threshold = config.game_setting.clone().unwrap().HONOR_THRESHOLD.unwrap();
     let block_recent_player_of_games = config.game_setting.clone().unwrap().BLOCK_RECENT_PLAYER_OF_GAMES.unwrap();
     
     for x in config.game_mode.unwrap() {
-        let mut tx1 = HandleQueueRequest(msgtx.clone(), tx.clone(), x.MODE.clone().unwrap(), x.TEAM_SIZE.unwrap(), x.MATCH_SIZE.unwrap())?;
+        let mut tx1 = HandleQueueRequest(msgtx.clone(), tx.clone(), x.MODE.clone().unwrap(), x.TEAM_SIZE.unwrap(), x.MATCH_SIZE.unwrap(), score_interval)?;
         QueueSender.insert(x.MODE.clone().unwrap(), tx1.clone());
     }
     
@@ -1113,11 +1152,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let mut game_id: u32 = 0;
         let mut game_port: u16 = 7777;
 
-        let sql = format!(r#"select userid, a.score as ng1v1, b.score as rk1v1, d.score as ng5v5, e.score as rk5v5, name from user as c 
+        let sql = format!(r#"select userid, a.score as ng1v1, b.score as rk1v1, d.score as ng5v5, e.score as rk5v5, f.honor as honor, name from user as c 
                             join user_ng1v1 as a on a.id=c.id 
                             join user_rk1v1 as b on b.id=c.id
                             join user_ng5v5 as d on d.id=c.id
-                            join user_rk5v5 as e on e.id=c.id;"#);
+                            join user_rk5v5 as e on e.id=c.id
+                            join user_honor as f on f.id=c.id;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
@@ -1136,9 +1176,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                 ng5v5: mysql::from_value(a.get("ng5v5").unwrap()),
                 rk1v1: mysql::from_value(a.get("rk1v1").unwrap()),
                 rk5v5: mysql::from_value(a.get("rk5v5").unwrap()),
+                honor: mysql::from_value(a.get("honor").unwrap()),
                 ..Default::default()
             };
-            
+            //println!("{:?}", user);
             TotalUsers.insert(id, Rc::new(RefCell::new(user.clone())));
         }
         
@@ -1224,7 +1265,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 //info!("game_port: {}", game_port);
                                 //info!("game id {}", group.borrow().game_id);
                                 
-                                let cmd = Command::new(r#"D:\Test\CF1\WindowsNoEditor\CF1\Binaries\Win64\CF1Server.exe"#)
+                                let cmd = Command::new(r#"/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server"#)
                                         .arg(format!("-Port={}", game_port))
                                         .arg(format!("-gameid {}", group.borrow().game_id))
                                         .arg("-NOSTEAM")
@@ -1281,6 +1322,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 for t in &group.borrow().teams {
                                     for r in &t.borrow().rooms {
                                         if !rm_rid.contains(&r.borrow().rid) {
+                                            let mut h: bool;
+                                            if r.borrow().avg_honor.clone() >= honor_threshold {
+                                                h = true;
+                                            } else {
+                                                h = false;
+                                            }
                                             let mut data = QueueRoomData {
                                                 user_name: users.clone(),
                                                 rid: r.borrow().rid.clone(),
@@ -1290,6 +1337,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 avg_rk1v1: r.borrow().avg_rk1v1.clone(),
                                                 avg_ng5v5: r.borrow().avg_ng5v5.clone(),
                                                 avg_rk5v5: r.borrow().avg_rk5v5.clone(),
+                                                honor: h,
                                                 mode: group.borrow().mode.clone(),
                                                 ready: 0,
                                                 queue_cnt: 1,
@@ -1696,6 +1744,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                         for r in &gr.borrow().rooms {
                                                             //println!("r_rid: {}, u_rid: {}", r.borrow().rid, u.borrow().rid);
                                                             if r.borrow().rid != u.borrow().rid {
+                                                                let mut h: bool;
+                                                                if r.borrow().avg_honor.clone() >= honor_threshold {
+                                                                    h = true;
+                                                                } else {
+                                                                    h = false;
+                                                                }
                                                                 let mut data = QueueRoomData {
                                                                     user_name: users.clone(),
                                                                     rid: r.borrow().rid.clone(),
@@ -1705,6 +1759,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                                     avg_rk1v1: r.borrow().avg_rk1v1.clone(),
                                                                     avg_ng5v5: r.borrow().avg_ng5v5.clone(),
                                                                     avg_rk5v5: r.borrow().avg_rk5v5.clone(),
+                                                                    honor: h,
                                                                     mode: gr.borrow().mode.clone(),
                                                                     ready: 0,
                                                                     queue_cnt: 1,
@@ -1816,6 +1871,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 y.borrow_mut().mode = x.mode.clone();
                                                 y.borrow_mut().ready = 1;
                                                 y.borrow_mut().update_avg();
+                                                let mut h: bool;
+                                                if y.borrow().avg_honor.clone() >= honor_threshold {
+                                                    h = true;
+                                                } else {
+                                                    h = false
+                                                }
                                                 let mut data = QueueRoomData {
                                                     user_name: users.clone(),
                                                     rid: y.borrow().rid.clone(),
@@ -1825,6 +1886,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     avg_rk1v1: y.borrow().avg_rk1v1.clone(),
                                                     avg_ng5v5: y.borrow().avg_ng5v5.clone(),
                                                     avg_rk5v5: y.borrow().avg_rk5v5.clone(),
+                                                    honor: h,
                                                     mode: x.mode.clone(),
                                                     ready: 0,
                                                     queue_cnt: 1,
@@ -2041,21 +2103,23 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
                                         room_id += 1;
                                         
-                                        let mut new_room = RoomData {
-                                            rid: room_id,
-                                            users: vec![],
-                                            master: x.id.clone(),
-                                            last_master: "".to_owned(),
-                                            mode: "".to_owned(),
-                                            avg_ng1v1: 0,
-                                            avg_rk1v1: 0,
-                                            avg_ng5v5: 0,
-                                            avg_rk5v5: 0,
-                                            ready: 0,
-                                            queue_cnt: 1,
-                                        };
+                                        
                                         let mut u = TotalUsers.get(&x.id);
                                         if let Some(u) = u {
+                                            let mut new_room = RoomData {
+                                                rid: room_id,
+                                                users: vec![],
+                                                master: x.id.clone(),
+                                                last_master: "".to_owned(),
+                                                mode: "".to_owned(),
+                                                avg_ng1v1: 0,
+                                                avg_rk1v1: 0,
+                                                avg_ng5v5: 0,
+                                                avg_rk5v5: 0,
+                                                avg_honor: u.borrow().honor,
+                                                ready: 0,
+                                                queue_cnt: 1,
+                                            };
                                             new_room.add_user(Rc::clone(&u));
                                             let rid = new_room.rid;
                                             let r = Rc::new(RefCell::new(new_room));

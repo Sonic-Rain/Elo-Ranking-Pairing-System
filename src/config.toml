@@ -1,5 +1,6 @@
 [game_setting]
 SCORE_INTERVAL = 100
+HONOR_THRESHOLD = 100
 BLOCK_RECENT_PLAYER_OF_GAMES = 3
 
 [[game_mode]]

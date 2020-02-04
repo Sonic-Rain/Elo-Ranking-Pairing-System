@@ -215,7 +215,9 @@ fn main() -> std::result::Result<(), Error> {
     
     let mut isServerLive = true;
     
-    
+    #[cfg(target_os = "linux")]
+    let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(10000);
+    #[cfg(not(target_os = "linux"))]
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = crossbeam::unbounded();
     let pool = mysql::Pool::new(get_url(setting.clone()).as_str())?;
     thread::sleep_ms(100);
@@ -241,6 +243,7 @@ fn main() -> std::result::Result<(), Error> {
                         let handle = || -> Result<(), Error> 
                         {
                             if let Ok(d) = d {
+                                //println!("topic {}", d.topic);
                                 if d.topic == "server/0/res/dead" {
                                     isServerLive = false;
                                     isBackup = false;
@@ -278,6 +281,7 @@ fn main() -> std::result::Result<(), Error> {
     let (txxx, check_server) = crossbeam_channel::unbounded();
     #[cfg(not(target_os = "linux"))]
     std::thread::spawn(move || {
+        println!("not linux!!!!!!!");
         loop {
             std::thread::sleep(std::time::Duration::from_millis(1000));
             txxx.try_send(std::time::Instant::now()).unwrap();
