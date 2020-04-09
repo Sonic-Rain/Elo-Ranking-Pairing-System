@@ -18,6 +18,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::fs::File;
 use std::io::prelude::*;
+use uuid::Uuid;
 use failure::Error;
 
 extern crate toml;
@@ -79,6 +80,14 @@ pub struct JoinRoomData {
 pub struct UserLoginData {
     pub u: User,
     pub dataid: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GameServerLoginData {
+    pub name: String,
+    pub address: String,
+    pub max_server: u32,
+    pub max_user: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -187,27 +196,63 @@ pub struct GameInfoData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct UserInfoData {
+pub struct GameInfoRes {
+    pub game: u32,
+    pub users: Vec<UserInfoRes>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct UserInfoRes {
+    pub steamid: String,
+    pub TotalCurrency: u32,
+    pub HiddenRank: u8,
+    pub HiddenHonor: u16,
+    pub Currency: u16,
+    pub RankBattleCount: i16,
+    pub HeroMastery: u16,
+    pub HeroExperience: u32,
+    pub RankLevel: u16,
+    pub Rank: u32,
+    pub PlayerLevel: u16,
+    pub PlayerExperience: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct GetRPData {
     pub id: String,
+    pub game: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct UploadData {
+    pub game: u32,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct UserInfoData {
+    pub steamid: String,
     pub hero: String,
     pub level: u16,
     pub equ: Vec<String>,
     pub damage: u16,
-    pub take_damage: u16, 
-    pub heal: u16,
-    pub kill: u16,
-    pub death: u16,
-    pub assist: u16,
-    pub gift: UserGift,
+    pub be_damage: u16,
+    pub Res: String, 
+    pub K: u16,
+    pub D: u16,
+    pub A: u16,
+    pub Talent: UserGift,
+    pub BattleScore: String,
+    pub Currency: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct UserGift {
-    pub a: u16,
-    pub b: u16,
-    pub c: u16,
-    pub d: u16,
-    pub e: u16,
+    pub A: u16,
+    pub B: u16,
+    pub C: u16,
+    pub D: u16,
+    pub E: u16,
 }
 
 #[derive(Debug)]
@@ -230,8 +275,11 @@ pub enum RoomEventData {
     GameOver(GameOverData),
     GameInfo(GameInfoData),
     GameClose(GameCloseData),
+    GetRP(GetRPData),
+    UploadRP(UploadData),
     Status(StatusData),
     Reconnect(ReconnectData),
+    GameServerLogin(GameServerLoginData),
     MainServerDead(DeadData),
 }
 
@@ -248,27 +296,45 @@ pub struct SqlScoreData {
     pub mode: String
 }
 
+#[derive(Clone, Debug)]
+pub struct SqlReplayData {
+    pub gameid: u32,
+    pub name: String,
+    pub url: String,
+    pub address: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct SqlGameData {
+    pub gameid: u32,
+    pub userid: String,
+}
+
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SqlGameInfoData {
     pub game : u32,
     pub id: String,
     pub hero: String,
-    pub level: u16,
     pub equ: String,
     pub damage: u16, 
-    pub take_damage: u16,
-    pub heal: u16,
-    pub kill: u16,
-    pub death: u16,
-    pub assist: u16,
-    pub gift: UserGift,
+    pub be_damage: u16,
+    pub Res: String, 
+    pub K: u16,
+    pub D: u16,
+    pub A: u16,
+    pub BattleScore: String,
+    pub Currency: u32,
+    pub Talent: UserGift,
 }
 
 
 pub enum SqlData {
     Login(SqlLoginData),
     UpdateScore(SqlScoreData),
-    UpdateGameInfo(SqlGameInfoData)
+    UpdateGameInfo(SqlGameInfoData),
+    UpdateReplay(SqlReplayData),
+    UpdateGame(SqlGameData)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -495,6 +561,10 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
         let mut len = 0;
         let mut UpdateInfo: Vec<SqlGameInfoData> = Vec::new();
         let mut info_len = 0; 
+        let mut UpdateReplay: Vec<SqlReplayData> = Vec::new();
+        let mut replay_len = 0;
+        let mut UpdateGame: Vec<SqlGameData> = Vec::new();
+        let mut game_len = 0;
 
         #[cfg(target_os = "linux")]
         let update1000ms = tick(Duration::from_millis(2000));
@@ -601,14 +671,14 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
 
                             let mut insert_honor: String = "insert into user_honor (id, honor) values".to_string();
                             for i in 0..len {
-                                let mut new_user = format!(" ({}, 0)", id+i);
+                                let mut new_user = format!(" ({}, 50)", id+i);
                                 insert_honor += &new_user;
                                 if i < len-1 {
                                     insert_honor += ",";
                                 }
                             }
                             insert_honor += ";";
-                            println!("{}", insert_honor);
+                            //println!("{}", insert_honor);
                             {
                                 conn.query(insert_honor.clone())?;
                             }
@@ -620,12 +690,12 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
 
                         if info_len > 0 {
                             
-                            let mut insert_info: String = "insert into game_info (userid, game_id, hero, level, damage, take_damage, heal, kill_cnt, death, assist) values".to_string();
-                            let mut user_info: String = "insert into user_info (userid, game_id, equ, gift_A, gift_B, gift_C, gift_D, gift_E) values".to_string();
+                            let mut insert_info: String = "insert into game_info (userid, gameid, hero, damage, be_damage, K, D, A, Res, BattleScore, Currency) values".to_string();
+                            let mut user_info: String = "insert into user_info (userid, gameid, equ, gift_A, gift_B, gift_C, gift_D, gift_E) values".to_string();
                             for (i, info) in UpdateInfo.iter().enumerate() {
-                                let mut new_user = format!(" ({}, {}, '{}', {}, {}, {}, {}, {}, {}, {})", info.id, info.game, info.hero, info.level, info.damage, info.take_damage, info.heal, info.kill, info.death, info.assist);
+                                let mut new_user = format!(" ({}, {}, '{}', {}, {}, {}, {}, {}, {}, {}, {})", info.id, info.game, info.hero, info.damage, info.be_damage, info.K, info.D, info.A, info.Res, info.BattleScore, info.Currency);
                                 insert_info += &new_user;
-                                let mut new_user1 = format!(" ({}, {}, '{}', {}, {}, {}, {}, {})", info.id, info.game, info.equ, info.gift.a, info.gift.b, info.gift.c, info.gift.d, info.gift.e);
+                                let mut new_user1 = format!(" ({}, {}, '{}', {}, {}, {}, {}, {})", info.id, info.game, info.equ, info.Talent.A, info.Talent.B, info.Talent.C, info.Talent.D, info.Talent.E);
                                 user_info += &new_user1;
                                 if i < info_len-1 {
                                     insert_info += ",";
@@ -646,6 +716,41 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                             UpdateInfo.clear();
                         }
 
+                        if replay_len > 0 {
+                            let mut insert_replay: String = "insert into replay (gameid, replay, url, address) values".to_string();
+                            for (i, replay) in UpdateReplay.iter().enumerate() {
+                                let mut new_replay = format!(r#" ({}, "{}", "{}", "{}")"#, replay.gameid, replay.name, replay.url, replay.address);
+                                insert_replay += &new_replay;
+                                if i < replay_len-1 {
+                                    insert_replay += ",";
+                                }
+                            }
+                            insert_replay += ";";
+                            println!("{}", insert_replay);
+                            {
+                                conn.query(insert_replay.clone())?;
+                            }
+                            replay_len = 0;
+                            UpdateReplay.clear();
+                        }
+
+                        if game_len > 0 {
+                            let mut insert_game: String = "insert into game (userid, gameid) values".to_string();
+                            for (i, game) in UpdateGame.iter().enumerate() {
+                                let mut new_game = format!(r#" ("{}", {})"#, game.userid, game.gameid);
+                                insert_game += &new_game;
+                                if i < game_len-1 {
+                                    insert_game += ",";
+                                }
+                            }
+                            insert_game += ";";
+                            println!("{}", insert_game);
+                            {
+                                conn.query(insert_game.clone())?;
+                            }
+                            game_len = 0;
+                            UpdateGame.clear();
+                        }
                     }
 
                     recv(rx1) -> d => {
@@ -684,6 +789,14 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                                     SqlData::UpdateGameInfo(x) => {
                                         UpdateInfo.push(x.clone());
                                         info_len += 1;
+                                    }
+                                    SqlData::UpdateReplay(x) => {
+                                        UpdateReplay.push(x.clone());
+                                        replay_len += 1;
+                                    }
+                                    SqlData::UpdateGame(x) => {
+                                        UpdateGame.push(x.clone());
+                                        game_len += 1;
                                     }
                                 }
                             }
@@ -750,8 +863,9 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                         let mut id: Vec<u32> = vec![];
                         let mut new_now = Instant::now();
                         tq = QueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
-                        //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
                         //tq.sort_by_key(|x| x.borrow().avg_rk);
+                        //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
+                        
                         
                         let mut new_now = Instant::now();
                         if mode == "ng1p2t" {
@@ -784,8 +898,8 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                         break;
                                     }
                                 }
-                                if (g.honor != v.borrow().honor) {
-                                    block = true;
+                                if (g.user_len != 0 && g.honor != v.borrow().honor) {
+                                     block = true;
                                 }
                                 if block {
                                     continue;
@@ -935,7 +1049,9 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                     break;
                                 }   
                             }
-                            
+                            if (fg.team_len != 0 && fg.honor != rg.borrow().honor) {
+                                block = true;
+                           }
                             if block {
                                 continue;
                             }
@@ -956,6 +1072,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                                 if total_score == 0 {
                                     total_score += group_score as i16;
                                     fg.group.push(rg.borrow().rid.clone());
+                                    fg.honor = rg.borrow().honor;
                                     fg.gid.push(*id);
                                     fg.team_len += 1;
                                     fg.block = [fg.block.as_slice(), rg.borrow().block.clone().as_slice()].concat();
@@ -1008,7 +1125,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>,
                         if let Ok(d) = d {
                             match d {
                                 QueueData::UpdateRoom(x) => {
-                                    //println!("mode: {}, rid: {}",mode, x.rid);
+                                    println!("mode: {}, rid: {}, block: {:?}, honor: {}",mode, x.rid, x.block, x.honor);
                                     QueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
                                 }
                                 QueueData::RemoveRoom(x) => {
@@ -1109,7 +1226,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
     let update5000ms = tick(Duration::from_millis(5000));
     #[cfg(target_os = "linux")]
     let update200ms = tick(Duration::from_millis(200));
-    
+    #[cfg(target_os = "linux")]
+    let update20000ms = tick(Duration::from_millis(20000));
 
     #[cfg(not(target_os = "linux"))]
     let (txxx, update5000ms) = crossbeam_channel::unbounded();
@@ -1131,6 +1249,17 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
             //println!("update200ms: rx len: {}, tx len: {}", rx.len(), txxx.len());
         }
     });
+
+    #[cfg(not(target_os = "linux"))]
+    let (txxx, update20000ms) = crossbeam_channel::unbounded();
+    #[cfg(not(target_os = "linux"))]
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(20000));
+            txxx.try_send(std::time::Instant::now()).unwrap();
+            //println!("update200ms: rx len: {}, tx len: {}", rx.len(), txxx.len());
+        }
+    });
     
     let start = Instant::now();
     //let QueueSender = tx1.clone();
@@ -1146,6 +1275,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let mut PreStartGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut GameingGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
+        let mut TotalReplay: BTreeMap<u32, Rc<RefCell<Replay>>> = BTreeMap::new();
+        let mut TotalGameServer: Vec<Rc<RefCell<GameServer>>> = vec![];
         let mut LossSend: Vec<MqttMsg> = vec![];
         let mut room_id: u32 = 0;
         let mut group_id: u32 = 0;
@@ -1198,19 +1329,37 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
             
         }
             
-            println!("userid: {}", userid);
-            //ng = mysql::from_value(a.get("ng").unwrap());
-            //rk = mysql::from_value(a.get("rk").unwrap());
-            //name = mysql::from_value(a.get("name").unwrap());
+        println!("userid: {}", userid);
+        //ng = mysql::from_value(a.get("ng").unwrap());
+        //rk = mysql::from_value(a.get("rk").unwrap());
+        //name = mysql::from_value(a.get("name").unwrap());
             
 
+        let replay_sql = format!(r#"select gameid, replay, url, address from replay;"#);
+        let replay_qres2: mysql::QueryResult = conn.query(replay_sql.clone())?;
         
-        let get_game_id = format!("select MAX(game_id) from game_info;");
+        
+        for row in replay_qres2 {
+            let a = row?.clone();
+            let gameid: u32 = mysql::from_value(a.get("gameid").unwrap());           
+            let replay = Replay {
+                gameid: gameid.clone(),
+                name: mysql::from_value(a.get("replay").unwrap()),
+                url: mysql::from_value(a.get("url").unwrap()),
+                address: mysql::from_value(a.get("address").unwrap()),
+                ..Default::default()
+            };
+            println!("{:?}", replay);
+            TotalReplay.insert(gameid, Rc::new(RefCell::new(replay.clone())));
+        }
+        println!("{:?}", TotalReplay);
+        
+        let get_game_id = format!("select MAX(gameid) from game;");
         let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
         
         for row in qres3 {
             let a = row?.clone();
-            let q = mysql::from_value_opt(a.get("MAX(game_id)").unwrap());
+            let q = mysql::from_value_opt(a.get("MAX(gameid)").unwrap());
             let q = match q {
                 Ok(q) => {
                     game_id = q;
@@ -1261,25 +1410,47 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 
                                 GameingGroups.remove(&group.borrow().game_id);
                                 //PreStartGroups.remove(&group.borrow().game_id);
-                                GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
+                                
                                 //info!("game_port: {}", game_port);
                                 //info!("game id {}", group.borrow().game_id);
                                 
-                                let cmd = Command::new(r#"/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server"#)
-                                        .arg(format!("-Port={}", game_port))
-                                        .arg(format!("-gameid {}", group.borrow().game_id))
-                                        .arg("-NOSTEAM")
-                                        .spawn();
-                                        match cmd {
-                                            Ok(_) => {},
-                                            Err(_) => {warn!("Fail open CF1Server")},
-                                        }
-                                if !isBackup || (isBackup && isServerLive == false){
-                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
-                                        msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)})?;
-                                    LossSend.push(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
-                                        msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)});
+                                TotalGameServer.sort_by(|a, b| a.borrow().utilization.cmp(&b.borrow().utilization));
+                                
+                                for gs in TotalGameServer.clone() {
+                                    if gs.borrow().now_user + group.borrow().user_names.len() as u32 > gs.borrow().max_user {
+                                        continue;
+                                    }
+                                    println!("user: {}", group.borrow().user_names.len());
+                                    msgtx.try_send(MqttMsg{topic:format!("server/{}/res/start_game", TotalGameServer[0].borrow().name.clone()), 
+                                        msg: format!(r#"{{"game":{}, "port":"{}", "user":{}}}"#, group.borrow().game_id, game_port, group.borrow().user_names.len())})?;
+
+                                    group.borrow_mut().server_name = TotalGameServer[0].borrow().name.clone();
+                                    group.borrow_mut().server_notify = 1;
+                                    group.borrow_mut().game_start = false;
+                                    GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
+                                    
+                                    TotalGameServer[0].borrow_mut().now_server += 1;
+                                    TotalGameServer[0].borrow_mut().update();
+                                    break;
                                 }
+                                for gs in TotalGameServer.clone() {
+                                    println!("GS afford: {}", gs.borrow().utilization);
+                                }
+                                // let cmd = Command::new(r#"/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server"#)
+                                //         .arg(format!("-Port={}", game_port))
+                                //         .arg(format!("-gameid {}", group.borrow().game_id))
+                                //         .arg("-NOSTEAM")
+                                //         .spawn();
+                                //         match cmd {
+                                //             Ok(_) => {},
+                                //             Err(_) => {warn!("Fail open CF1Server")},
+                                //         }
+                                // if !isBackup || (isBackup && isServerLive == false){
+                                //     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
+                                //         msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)})?;
+                                //     LossSend.push(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
+                                //         msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)});
+                                // }
                                 
                             },
                             PrestartStatus::Cancel => {
@@ -1323,10 +1494,11 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     for r in &t.borrow().rooms {
                                         if !rm_rid.contains(&r.borrow().rid) {
                                             let mut h: bool;
-                                            if r.borrow().avg_honor.clone() >= honor_threshold {
-                                                h = true;
-                                            } else {
+                                            
+                                            if r.borrow().avg_honor.clone() < honor_threshold {
                                                 h = false;
+                                            } else {
+                                                h = true;
                                             }
                                             let mut data = QueueRoomData {
                                                 user_name: users.clone(),
@@ -1386,8 +1558,58 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                             continue;
                         }
                     }
+                    
                 }
                 
+                recv(update20000ms) -> _ => {
+                    for (id, group) in &mut GameingGroups {
+                        if group.borrow().game_start == false {
+                            if group.borrow().server_notify > 5 {
+                                // let s = TotalGameServer.iter().find(|&x| x.borrow().name == group.borrow().server_name);
+                                // if let Some(s) = s {
+                                //     s.borrow_mut().now_server -= 1;
+                                //     s.borrow_mut().update();
+                                   
+                                // }
+                                let index = TotalGameServer.iter().position(|x| *x.borrow().name == group.borrow().server_name).unwrap();
+                                TotalGameServer.remove(index);
+                                TotalGameServer.sort_by(|a, b| a.borrow().utilization.cmp(&b.borrow().utilization));
+                                // if TotalGameServer[0].borrow().name == group.borrow().server_name {
+                                //     // TotalGameServer.sort_by(|a, b| a.borrow().utilization.cmp(&b.borrow().utilization));
+                                //     msgtx.try_send(MqttMsg{topic:format!("server/{}/res/start_game", TotalGameServer[1].borrow().name.clone()), 
+                                //         msg: format!(r#"{{"game":{}, "port":"{}"}}"#, group.borrow().game_id, group.borrow().game_port)})?;
+
+                                //     group.borrow_mut().server_name = TotalGameServer[1].borrow().name.clone();
+                                //     group.borrow_mut().server_notify = 1;
+                                //     group.borrow_mut().game_start = false;
+                                //     // GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
+                                    
+                                //     TotalGameServer[1].borrow_mut().now_server += 1;
+                                //     TotalGameServer[1].borrow_mut().update();
+                                // } else {
+                                    msgtx.try_send(MqttMsg{topic:format!("server/{}/res/start_game", TotalGameServer[0].borrow().name.clone()), 
+                                    msg: format!(r#"{{"game":{}, "port":"{}"}}"#, group.borrow().game_id, group.borrow().game_port)})?;
+
+                                    group.borrow_mut().server_name = TotalGameServer[0].borrow().name.clone();
+                                    group.borrow_mut().server_notify = 1;
+                                    group.borrow_mut().game_start = false;
+                                    // GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
+                                    
+                                    TotalGameServer[0].borrow_mut().now_server += 1;
+                                    TotalGameServer[0].borrow_mut().update();
+                                // }
+                            } else {
+                                
+                                msgtx.try_send(MqttMsg{topic:format!("server/{}/res/start_game", group.borrow().server_name.clone()), 
+                                    msg: format!(r#"{{"game":{}, "port":"{}"}}"#, group.borrow().game_id, group.borrow().game_port)})?;
+                                group.borrow_mut().server_notify += 1;
+                                
+                            }
+                        }
+                    }
+                }
+
+
                 recv(rx) -> d => {
                     
                     let handle = || -> Result<(), Error> {
@@ -1431,8 +1653,25 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 },
                                 RoomEventData::GameClose(x) => {
                                     //let p = PreStartGroups.remove(&x.game);
+                                    //    let cmd = Command::new(r#"/home/damody/LinuxNoEditor/CF1/Binaries/Linux/CF1Server"#)
+                                    //         .arg(format!("-Port={}", game_port))
+                                    //         .arg(format!("-gameid {}", group.borrow().game_id))
+                                    //         .arg("-NOSTEAM")
+                                    //         .spawn();
+                                    //         match cmd {
+                                    //             Ok(_) => {},
+                                    //             Err(_) => {warn!("Fail open CF1Server")},
+                                    //         }
                                     let g = GameingGroups.remove(&x.game);
                                     if let Some(g) = g {
+                                        let s = TotalGameServer.iter().find(|&x| x.borrow().name == g.borrow().server_name);
+                                        if let Some(s) = s {
+                                            s.borrow_mut().now_server -= 1;
+                                            s.borrow_mut().update();
+                                            msgtx.try_send(MqttMsg{topic:format!("server/{}/res/game_close", s.borrow().name.clone()), 
+                                            msg: format!(r#"{{"game":{}, "user":{}}}"#, x.game, g.borrow().user_names.len())})?;
+                                        }
+                                        
                                         for u in &g.borrow().user_names {
                                             let u = get_user(&u, &TotalUsers);
                                             match u {
@@ -1476,6 +1715,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let lose = get_users(&x.lose, &TotalUsers)?;
                                     let g1 = GameingGroups.get(&x.game);
                                     if let Some(g1) = g1 {
+                                       
                                         settlement_ng_score(&win, &lose, &msgtx, &sender, &mut conn, g1.borrow().mode.clone());
                                     }
                                     // remove game
@@ -1483,6 +1723,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let mut users: Vec<String> = Vec::new();
                                     match g {
                                         Some(g) => {
+                                            
                                             for u in &g.borrow().user_names {
                                                 let u = get_user(&u, &TotalUsers);
                                                 if let Some(u) = u {
@@ -1501,14 +1742,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             match u {
                                                 Some(u) => {
                                                     // add recent users
-                                                    if u.borrow().recent_users.len() >= BLOCK_RECENT_PLAYER_OF_GAMES {
+                                                    if u.borrow().recent_users.len() != 0 && u.borrow().recent_users.len() >= block_recent_player_of_games {
                                                         u.borrow_mut().recent_users.remove(0);                                                        
                                                     }
-                                                    let mut tmp_users = users.clone();
-                                                    let index = tmp_users.iter().position(|x| *x == u.borrow().id).unwrap();
-                                                    tmp_users.remove(index);
-                                                    u.borrow_mut().recent_users.push(tmp_users.clone());
-                                                    
+                                                    if block_recent_player_of_games > 0 {
+                                                        let mut tmp_users = users.clone();
+                                                        let index = tmp_users.iter().position(|x| *x == u.borrow().id).unwrap();
+                                                        tmp_users.remove(index);
+                                                        u.borrow_mut().recent_users.push(tmp_users.clone());
+                                                    }
                                                     // remove room
                                                     let r = TotalRoom.get(&u.borrow().rid);
                                                     let mut is_null = false;
@@ -1570,12 +1812,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 },
                                 RoomEventData::GameInfo(x) => {
                                     //println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                                    let mut data1: GameInfoData = Default::default();
                                     for u in &x.users {
+                                        let mut userinfo: UserInfoData = Default::default();
                                         let mut update_info: SqlGameInfoData = Default::default();
+
+                                        // SQL update
                                         update_info.game = x.game.clone();
-                                        update_info.id = u.id.clone();
+                                        update_info.id = u.steamid.clone();
                                         update_info.hero = u.hero.clone();
-                                        update_info.level = u.level.clone();
                                         for (i, e) in u.equ.iter().enumerate() {
                                             update_info.equ += e;
                                             if i < u.equ.len()-1 {
@@ -1583,25 +1828,43 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             }
                                         }
                                         update_info.damage = u.damage.clone();
-                                        update_info.take_damage = u.take_damage.clone();
-                                        update_info.heal = u.heal.clone();
-                                        update_info.kill = u.kill.clone();
-                                        update_info.death = u.death.clone();
-                                        update_info.assist = u.assist.clone();
-                                        update_info.gift = u.gift.clone();
+                                        update_info.be_damage = u.be_damage.clone();
+                                        update_info.K = u.K.clone();
+                                        update_info.D = u.D.clone();
+                                        update_info.A = u.A.clone();
+                                        update_info.Talent = u.Talent.clone();
                                         
                                         sender.send(SqlData::UpdateGameInfo(update_info));
+
+                                        // Ready for Response
+                                        userinfo.steamid = u.steamid.clone();
+                                        userinfo.TotalCurrency = 33;
+                                        userinfo.HiddenRank = 10;
+                                        userinfo.HiddenHonor = 20;
+                                        userinfo.Currency = 20;
+                                        userinfo.RankBattleCount = -
                                     }
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/choose_hero", x.game), 
+                                            msg: format!(r#"{{"game":"{}", "users":"{}"}}"#, u.borrow().id, u.borrow().hero)}
                                 },
                                 RoomEventData::StartGame(x) => {
                                     let g = GameingGroups.get(&x.game);
                                     if let Some(g) = g {
-                                        SendGameList(&g, &msgtx, &mut conn);
-                                        for r in &g.borrow().room_names {
-                                            if !isBackup || (isBackup && isServerLive == false) {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"{}:{}","game":{}}}"#, 
-                                                        r, server_addr, g.borrow().game_port, g.borrow().game_id)})?;
+                                        if g.borrow().game_start == false {
+                                            SendGameList(&g, &msgtx, &mut conn);
+                                            g.borrow_mut().game_start = true;
+                                            for r in &g.borrow().room_names {
+                                                if !isBackup || (isBackup && isServerLive == false) {
+                                                    let s = TotalGameServer.iter().find(|&x| x.borrow().name == g.borrow().server_name);
+                                                    if let Some(s) = s {
+                                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
+                                                        msg: format!(r#"{{"room":"{}","msg":"start","server":"{}:{}","game":{}}}"#, 
+                                                            r, s.borrow().address, g.borrow().game_port, g.borrow().game_id)})?;
+                                                    }
+                                                }
+                                            }
+                                            for u in &g.borrow().user_names {
+                                                sender.send(SqlData::UpdateGame(SqlGameData {gameid: x.game.clone(), userid: u.clone()}));
                                             }
                                         }
                                     }
@@ -1745,10 +2008,11 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                             //println!("r_rid: {}, u_rid: {}", r.borrow().rid, u.borrow().rid);
                                                             if r.borrow().rid != u.borrow().rid {
                                                                 let mut h: bool;
-                                                                if r.borrow().avg_honor.clone() >= honor_threshold {
-                                                                    h = true;
-                                                                } else {
+                                                                println!("PRESTART room avg honor: {}",r.borrow().avg_honor.clone());
+                                                                if r.borrow().avg_honor.clone() < honor_threshold {
                                                                     h = false;
+                                                                } else {
+                                                                    h = true;
                                                                 }
                                                                 let mut data = QueueRoomData {
                                                                     user_name: users.clone(),
@@ -1872,10 +2136,11 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 y.borrow_mut().ready = 1;
                                                 y.borrow_mut().update_avg();
                                                 let mut h: bool;
-                                                if y.borrow().avg_honor.clone() >= honor_threshold {
-                                                    h = true;
+                                                println!("STARTQUEUE room avg honor: {}",y.borrow().avg_honor.clone());
+                                                if y.borrow().avg_honor.clone() < honor_threshold {
+                                                    h = false;
                                                 } else {
-                                                    h = false
+                                                    h = true;
                                                 }
                                                 let mut data = QueueRoomData {
                                                     user_name: users.clone(),
@@ -2176,6 +2441,44 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
                                 },
+                                RoomEventData::GetRP(x) => {
+                                    println!("Get Replay");
+                                    let replay = TotalReplay.get(&x.game);
+                                    if let Some(replay) = replay {
+                                        println!("{:?}", replay);
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/replay", x.id.clone()), 
+                                        msg: format!(r#"{{"name":"{}", "url":"{}", "server":"{}"}}"#, replay.borrow().name, replay.borrow().url, replay.borrow().address)};
+                                    }
+                                },
+                                RoomEventData::UploadRP(x) => {
+                                    println!("Upload Replay");
+                                    let s = format!("{}", Uuid::new_v4());
+                                    sender.send(SqlData::UpdateReplay(SqlReplayData {gameid: x.game.clone(), name: x.name.clone(), url: s.clone(), address: "114.32.129.195".to_string() }));
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/upload", x.game.clone()), 
+                                        msg: format!(r#"{{"server":"114.32.129.195", "game":{}, "id":"{}"}}"#, x.game.clone(), s)};
+                                    let replay = Replay {
+                                        gameid: x.game.clone(),
+                                        name: x.name.clone(),
+                                        url: s.clone(),
+                                        address: "114.32.129.195".to_string(),
+                                        ..Default::default()
+                                    };
+                                    TotalReplay.insert(x.game.clone(), Rc::new(RefCell::new(replay.clone())));
+                                },
+                                RoomEventData::GameServerLogin(x) => {
+                                    let gameserver = GameServer {
+                                        name: x.name.clone(),
+                                        address: x.address.clone(),
+                                        max_server: x.max_server.clone(),
+                                        now_server: 0,
+                                        max_user: x.max_user.clone(),
+                                        now_user: 0,
+                                        utilization: 0,
+                                    };
+                                    TotalGameServer.push(Rc::new(RefCell::new(gameserver)));
+                                    mqttmsg = MqttMsg{topic:format!("server/{}/res/login", x.name.clone()), 
+                                            msg: format!(r#"{{"msg":"ok"}}"#)};
+                                },
                                 RoomEventData::MainServerDead(x) => {
                                     isServerLive = false;
                                     isBackup = false;
@@ -2347,6 +2650,30 @@ pub fn reconnect(id: String, v: Value, sender: Sender<RoomEventData>)
 {
     let data: ReconnectData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::Reconnect(data));
+    Ok(())
+}
+
+pub fn getRP(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: GameCloseData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::GetRP(GetRPData{ id: id.clone(), game: data.game}));
+    Ok(())
+}
+
+pub fn uploadRP(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: UploadData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::UploadRP(data));
+    Ok(())
+}
+
+pub fn server_login(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: GameServerLoginData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::GameServerLogin(data));
     Ok(())
 }
 

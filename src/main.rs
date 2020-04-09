@@ -178,12 +178,14 @@ fn main() -> std::result::Result<(), Error> {
     println!("Backup: {}", isBackup);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
-    mqtt_options = mqtt_options.set_request_channel_capacity(100);
-    mqtt_options = mqtt_options.set_notification_channel_capacity(100);
+    mqtt_options = mqtt_options.set_request_channel_capacity(100000);
+    mqtt_options = mqtt_options.set_notification_channel_capacity(100000);
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
     
     // Server message
     mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("server/+/send/login", QoS::AtMostOnce).unwrap();
+    
 
     // Client message
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce).unwrap();
@@ -191,6 +193,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("member/+/send/replay", QoS::AtMostOnce).unwrap();
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce).unwrap();
@@ -212,6 +215,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/choose", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("game/+/send/leave", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("game/+/send/exit", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("game/+/send/upload", QoS::AtMostOnce).unwrap();
     
     let mut isServerLive = true;
     
@@ -231,8 +235,8 @@ fn main() -> std::result::Result<(), Error> {
             
             let mut mqtt_options = MqttOptions::new(generate_client_id(), server_addr, server_port.parse::<u16>()?);
             mqtt_options = mqtt_options.set_keep_alive(100);
-            mqtt_options = mqtt_options.set_request_channel_capacity(100);
-            mqtt_options = mqtt_options.set_notification_channel_capacity(100);
+            mqtt_options = mqtt_options.set_request_channel_capacity(100000);
+            mqtt_options = mqtt_options.set_notification_channel_capacity(100000);
             //mqtt_options = mqtt_options.set_reconnect_opts(ReconnectOptions::Always(1));
             //println!("mqtt_options {:#?}", mqtt_options);
             let update = tick(Duration::from_millis(1000));
@@ -290,7 +294,7 @@ fn main() -> std::result::Result<(), Error> {
     });
     
 
-    let relogin = Regex::new(r"\w+/(\w+)/send/login").unwrap();
+    let relogin = Regex::new(r"(\w+)/(\w+)/send/login").unwrap();
     let relogout = Regex::new(r"\w+/(\w+)/send/logout").unwrap();
     let recreate = Regex::new(r"\w+/(\w+)/send/create").unwrap();
     let reclose = Regex::new(r"\w+/(\w+)/send/close").unwrap();
@@ -309,7 +313,9 @@ fn main() -> std::result::Result<(), Error> {
     let regame_close = Regex::new(r"\w+/(\w+)/send/game_close").unwrap();
     let restatus = Regex::new(r"\w+/(\w+)/send/status").unwrap();
     let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect").unwrap();
-    
+    let regetRP = Regex::new(r"\w+/(\w+)/send/replay").unwrap();
+    let reuploadRP = Regex::new(r"\w+/(\w+)/send/upload").unwrap();
+
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
     let mut sender: Sender<RoomEventData> = event_room::init(tx.clone(), sender1.clone(), pool.clone(), server_addr.clone(), isBackup)?;
@@ -388,9 +394,15 @@ fn main() -> std::result::Result<(), Error> {
                                     event_room::join(userid, v, sender.clone())?;
                                 } else if relogin.is_match(topic_name) {
                                     let cap = relogin.captures(topic_name).unwrap();
-                                    let userid = cap[1].to_string();
-                                    info!("login: userid: {} json: {:?}", userid, v);
-                                    event_member::login(userid, v, pool.clone(), sender.clone(), sender1.clone())?;
+                                    let userid = cap[2].to_string();
+                                    //println!("{:?}", cap);
+                                    if cap[1].to_string() == "server" {
+                                        info!("Server Login!");
+                                        event_room::server_login(userid, v, sender.clone())?;
+                                    } else {
+                                        //info!("login: userid: {} json: {:?}", userid, v);
+                                        event_member::login(userid, v, pool.clone(), sender.clone(), sender1.clone())?;
+                                    }
                                 } else if relogout.is_match(topic_name) {
                                     let cap = relogout.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
@@ -461,6 +473,16 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("reconnect: userid: {} json: {:?}", userid, v);
                                     event_room::reconnect(userid, v, sender.clone())?;
+                                } else if regetRP.is_match(topic_name) {
+                                    let cap = regetRP.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    event_room::getRP(userid, v, sender.clone())?;
+                                } else if reuploadRP.is_match(topic_name) {
+                                    let cap = reuploadRP.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    event_room::uploadRP(userid, v, sender.clone())?;
                                 }
                             } else {
                                 warn!("Json Parser error");

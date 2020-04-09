@@ -5,6 +5,31 @@ use crate::msg::*;
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use failure::Error;
 
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct GameServer {
+    pub name: String,
+    pub address: String,
+    pub max_user: u32,
+    pub now_user: u32,
+    pub max_server: u32,
+    pub now_server: u32,
+    pub utilization: i16,
+}
+
+impl GameServer{
+    pub fn update(&mut self) {
+        self.utilization = 100*self.now_server as i16/self.max_server as i16;
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Replay {
+    pub gameid: u32,
+    pub name: String,
+    pub url: String,
+    pub address: String,
+}
+
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
@@ -12,6 +37,7 @@ pub struct User {
     pub name: String,
     pub hero: String,
     pub honor: i32,
+    pub info: PlayerInfo,
     pub ng1v1: i16,
     pub ng5v5: i16,
     pub rk1v1: i16,
@@ -24,6 +50,19 @@ pub struct User {
     pub prestart_get: bool,
     pub recent_users: Vec<Vec<String>>,
     pub blacklist: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PlayerInfo {
+    pub PlayerExp: u32,
+    pub PlayerLv: u16,
+    pub Rank: u8,
+    pub RankLv: u16,
+    pub HeroExp: u32,
+    pub HeroMastery: String,
+    pub RankBattleCnt: u32,
+    pub TotalCurrency: u32,
+    pub HiddenRank: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -322,6 +361,9 @@ pub struct FightGame {
     pub winteam: i16,
     pub game_status: u16,
     pub game_port: u16,
+    pub server_name: String,
+    pub game_start: bool,
+    pub server_notify: i8,
 }
 
 #[derive(PartialEq)]

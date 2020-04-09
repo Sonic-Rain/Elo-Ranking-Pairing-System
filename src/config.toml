@@ -1,7 +1,7 @@
 [game_setting]
 SCORE_INTERVAL = 100
-HONOR_THRESHOLD = 100
-BLOCK_RECENT_PLAYER_OF_GAMES = 3
+HONOR_THRESHOLD = 1000
+BLOCK_RECENT_PLAYER_OF_GAMES = 0
 
 [[game_mode]]
 MODE = "ng1p2t"
@@ -17,11 +17,11 @@ MATCH_SIZE = 2
 
 [[game_mode]]
 MODE = "ng5p2t"
-TEAM_SIZE = 5
+TEAM_SIZE = 4
 MATCH_SIZE = 2
 
 
 [[game_mode]]
 MODE = "rk5p2t"
-TEAM_SIZE = 5
+TEAM_SIZE = 4
 MATCH_SIZE = 2
