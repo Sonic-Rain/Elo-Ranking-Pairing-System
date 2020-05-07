@@ -12,6 +12,7 @@ use mysql;
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use crate::event_room::*;
 use crate::room::User;
+use crate::room::ScoreInfo;
 
 #[derive(Serialize, Deserialize)]
 struct LoginData {
@@ -28,7 +29,7 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
  -> std::result::Result<(), Error>
 {
     let data: LoginData = serde_json::from_value(v)?;
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), honor: 50, online: true, ng1v1: 1000, ng5v5:1000, rk1v1: 1000, rk5v5: 1000, ..Default::default()}, dataid: data.id}));
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), honor: 50, online: true, ng1v1: ScoreInfo{score: 1000, WinCount: 0, LoseCount: 0}, ng5v5:ScoreInfo{score: 1000, WinCount: 0, LoseCount: 0}, rk1v1: ScoreInfo{score: 1000, WinCount: 0, LoseCount: 0}, rk5v5: ScoreInfo{score: 1000, WinCount: 0, LoseCount: 0}, ..Default::default()}, dataid: data.id}));
     /*
     let mut conn = pool.get_conn()?;
     let sql = format!(r#"select a.score as ng, b.score as rk, name from user as c 

@@ -185,6 +185,10 @@ fn main() -> std::result::Result<(), Error> {
     // Server message
     mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("server/+/send/login", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("manager/+/send/insert_equ", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("manager/+/send/modify_equ", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("manager/+/send/new_equ", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("manager/+/send/delete_equ", QoS::AtMostOnce).unwrap();
     
 
     // Client message
@@ -315,6 +319,11 @@ fn main() -> std::result::Result<(), Error> {
     let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect").unwrap();
     let regetRP = Regex::new(r"\w+/(\w+)/send/replay").unwrap();
     let reuploadRP = Regex::new(r"\w+/(\w+)/send/upload").unwrap();
+    let reinsert_equ = Regex::new(r"\w+/(\w+)/send/insert_equ").unwrap();
+    let remodify_equ = Regex::new(r"\w+/(\w+)/send/modify_equ").unwrap();
+    let recreate_equ = Regex::new(r"\w+/(\w+)/send/new_equ").unwrap();
+    let redelete_equ = Regex::new(r"\w+/(\w+)/send/delete_equ").unwrap();
+
 
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
@@ -483,6 +492,26 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("reconnect: userid: {} json: {:?}", userid, v);
                                     event_room::uploadRP(userid, v, sender.clone())?;
+                                } else if reinsert_equ.is_match(topic_name) {
+                                    let cap = reinsert_equ.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    event_room::insert_equ(userid, v, sender.clone())?;
+                                } else if remodify_equ.is_match(topic_name) {
+                                    let cap = remodify_equ.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    event_room::modify_equ(userid, v, sender.clone())?;
+                                } else if recreate_equ.is_match(topic_name) {
+                                    let cap = recreate_equ.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    event_room::create_equ(userid, v, sender.clone())?;
+                                } else if redelete_equ.is_match(topic_name) {
+                                    let cap = redelete_equ.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    event_room::delete_equ(userid, v, sender.clone())?;
                                 }
                             } else {
                                 warn!("Json Parser error");

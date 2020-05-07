@@ -1,9 +1,11 @@
 use serde_derive::{Serialize, Deserialize};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::collections::{HashMap, BTreeMap};
 use crate::msg::*;
 use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
 use failure::Error;
+use rust_decimal::Decimal;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct GameServer {
@@ -30,6 +32,42 @@ pub struct Replay {
     pub address: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Equipment {
+    pub equ_id: u32,
+    pub equ_name: String,
+    pub positive: String,
+    pub negative: String,
+    pub pvalue: Vec<f32>,
+    pub nvalue: Vec<f32>,
+    pub option_id: Vec<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct EquOption {
+    pub option_id: u32,
+    pub option_name: String,
+    pub special: bool,
+    pub exception: bool,
+    pub set_id: u32,
+    pub set_amount: u8,
+    pub option_weight: f32,
+    pub effect: Vec<f32>, 
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct UserEquInfo {
+    pub equ_id: u32,
+    pub rank: u8,
+    pub lv: u8,
+    pub lv5: u8,
+    pub option1: u32,
+    pub option2: u32,
+    pub option3: u32,
+    pub option1lv: u8,
+    pub option2lv: u8,
+    pub option3lv: u8,
+}
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
@@ -38,10 +76,10 @@ pub struct User {
     pub hero: String,
     pub honor: i32,
     pub info: PlayerInfo,
-    pub ng1v1: i16,
-    pub ng5v5: i16,
-    pub rk1v1: i16,
-    pub rk5v5: i16,
+    pub ng1v1: ScoreInfo,
+    pub ng5v5: ScoreInfo,
+    pub rk1v1: ScoreInfo,
+    pub rk5v5: ScoreInfo,
     pub rid: u32,
     pub gid: u32,
     pub game_id: u32,
@@ -55,14 +93,26 @@ pub struct User {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct PlayerInfo {
     pub PlayerExp: u32,
-    pub PlayerLv: u16,
-    pub Rank: u8,
-    pub RankLv: u16,
-    pub HeroExp: u32,
-    pub HeroMastery: String,
-    pub RankBattleCnt: u32,
+    pub PlayerLv: u32,
+    pub HeroExp: BTreeMap<String, Hero>,
+    pub Money: u32,
     pub TotalCurrency: u32,
+    pub TotalEquip: Vec<UserEquInfo>,
     pub HiddenRank: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ScoreInfo {
+    pub score: i16,
+    pub WinCount: u32,
+    pub LoseCount: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Hero {
+    pub Hero_name: String,
+    pub Level: u32,
+    pub Exp: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -90,10 +140,10 @@ impl RoomData {
         let mut sum_honor = 0;
         
         for user in &self.users {
-            sum_ng1v1 += user.borrow().ng1v1;
-            sum_rk1v1 += user.borrow().rk1v1;
-            sum_ng5v5 += user.borrow().ng5v5;
-            sum_rk5v5 += user.borrow().rk5v5;
+            sum_ng1v1 += user.borrow().ng1v1.score;
+            sum_rk1v1 += user.borrow().rk1v1.score;
+            sum_ng5v5 += user.borrow().ng5v5.score;
+            sum_rk5v5 += user.borrow().rk5v5.score;
             sum_honor += user.borrow().honor;
         }
         if self.users.len() > 0 {
@@ -219,11 +269,11 @@ impl FightGroup {
         false
     }
 
-    pub fn get_users_id_hero(&self) -> Vec<(String, String, String)> {
-        let mut res: Vec<(String, String, String)> = vec![];
+    pub fn get_users_id_hero(&self) -> Vec<(String, String, String, Vec<UserEquInfo>)> {
+        let mut res: Vec<(String, String, String, Vec<UserEquInfo>)> = vec![];
         for r in &self.rooms {
             for u in &r.borrow().users {
-                res.push((u.borrow().id.clone(), u.borrow().name.clone(), u.borrow().hero.clone()));
+                res.push((u.borrow().id.clone(), u.borrow().name.clone(), u.borrow().hero.clone(), u.borrow().info.TotalEquip.clone()));
             }
         }
         res
@@ -358,7 +408,8 @@ pub struct FightGame {
     pub game_id: u32,
     pub mode: String,
     pub user_count: u16,
-    pub winteam: i16,
+    pub winteam: Vec<String>,
+    pub loseteam: Vec<String>,
     pub game_status: u16,
     pub game_port: u16,
     pub server_name: String,
