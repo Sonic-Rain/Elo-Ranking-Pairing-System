@@ -27,13 +27,10 @@ struct LogoutData {
 pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>, sender1: Sender<SqlData>)
  -> std::result::Result<(), Error>
 {
-    let data: LoginData = serde_json::from_value(v)?;
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), online: true, ng: 1000, rk: 1000, ..Default::default()}, dataid: data.id}));
-    /*
     let mut conn = pool.get_conn()?;
     let sql = format!(r#"select a.score as ng, b.score as rk, name from user as c 
                         join user_ng as a on a.id=c.id 
-                        join user_rank as b on b.id=c.id  where userid='{}';"#, data.id);
+                        join user_rk as b on b.id=c.id  where c.id='{}';"#, id);
     
     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
     let mut ng: i16 = 0;
@@ -50,16 +47,15 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
         break;
     }
     if count == 0 { 
-        let sql = format!("replace into user (userid, name, status) values ('{}', 'default name', 'online');", data.id);
+        let sql = format!("replace into user (id, name, status) values ('{}', 'default name', 'online');", id);
         {
             conn.query(sql.clone())?;
         } 
-        sender1.send(SqlData::Login(SqlLoginData {id: data.id.clone(), name: name.clone()}));
+        sender1.send(SqlData::Login(SqlLoginData {id: id.clone(), name: name.clone()}));
         //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: 1000, rk: 1000, ..Default::default()}}));
-        
     }
     
-    let qres = conn.query(format!("update user set status='online' where userid='{}';", data.id));
+    let qres = conn.query(format!("update user set status='online' where id='{}';", id));
     let publish_packet = match qres {
         Ok(_) => {
             //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), ng: ng, rk: rk}}));
@@ -69,11 +65,9 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
         }
     };
     if count != 0 {
-        sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: ng, rk: rk, ..Default::default()}}));
+        sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), online: true, ng: ng, rk: rk, ..Default::default()}, dataid: id}));
     }
-    */
     Ok(())
-    
 }
 
 
