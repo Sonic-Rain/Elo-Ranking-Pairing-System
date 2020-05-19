@@ -6,6 +6,7 @@ use serde_derive::{Serialize, Deserialize};
 use failure::Error;
 use rumqtt::{MqttClient, MqttOptions, QoS, ReconnectOptions};
 use log::{info, warn, error, trace};
+use crate::msg::*;
 
 use ::futures::Future;
 use mysql;
@@ -21,6 +22,12 @@ struct LoginData {
 #[derive(Serialize, Deserialize)]
 struct LogoutData {
     id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AddBlackData {
+    id: String,
+    black: String,
 }
 
 
@@ -92,5 +99,26 @@ pub fn logout(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventD
         }
     };
     sender.send(RoomEventData::Logout(UserLogoutData { id: id}));
+    Ok(())
+}
+
+pub fn AddBlacklist(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
+    let data: AddBlackData = serde_json::from_value(v)?;
+    let mut conn = pool.get_conn()?;
+    let mut sql = format!(r#"show tables like '{}_black_list'"#, id);
+    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+    let mut count = 0;
+    for row in qres2 {
+        count += 1;
+        break;
+    }
+    if count == 0 {
+        sql = format!(r#"create table {}_black_list (id varchar(100) not null, primary key( id ));"#, id);
+        let qres = conn.query(sql);
+    }
+    sql = format!(r#"replace into {}_black_list (id) values ('{}');"#, id, data.black);
+    let qres = conn.query(sql);
+    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/add_black_list", id), 
+                    msg: format!(r#"{{"msg":"added"}}"#)})?;
     Ok(())
 }

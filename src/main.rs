@@ -112,6 +112,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
@@ -193,7 +194,7 @@ fn main() -> std::result::Result<(), Error> {
     let server = Regex::new(r"\w+/(\w+)/res/(\w+)")?;
     let check_server = tick(Duration::from_millis(1000));
     
-
+    let readd_black_list = Regex::new(r"\w+/(\w+)/send/add_black_list")?;
     let relogin = Regex::new(r"\w+/(\w+)/send/login")?;
     let relogout = Regex::new(r"\w+/(\w+)/send/logout")?;
     let recreate = Regex::new(r"\w+/(\w+)/send/create")?;
@@ -302,6 +303,10 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("logout: userid: {} json: {:?}", userid, v);
                                     event_member::logout(userid, v, pool.clone(), sender.clone())?;
+                                } else if readd_black_list.is_match(topic_name){
+                                    let cap = readd_black_list.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    event_member::AddBlacklist(userid, v, pool.clone(), tx.clone());
                                 } else if recreate.is_match(topic_name) {
                                     let cap = recreate.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
