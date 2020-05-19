@@ -41,7 +41,7 @@ fn generate_client_id() -> String {
 }
 
 fn get_url() -> String {
-    "mysql://erps:erpsgogo@127.0.0.1:3306/erps".into()
+    "mysql://nobu_system:iwanttoplaynobu@127.0.0.1:3306/nobu".into()
 }
 
 fn main() -> std::result::Result<(), Error> {
@@ -89,12 +89,12 @@ fn main() -> std::result::Result<(), Error> {
             .help("backup"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or("172.104.78.55").to_owned();
+    let server_addr = matches.value_of("SERVER").unwrap_or("103.29.70.64").to_owned();
     let server_port = matches.value_of("PORT").unwrap_or("1883").to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
-        .unwrap_or("Elo Rank Server".to_owned());
+        .unwrap_or("Elo test Server".to_owned());
     let mut isBackup: bool = matches.value_of("BACKUP").unwrap_or("false").to_owned().parse().unwrap();
     println!("Backup: {}", isBackup);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
@@ -266,6 +266,7 @@ fn main() -> std::result::Result<(), Error> {
                                 }
                             };
                             let topic_name = x.topic_name.as_str();
+                            println!("topic_name {}", topic_name);
                             let vo : serde_json::Result<Value> = serde_json::from_str(msg);
                             if server.is_match(topic_name) {
                                 //println!("topic: {}", topic_name);
