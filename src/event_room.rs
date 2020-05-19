@@ -511,7 +511,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                             if let Ok(d) = d {
                                 match d {
                                     
-                                    SqlData::Login(x) => {                                       
+                                    SqlData::Login(x) => {
                                         NewUsers.push(x.id.clone());
                                         len+=1;                                        
                                     }
@@ -794,30 +794,29 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let sql = format!(r#"select userid, a.score as ng, b.score as rk, name from user as c 
                             join user_ng as a on a.id=c.id 
                             join user_rank as b on b.id=c.id;"#);
-        let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+        // let qres2: mysql::QueryResult = conn.query(sql.clone())?;
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
         let mut rk: i16 = 0;
         let mut name: String = "".to_owned();
         let id = 0;
-        for row in qres2 {
-            let a = row?.clone();
-            let user = User {
-                id: mysql::from_value(a.get("userid").unwrap()),
-                hero: mysql::from_value(a.get("name").unwrap()),
-                online: false,
-                ng: mysql::from_value(a.get("ng").unwrap()),
-                rk: mysql::from_value(a.get("rk").unwrap()),
-                ..Default::default()
-            };
-            userid = mysql::from_value(a.get("userid").unwrap());
-            //println!("userid: {}", userid);
-            //ng = mysql::from_value(a.get("ng").unwrap());
-            //rk = mysql::from_value(a.get("rk").unwrap());
-            //name = mysql::from_value(a.get("name").unwrap());
-            TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
-        }
-
+        // for row in qres2 {
+        //     let a = row?.clone();
+        //     let user = User {
+        //         id: mysql::from_value(a.get("userid").unwrap()),
+        //         hero: mysql::from_value(a.get("name").unwrap()),
+        //         online: false,
+        //         ng: mysql::from_value(a.get("ng").unwrap()),
+        //         rk: mysql::from_value(a.get("rk").unwrap()),
+        //         ..Default::default()
+        //     };
+        //     userid = mysql::from_value(a.get("userid").unwrap());
+        //     //println!("userid: {}", userid);
+        //     //ng = mysql::from_value(a.get("ng").unwrap());
+        //     //rk = mysql::from_value(a.get("rk").unwrap());
+        //     //name = mysql::from_value(a.get("name").unwrap());
+        //     TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
+        // }
         /*
         let get_game_id = format!("select MAX(game_id) from game_info;");
         let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
@@ -959,7 +958,6 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                 }
                 
                 recv(rx) -> d => {
-                    
                     let handle = || -> Result<(), Error> {
                         let mut mqttmsg: MqttMsg = MqttMsg{topic: format!(""), msg: format!("")};
                         if let Ok(d) = d {
@@ -1423,8 +1421,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()), 
                                                 msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)};
-                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()), 
-                                            //    msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)})?;
+                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
+                                            //msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)})?;
                                         }
                                         
                                     }
@@ -1626,7 +1624,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                         if mqttmsg.topic != "" {
                             LossSend.push(mqttmsg.clone());
                             if !isBackup || (isBackup && isServerLive == false) {
-                                //println!("send");
+                                // println!("send");
                                 msgtx.try_send(mqttmsg.clone())?;
                             }
                         }

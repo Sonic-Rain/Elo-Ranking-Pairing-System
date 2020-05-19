@@ -133,7 +133,6 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/choose", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/leave", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/exit", QoS::AtMostOnce)?;
-    
     let mut isServerLive = true;
     
     
