@@ -25,11 +25,26 @@ struct LogoutData {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AddBlackData {
+struct AddBlackListData {
     id: String,
     black: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct RemoveBlackListData{
+    id: String,
+    black: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct QueryBlackListData{
+    id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct QueryBlackListMsg{
+    list: Vec<String>,
+}
 
 pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>, sender1: Sender<SqlData>)
  -> std::result::Result<(), Error>
@@ -103,7 +118,7 @@ pub fn logout(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventD
 }
 
 pub fn AddBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
-    let data: AddBlackData = serde_json::from_value(v)?;
+    let data: AddBlackListData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
     let mut sql = format!(r#"show tables like '{}_black_list'"#, id);
     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -124,7 +139,7 @@ pub fn AddBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttM
 }
 
 pub fn RemoveBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
-    let data: AddBlackData = serde_json::from_value(v)?;
+    let data: RemoveBlackListData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
     let mut sql = format!(r#"show tables like '{}_black_list'"#, id);
     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -141,5 +156,33 @@ pub fn RemoveBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<Mq
     let qres = conn.query(sql);
     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/rm_black_list", id), 
                     msg: format!(r#"{{"msg":"removed"}}"#)})?;
+    Ok(())
+}
+
+pub fn QueryBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
+    let data: QueryBlackListData = serde_json::from_value(v)?;
+    let mut conn = pool.get_conn()?;
+    let mut sql = format!(r#"show tables like '{}_black_list';"#, id);
+    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+    let mut count = 0;
+    for row in qres2 {
+        count += 1;
+        break;
+    }
+    if count == 0 {
+        sql = format!(r#"create table {}_black_list (id varchar(100) not null, primary key( id ));"#, id);
+        let qres = conn.query(sql.clone());
+    }
+    sql = format!(r#"select * from {}_black_list;"#, id);
+    let qres: mysql::QueryResult = conn.query(sql.clone())?;
+    let mut blackid: String;
+    let mut list = Vec::new();
+    for row in qres {
+        let a = row?.clone();
+        blackid = mysql::from_value(a.get("id").unwrap());
+        list.push(blackid);
+    }
+    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/query_black_list", id), 
+                    msg: format!(r#"{{"list":{}}}"#,serde_json::to_value(list)?)})?;
     Ok(())
 }
