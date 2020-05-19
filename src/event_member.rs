@@ -74,12 +74,11 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
 pub fn logout(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
-    let data: LogoutData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
-    let qres = conn.query(format!("update user set status='offline' where userid='{}';", data.id));
+    let qres = conn.query(format!("update user set status='offline' where id='{}';", id));
     let publish_packet = match qres {
         Ok(_) => {
-            //sender.send(RoomEventData::Logout(UserLogoutData { id: id}));
+            // sender.send(RoomEventData::Logout(UserLogoutData { id: id}));
         },
         _=> {
             
