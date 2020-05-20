@@ -38,6 +38,7 @@ pub struct CreateRoomData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CloseRoomData {
     pub id: String,
+    pub dataid: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -796,7 +797,6 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                             join user_ng as a on a.id=c.id 
                             join user_rk as b on b.id=c.id;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
-        println!("here");
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
         let mut rk: i16 = 0;
@@ -1587,25 +1587,15 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 RoomEventData::Close(x) => {
                                     let mut success = false;
                                     if let Some(y) =  TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers)) {
-                                        let data = TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
-                                        y.borrow_mut().leave_room();
-                                        match data {
-                                            Some(_) => {
-                                                //QueueRoom.remove(&get_rid_by_id(&x.id, &TotalUsers));
-                                                println!("Totalroom rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
-                                                QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: get_rid_by_id(&x.id, &TotalUsers)}));
-                                                success = true;
-                                            },
-                                            _ => {}
-                                        }
+                                        success = true;
                                     }
                                     if success {
-                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/close", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok"}}"#)};
                                         //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
                                         //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
-                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/close", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"fail"}}"#)};
                                         //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
                                         //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
@@ -1670,8 +1660,12 @@ pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
 pub fn close(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
-    let data: CloseRoomData = serde_json::from_value(v)?;
-    sender.try_send(RoomEventData::Close(CloseRoomData{id: data.id.clone()}));
+    #[derive(Serialize, Deserialize, Clone, Debug)]
+    struct Create_json {
+        id: String,
+    }
+    let data: Create_json = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::Close(CloseRoomData{id: id.clone(), dataid: data.id.clone()}));
     Ok(())
 }
 
