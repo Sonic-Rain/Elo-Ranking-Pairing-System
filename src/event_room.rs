@@ -1190,7 +1190,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
-                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id), 
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)}
                                         //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
                                         //    msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;

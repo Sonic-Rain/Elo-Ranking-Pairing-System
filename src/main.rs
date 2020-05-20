@@ -109,7 +109,7 @@ fn main() -> std::result::Result<(), Error> {
     // Client message
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/choose_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/ng_choose_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;
@@ -212,7 +212,7 @@ fn main() -> std::result::Result<(), Error> {
     let rejoin = Regex::new(r"\w+/(\w+)/send/join")?;
     let rereject = Regex::new(r"\w+/(\w+)/send/reject")?;
     let reset = Regex::new(r"reset")?;
-    let rechoosehero = Regex::new(r"\w+/(\w+)/send/choose_hero")?;
+    let rechoosehero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
