@@ -95,7 +95,7 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
     if count != 0 {
         //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), online: true, ng: ng, rk: rk, ..Default::default()}, dataid: id}));
     }
-    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: "default name".to_string(), online: true, ng: ng, rk: rk, ..Default::default()}, dataid: id}));
+    sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), name: "default name".to_string(), online: true, ng: ng, rk: rk, ..Default::default()}, dataid: id}));
     Ok(())
 }
 

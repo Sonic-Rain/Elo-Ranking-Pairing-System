@@ -32,6 +32,7 @@ const SCORE_INTERVAL: i16 = 100;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
     pub id: String,
+    pub dataid: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -791,32 +792,32 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let mut game_id: u32 = 0;
         let mut game_port: u16 = 7777;
 
-        let sql = format!(r#"select userid, a.score as ng, b.score as rk, name from user as c 
+        let sql = format!(r#"select c.id, a.score as ng, b.score as rk, name from user as c 
                             join user_ng as a on a.id=c.id 
-                            join user_rank as b on b.id=c.id;"#);
-        // let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                            join user_rk as b on b.id=c.id;"#);
+        let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+        println!("here");
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
         let mut rk: i16 = 0;
         let mut name: String = "".to_owned();
         let id = 0;
-        // for row in qres2 {
-        //     let a = row?.clone();
-        //     let user = User {
-        //         id: mysql::from_value(a.get("userid").unwrap()),
-        //         hero: mysql::from_value(a.get("name").unwrap()),
-        //         online: false,
-        //         ng: mysql::from_value(a.get("ng").unwrap()),
-        //         rk: mysql::from_value(a.get("rk").unwrap()),
-        //         ..Default::default()
-        //     };
-        //     userid = mysql::from_value(a.get("userid").unwrap());
-        //     //println!("userid: {}", userid);
-        //     //ng = mysql::from_value(a.get("ng").unwrap());
-        //     //rk = mysql::from_value(a.get("rk").unwrap());
-        //     //name = mysql::from_value(a.get("name").unwrap());
-        //     TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
-        // }
+        for row in qres2 {
+            let a = row?.clone();
+            let user = User {
+                id: mysql::from_value(a.get("id").unwrap()),
+                name: mysql::from_value(a.get("name").unwrap()),
+                ng: mysql::from_value(a.get("ng").unwrap()),
+                rk: mysql::from_value(a.get("rk").unwrap()),
+                ..Default::default()
+            };
+            userid = mysql::from_value(a.get("id").unwrap());
+            //println!("userid: {}", userid);
+            //ng = mysql::from_value(a.get("ng").unwrap());
+            //rk = mysql::from_value(a.get("rk").unwrap());
+            //name = mysql::from_value(a.get("name").unwrap());
+            TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
+        }
         /*
         let get_game_id = format!("select MAX(game_id) from game_info;");
         let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
@@ -1547,8 +1548,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let mut success = false;
                                     //println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
                                     if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
-                                        room_id += 1;
-                                        
+                                        room_id = x.id.parse::<u32>().unwrap();
                                         let mut new_room = RoomData {
                                             rid: room_id,
                                             users: vec![],
@@ -1564,7 +1564,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             new_room.add_user(Rc::clone(&u));
                                             let rid = new_room.rid;
                                             let r = Rc::new(RefCell::new(new_room));
-                                            r.borrow().publish_update(&msgtx, x.id.clone())?;
+                                            r.borrow().publish_update(&msgtx, x.dataid.clone())?;
                                             TotalRoom.insert(
                                                 rid,
                                                 Rc::clone(&r),
@@ -1658,8 +1658,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
 pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
-    let data: CreateRoomData = serde_json::from_value(v)?;
-    sender.try_send(RoomEventData::Create(CreateRoomData{id: data.id.clone()}));
+    #[derive(Serialize, Deserialize, Clone, Debug)]
+    struct Create_json {
+        id: String,
+    }
+    let data: Create_json = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::Create(CreateRoomData{id: id.clone(), dataid: data.id.clone()}));
     Ok(())
 }
 

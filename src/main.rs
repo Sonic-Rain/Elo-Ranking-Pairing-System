@@ -322,7 +322,7 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if recreate.is_match(topic_name) {
                                     let cap = recreate.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("create: userid: {} json: {:?}", userid, v);
+                                    info!("create: userid: {} json: {:?}", userid, v);
                                     event_room::create(userid, v, sender.clone())?;
                                 } else if reclose.is_match(topic_name) {
                                     let cap = reclose.captures(topic_name).unwrap();
