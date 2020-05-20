@@ -1172,7 +1172,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     is_null = true;
                                                 }
                                                 mqttmsg = MqttMsg{topic:format!("room/{}/res/leave", x.id), 
-                                                    msg: format!(r#"{{"msg":"ok", "id": "{}"}}"#, x.id)};
+                                                    msg: format!(r#"{{"id": "{}","msg":"room leave"}}"#, x.id)};
                                                 //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id), 
                                                 //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             }
@@ -1240,8 +1240,6 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if TotalUsers.contains_key(&x.id) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()), 
                                             msg: format!(r#"{{"room":"{}","id":"{}","mgs":"reject"}}"#, x.room.clone(), x.id.clone())};
-                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
-                                        //    msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
                                     }
                                 }
                                 RoomEventData::Reset() => {
