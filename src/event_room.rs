@@ -25,7 +25,7 @@ use crate::msg::*;
 use crate::elo::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 1;
+const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 
@@ -1204,9 +1204,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if let Some(u) = u {
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
-                                            
                                             if let Some(r) = r {
                                                 if r.borrow().ready == 0 && r.borrow().users.len() < TEAM_SIZE as usize {
+                                                    println!("here");
                                                     r.borrow_mut().add_user(Rc::clone(j));
                                                     let m = r.borrow().master.clone();
                                                     r.borrow().publish_update(&msgtx, m)?;
@@ -1224,7 +1224,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     }
                                     if sendok == false {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                            msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())};
+                                            msg: format!(r#"{{"room":"{}","msg":"full"}}"#, x.room.clone())};
                                         //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                         //    msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())})?;
                                     }
