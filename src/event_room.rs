@@ -54,6 +54,12 @@ pub struct JoinRoomData {
     pub join: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RejectRoomData {
+    pub room: String,
+    pub id: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct UserLoginData {
     pub u: User,
@@ -197,6 +203,7 @@ pub enum RoomEventData {
     ChooseNGHero(UserNGHeroData),
     Invite(InviteRoomData),
     Join(JoinRoomData),
+    Reject(RejectRoomData),
     StartQueue(StartQueueData),
     CancelQueue(CancelQueueData),
     UpdateGame(PreGameData),
@@ -1229,6 +1236,14 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     }
                                     //println!("TotalRoom {:#?}", TotalRoom);
                                 },
+                                RoomEventData::Reject(x) => {
+                                    if TotalUsers.contains_key(&x.id) {
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()), 
+                                            msg: format!(r#"{{"room":"{}","id":"{}","mgs":"reject"}}"#, x.room.clone(), x.id.clone())};
+                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
+                                        //    msg: format!(r#"{{"room":"{}","from":"{}"}}"#, x.room.clone(), x.from.clone())})?;
+                                    }
+                                }
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
                                     //QueueRoom.clear();
@@ -1706,6 +1721,14 @@ pub fn join(id: String, v: Value, sender: Sender<RoomEventData>)
     let data: JoinRoomData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::Join(data));
     Ok(())
+}
+
+pub fn reject(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+   let data: RejectRoomData = serde_json::from_value(v)?;
+   sender.try_send(RoomEventData::Reject(data));
+   Ok(())
 }
 
 pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
