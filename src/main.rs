@@ -213,6 +213,7 @@ fn main() -> std::result::Result<(), Error> {
     let rereject = Regex::new(r"\w+/(\w+)/send/reject")?;
     let reset = Regex::new(r"reset")?;
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
+    let rechoosehero_timeout = Regex::new(r"\w+/(\w+)/send/ng_choose_hero_timeout")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;

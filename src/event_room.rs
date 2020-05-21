@@ -28,6 +28,7 @@ use std::process::Command;
 const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
+const CHOOSE_HERO_TIME: Duration = Duration::from_millis(3000);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -201,6 +202,7 @@ pub enum RoomEventData {
     Create(CreateRoomData),
     Close(CloseRoomData),
     ChooseNGHero(UserNGHeroData),
+    ChooseNGHeroTimeout(String),
     Invite(InviteRoomData),
     Join(JoinRoomData),
     Reject(RejectRoomData),
@@ -1187,14 +1189,19 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     }
                                 },
                                 RoomEventData::ChooseNGHero(x) => {
+                                    println!("here");
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id), 
-                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)}
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                         //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/choose_hero", u.borrow().id), 
                                         //    msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)})?;
                                     }
+                                },
+                                RoomEventData::ChooseNGHeroTimeout(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", x), 
+                                            msg: format!(r#"{{"msg":"timeout"}}"#)};
                                 },
                                 RoomEventData::Invite(x) => {
                                     if TotalUsers.contains_key(&x.from) {
@@ -1733,7 +1740,11 @@ pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
     let data: UserNGHeroData = serde_json::from_value(v)?;
-    sender.try_send(RoomEventData::ChooseNGHero(data));
+    if (data.hero.chars().count() < 2) {
+        sender.try_send(RoomEventData::ChooseNGHeroTimeout(id.clone()));
+    } else {
+        sender.try_send(RoomEventData::ChooseNGHero(data));
+    }
     Ok(())
 }
 
