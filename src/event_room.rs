@@ -29,11 +29,11 @@ const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: Duration = Duration::from_millis(3000);
+const READY_TIME: Duration = Duration::from_millis(10000);
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
     pub id: String,
-    pub dataid: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -80,8 +80,17 @@ pub struct UserLogoutData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StartQueueData {
-    pub id: String,
+    pub room: String,
     pub action: String,
+    pub mode: String,
+    pub id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ReadyData {
+    pub room: String,
+    pub id: String,
+    pub accept: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -207,6 +216,7 @@ pub enum RoomEventData {
     Join(JoinRoomData),
     Reject(RejectRoomData),
     StartQueue(StartQueueData),
+    Ready(ReadyData),
     CancelQueue(CancelQueueData),
     UpdateGame(PreGameData),
     PreStart(PreStartData),
@@ -264,6 +274,8 @@ pub struct QueueRoomData {
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub ready: i8,
+    pub in_group: bool,
+    pub notify: bool,
     pub queue_cnt: i16,
 }
 
@@ -285,6 +297,7 @@ pub struct ReadyGameData {
     pub team_len: usize,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct RemoveRoomData {
     pub rid: u32,
 }
@@ -559,13 +572,12 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
         
     thread::spawn(move || -> Result<(), Error> {
         let mut QueueRoom: BTreeMap<u32, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut NotifyRoom: BTreeMap<u32, bool> = BTreeMap::new();
         let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
-        
         let mut group_id = 0;
         loop {
             select! {
                 recv(update) -> _ => {
-                    
                     let mut new_now = Instant::now();
                     if QueueRoom.len() >= MATCH_SIZE {
                         let mut g: ReadyGroupData = Default::default();
@@ -581,9 +593,6 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                         let mut new_now1 = Instant::now();
                         for (k, v) in &mut QueueRoom {
-                            
-                            
-
                             if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
                                 for r in g.rid {
                                     id.push(r);
@@ -593,15 +602,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                                 let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                 g.avg_ng = ng;
                                 g.user_len += v.borrow().user_len;
-                                v.borrow_mut().ready = 1;
+                                v.borrow_mut().in_group = true;
                                 v.borrow_mut().gid = group_id + 1;
                                 v.borrow_mut().queue_cnt += 1;
                                 
                             }
-
-                            if v.borrow().ready == 0 &&
+                            if v.borrow().in_group == false &&
                                 v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
-                                
+
                                 let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
                                 if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
                                     g.rid.push(v.borrow().rid);
@@ -614,7 +622,7 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                                     }
                                     g.avg_ng = ng;
                                     g.user_len += v.borrow().user_len;
-                                    v.borrow_mut().ready = 1;
+                                    v.borrow_mut().in_group = true;
                                     v.borrow_mut().gid = group_id + 1;
                                 }
                                 else {
@@ -639,14 +647,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                             for r in g.rid {
                                 let mut room = QueueRoom.get(&r);
                                 if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
+                                    room.borrow_mut().in_group = false;
                                     room.borrow_mut().gid = 0;
                                 }
                             }
                             for r in id {
                                 let mut room = QueueRoom.get(&r);
                                 if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
+                                    room.borrow_mut().in_group = false;
                                     room.borrow_mut().gid = 0;
                                 }
                             }
@@ -655,63 +663,60 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
 
                     if ReadyGroups.len() >= MATCH_SIZE {
                         let mut fg: ReadyGameData = Default::default();
-                        //let mut prestart = false;
+                        let mut prestart = false;
                         let mut total_ng: i16 = 0;
                         let mut rm_ids: Vec<u32> = vec![];
                         //println!("ReadyGroup!! {}", ReadyGroups.len());
                         let mut new_now2 = Instant::now();
                         for (id, rg) in &mut ReadyGroups {
-                            
-                            
+                            for rid in &rg.borrow().rid {
+                                let isNotify = NotifyRoom.get(rid);
+                                let room = QueueRoom.get(rid);
+                                if let Some(room) = room {
+                                    let isNotify = room.borrow_mut().notify;
+                                    if isNotify {
 
-                            if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                if total_ng == 0 {
-                                    total_ng += rg.borrow().avg_ng as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.gid.push(*id);
-                                    fg.team_len += 1;
-                                    continue;
+                                    }else{
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/ready", rid), 
+                                            msg: format!(r#"{{"msg":"ready"}}"#)})?;
+                                        room.borrow_mut().notify = true;
+                                        room.borrow_mut().ready = 0;
+                                    }
                                 }
-                                
-                                let mut difference = 0;
-                                if fg.team_len > 0 {
-                                    difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
-                                }
-                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_ng += rg.borrow().avg_ng as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.team_len += 1;
-                                    fg.gid.push(*id);
-                                }
-                                else {
-                                    rg.borrow_mut().queue_cnt += 1;
-                                }
-                            }
-                            if fg.team_len == MATCH_SIZE {
-                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
-                                for id in fg.gid {
-                                    rm_ids.push(id);
-                                }
-                                fg = Default::default();
                             }
                         }
-                        
-                        for id in rm_ids {
-                            let rg = ReadyGroups.remove(&id);
-                            if let Some(rg) = rg {
+                        let mut isReady = true;
+                        // let mut not_ready_rids = Vec::new();
+                        // let mut not_ready_gids = Vec::new();
+                        let mut ready_count = 0;
+                        let mut game_id = 0;
+                        for (id, rg) in &mut ReadyGroups {
+                            for rid in &rg.borrow().rid {
+                                game_id = rid.clone();
+                                let room = QueueRoom.get_mut(rid);
+                                    if let Some(room) = room {
+                                        let room_ready = room.borrow_mut().ready;
+                                        let room_user_len = room.borrow_mut().user_len;
+                                        println!("romm : {}, ready : {}, len : {}", rid, room_ready, room_user_len);
+                                        ready_count += room_ready;
+                                        // if room_ready < (room_user_len as i8) {
+                                        //     isReady = false;
+                                        //     not_ready_rids.push(rid.clone());
+                                        //     not_ready_gids.push(id.clone());
+                                        // }
+                                    }
+                                }
+                        }
+                        if ready_count == 10{
+                            for (id, rg) in &mut ReadyGroups {
                                 for rid in &rg.borrow().rid {
-                                    
-                                    QueueRoom.remove(&rid);
-                                    
+                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", rid), 
+                                        msg: format!(r#"{{"msg":"start","game":"{}"}}"#, game_id)})?;
                                 }
                             }
+                            //to open game
                         }
-
-                        //println!("Time 3: {:?}",Instant::now().duration_since(new_now2));
                     }
-                    
-
-
                 }
 
                 recv(rx) -> d => {
@@ -719,8 +724,8 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         if let Ok(d) = d {
                             match d {
                                 QueueData::UpdateRoom(x) => {
-                                    //println!("rid: {}", x.rid);
                                     QueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
+                                    NotifyRoom.insert(x.rid.clone(), false);
                                 }
                                 QueueData::RemoveRoom(x) => {
                                     //println!("Remove Room!!!  x.rid: {}", &x.rid);
@@ -746,7 +751,47 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                                         ReadyGroups.remove(&r.borrow().gid);
                                     }
                                     QueueRoom.remove(&x.rid);
+                                    NotifyRoom.remove(&x.rid);
                                 }
+                                // QueueData::MatchRoom(x) => {
+                                //     thread::sleep(READY_TIME);
+                                //     // let mut isReady = true;
+                                //     // let mut not_ready_rids = Vec::new();
+                                //     // let mut not_ready_gids = Vec::new();
+                                //     // for (id, rg) in &mut ReadyGroups {
+                                //     //     for rid in &rg.borrow().rid {
+                                //     //         let room = QueueRoom.get_mut(rid);
+                                //     //         if let Some(room) = room {
+                                //     //             let room_ready = room.borrow_mut().ready;
+                                //     //             let room_user_len = room.borrow_mut().user_len;
+                                //     //             println!("romm : {}, ready : {}, len : {}", rid, room_ready, room_user_len);
+                                //     //             if room_ready < (room_user_len as i8) {
+                                //     //                 isReady = false;
+                                //     //                 not_ready_rids.push(rid.clone());
+                                //     //                 not_ready_gids.push(id.clone());
+                                //     //             }
+                                //     //         }
+                                //     //     }
+                                //     // }
+                                //     // for rid in not_ready_rids {
+                                //     //     QueueRoom.remove(&rid);
+                                //     //     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", rid), 
+                                //     //                     msg: format!(r#"{{"msg":"timeout}}"#)})?;
+                                //     // }
+                                //     // for gid in not_ready_gids {
+                                //     //     ReadyGroups.remove(&gid);
+                                //     // }
+                                //     // if isReady {
+                                        
+                                //     // } else {
+                                //     //     for (id, rg) in &mut ReadyGroups {
+                                //     //         for rid in &rg.borrow().rid {
+                                //     //             msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", rid), 
+                                //     //                     msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                //     //         }
+                                //     //     }
+                                //     // }
+                                // }
                             }
                         }
                         Ok(()) 
@@ -925,6 +970,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 avg_ng: r.borrow().avg_ng.clone(),
                                                 avg_rk: r.borrow().avg_rk.clone(),
                                                 ready: 0,
+                                                in_group: false,
+                                                notify: false,
                                                 queue_cnt: 1,
                                             };
                                             QueueSender.send(QueueData::UpdateRoom(data));
@@ -1231,6 +1278,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                                     //    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
                                                     sendok = true;
+                                                    let rid = x.room.parse::<u32>().unwrap();
+                                                    u.borrow_mut().rid = rid;
                                                 }
                                             }
                                         }
@@ -1288,6 +1337,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                                     avg_ng: r.borrow().avg_ng.clone(),
                                                                     avg_rk: r.borrow().avg_rk.clone(),
                                                                     ready: 0,
+                                                                    in_group: false,
+                                                                    notify: false,
                                                                     queue_cnt: 1,
                                                                 };
                                                                 QueueSender.send(QueueData::UpdateRoom(data));
@@ -1360,43 +1411,109 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let mut hasRoom = false;
                                     let u = TotalUsers.get(&x.id);
                                     let mut rid = 0;
+                                    let mut ng = 0;
+                                    let mut rk = 0;
                                     if let Some(u) = u {
                                         if u.borrow().rid != 0 {
                                             hasRoom = true;
                                             rid = u.borrow().rid;
+                                        }else{
+                                            rid = u.borrow().id.parse().unwrap();
+                                            ng = u.borrow().ng;
+                                            rk = u.borrow().rk;
+                                        }
+                                        if hasRoom {
+                                            let r = TotalRoom.get(&rid);
+                                            if let Some(y) = r {
+                                                y.borrow_mut().update_avg();
+                                                let mut data = QueueRoomData {
+                                                    rid: y.borrow().rid.clone(),
+                                                    gid: 0,
+                                                    user_len: y.borrow().users.len().clone() as i16,
+                                                    avg_ng: y.borrow().avg_ng.clone(),
+                                                    avg_rk: y.borrow().avg_rk.clone(),
+                                                    ready: 0,
+                                                    in_group: false,
+                                                    notify: false,
+                                                    queue_cnt: 1,
+                                                };
+                                                //println!("Totalroom rid: {}", rid);
+                                                QueueSender.send(QueueData::UpdateRoom(data));
+                                                //QueueRoom.insert(
+                                                //    y.borrow().rid,
+                                                //    Rc::clone(y)
+                                                //);
+                                                success = true;
+                                                if success {
+                                                    mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                        msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                } else {
+                                                    mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                        msg: format!(r#"{{"msg":"fail"}}"#)}
+                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                                }
+                                            }
+                                        }else{
+                                            tx2.try_send(RoomEventData::Create(CreateRoomData{id: x.id.clone()}));
+                                            let mut data = QueueRoomData {
+                                                rid: rid,
+                                                gid: 0,
+                                                user_len: 1,
+                                                avg_ng: ng,
+                                                avg_rk: rk,
+                                                ready: 0,
+                                                in_group: false,
+                                                notify: false,
+                                                queue_cnt: 1,
+                                            };
+                                            QueueSender.send(QueueData::UpdateRoom(data));
+                                                //QueueRoom.insert(
+                                                //    y.borrow().rid,
+                                                //    Rc::clone(y)
+                                                //);
+                                            success = true;
+                                            if success {
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", rid), 
+                                                    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                            } else {
+                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", rid), 
+                                                    msg: format!(r#"{{"msg":"fail"}}"#)}
+                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
+                                                    //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
+                                            }
                                         }
                                     }
-                                    if hasRoom {
+                                },
+                                RoomEventData::Ready(x) => {
+                                    let u = TotalUsers.get(&x.id);
+                                    let mut rid = 0;
+                                    let mut ng = 0;
+                                    let mut rk = 0;
+                                    if let Some(u) = u {
+                                        if u.borrow().rid != 0 {
+                                            rid = u.borrow().rid;
+                                        }
                                         let r = TotalRoom.get(&rid);
                                         if let Some(y) = r {
-                                            y.borrow_mut().update_avg();
+                                            let mut ready = y.borrow().ready;
+                                            println!("here {}", y.borrow().rid.clone());
                                             let mut data = QueueRoomData {
                                                 rid: y.borrow().rid.clone(),
                                                 gid: 0,
                                                 user_len: y.borrow().users.len().clone() as i16,
                                                 avg_ng: y.borrow().avg_ng.clone(),
                                                 avg_rk: y.borrow().avg_rk.clone(),
-                                                ready: 0,
+                                                ready: ready + 1,
+                                                in_group: true,
+                                                notify: true,
                                                 queue_cnt: 1,
                                             };
-                                            //println!("Totalroom rid: {}", rid);
                                             QueueSender.send(QueueData::UpdateRoom(data));
-                                            //QueueRoom.insert(
-                                            //    y.borrow().rid,
-                                            //    Rc::clone(y)
-                                            //);
-                                            success = true;
-                                            if success {
-                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)};
-                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                            } else {
-                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"fail"}}"#)}
-                                                //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()), 
-                                                //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
-                                            }
                                         }
                                     }
                                 },
@@ -1421,7 +1538,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             success = true;
                                             if success {
                                                 mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                    msg: format!(r#"{{"msg":"cancelled"}}"#)};
                                                 //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master.clone()), 
                                                 //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                             } else {
@@ -1566,6 +1683,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 RoomEventData::Create(x) => {
                                     let mut success = false;
                                     //println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
+                                    println!("{}",&x.id);
+                                    println!("{}",&get_rid_by_id(&x.id, &TotalUsers));
                                     if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
                                         room_id = x.id.parse::<u32>().unwrap();
                                         let mut new_room = RoomData {
@@ -1583,12 +1702,13 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             new_room.add_user(Rc::clone(&u));
                                             let rid = new_room.rid;
                                             let r = Rc::new(RefCell::new(new_room));
-                                            r.borrow().publish_update(&msgtx, x.dataid.clone())?;
+                                            r.borrow().publish_update(&msgtx, x.id.clone())?;
                                             TotalRoom.insert(
                                                 rid,
                                                 Rc::clone(&r),
                                             );
                                             success = true;
+                                            u.borrow_mut().rid = rid;
                                         }
                                     }
                                     if success {
@@ -1667,12 +1787,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
 pub fn create(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
-    #[derive(Serialize, Deserialize, Clone, Debug)]
-    struct Create_json {
-        id: String,
-    }
-    let data: Create_json = serde_json::from_value(v)?;
-    sender.try_send(RoomEventData::Create(CreateRoomData{id: id.clone(), dataid: data.id.clone()}));
+    sender.try_send(RoomEventData::Create(CreateRoomData{id: id.clone()}));
     Ok(())
 }
 
@@ -1692,7 +1807,15 @@ pub fn start_queue(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
     let data: StartQueueData = serde_json::from_value(v)?;
-    sender.try_send(RoomEventData::StartQueue(StartQueueData{id: data.id.clone(), action: data.action.clone()}));
+    sender.try_send(RoomEventData::StartQueue(data));
+    Ok(())
+}
+
+pub fn ready_queue(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+    let data: ReadyData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::Ready(data));
     Ok(())
 }
 

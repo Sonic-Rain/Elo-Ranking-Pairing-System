@@ -119,6 +119,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/start_queue", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/ready", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/invite", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/join", QoS::AtMostOnce)?;
@@ -205,6 +206,7 @@ fn main() -> std::result::Result<(), Error> {
     let recreate = Regex::new(r"\w+/(\w+)/send/create")?;
     let reclose = Regex::new(r"\w+/(\w+)/send/close")?;
     let restart_queue = Regex::new(r"\w+/(\w+)/send/start_queue")?;
+    let reready = Regex::new(r"\w+/(\w+)/send/ready")?;
     let recancel_queue = Regex::new(r"\w+/(\w+)/send/cancel_queue")?;
     let represtart_get = Regex::new(r"\w+/(\w+)/send/prestart_get")?;
     let represtart = Regex::new(r"\w+/(\w+)/send/prestart")?;
@@ -213,7 +215,6 @@ fn main() -> std::result::Result<(), Error> {
     let rereject = Regex::new(r"\w+/(\w+)/send/reject")?;
     let reset = Regex::new(r"reset")?;
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
-    let rechoosehero_timeout = Regex::new(r"\w+/(\w+)/send/ng_choose_hero_timeout")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
@@ -342,6 +343,11 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("start_queue: userid: {} json: {:?}", userid, v);
                                     event_room::start_queue(userid, v, sender.clone())?;
+                                } else if reready.is_match(topic_name) {
+                                    let cap = reready.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("start_queue: userid: {} json: {:?}", userid, v);
+                                    event_room::ready_queue(userid, v, sender.clone())?;
                                 } else if recancel_queue.is_match(topic_name) {
                                     let cap = recancel_queue.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
