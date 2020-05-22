@@ -95,8 +95,10 @@ pub struct ReadyData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CancelQueueData {
-    pub id: String,
+    pub room: String,
     pub action: String,
+    pub mode: String,
+    pub id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
