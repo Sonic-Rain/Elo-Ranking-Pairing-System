@@ -706,15 +706,20 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         }
                         if ready_count == 10{
                             ready_time = -1;
+                            let mut gids = Vec::new();
                             for (id, rg) in &mut ReadyGroups {
+                                gids.push(id.clone());
                                 for rid in &rg.borrow().rid {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", rid), 
                                         msg: format!(r#"{{"msg":"start","game":"{}"}}"#, game_id)})?;
+                                    QueueRoom.remove(&rid);
                                 }
                             }
+                            for gid in gids {
+                                ReadyGroups.remove(&gid);
+                            }
                             //to open game
-                        }
-                        else if ready_time >= READY_TIME{
+                        }else if ready_time >= READY_TIME {
                             ready_time = -1;
                             let mut not_ready_rids = Vec::new();
                             let mut not_ready_gids = Vec::new();
@@ -737,14 +742,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", rid), 
                                                 msg: format!(r#"{{"msg":"timeout}}"#)})?;
                             }
-                            for gid in not_ready_gids {
-                                ReadyGroups.remove(&gid);
-                            }
                             for (id, rg) in &mut ReadyGroups {
                                 for rid in &rg.borrow().rid {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", rid), 
                                                     msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                 }
+                            }
+                            for gid in not_ready_gids {
+                                ReadyGroups.remove(&gid);
                             }
                         }
                     }
