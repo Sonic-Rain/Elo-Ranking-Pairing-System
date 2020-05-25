@@ -74,6 +74,18 @@ pub struct UserNGHeroData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RankChooseHeroData {
+    pub id: String,
+    pub hero: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BanHeroData {
+    pub id: String,
+    pub hero: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserLogoutData {
     pub id: String,
 }
@@ -214,6 +226,9 @@ pub enum RoomEventData {
     Close(CloseRoomData),
     ChooseNGHero(UserNGHeroData),
     ChooseNGHeroTimeout(String),
+    RankChooseHero(RankChooseHeroData),
+    BanHero(BanHeroData),
+    RankChooseHeroTimeout(String),
     Invite(InviteRoomData),
     Join(JoinRoomData),
     Reject(RejectRoomData),
@@ -1245,6 +1260,14 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", x), 
                                             msg: format!(r#"{{"msg":"timeout"}}"#)};
                                 },
+                                RoomEventData::RankChooseHero(x) => {
+                                },
+                                RoomEventData::RankChooseHeroTimeout(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero", x), 
+                                            msg: format!(r#"{{"game":{},"msg":"timeout"}}"#, x)};
+                                },
+                                RoomEventData::BanHero(x) => {
+                                },
                                 RoomEventData::Invite(x) => {
                                     if TotalUsers.contains_key(&x.from) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
@@ -1825,6 +1848,25 @@ pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
     } else {
         sender.try_send(RoomEventData::ChooseNGHero(data));
     }
+    Ok(())
+}
+
+pub fn rk_choose_hero(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: RankChooseHeroData = serde_json::from_value(v)?;
+    if (data.hero.chars().count() < 2) {
+        sender.try_send(RoomEventData::RankChooseHeroTimeout(id.clone()));
+    } else {
+        sender.try_send(RoomEventData::RankChooseHero(data));
+    }
+    Ok(())
+}
+
+pub fn ban_hero(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+
     Ok(())
 }
 

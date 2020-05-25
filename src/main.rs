@@ -131,6 +131,8 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("room/+/send/prestart_get", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/start", QoS::AtMostOnce)?;
 
+    mqtt_client.subscribe("game/+/send/rk_choose_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/ban_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;
@@ -215,6 +217,8 @@ fn main() -> std::result::Result<(), Error> {
     let rereject = Regex::new(r"\w+/(\w+)/send/reject")?;
     let reset = Regex::new(r"reset")?;
     let rechoosehero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
+    let rerk_choosehero = Regex::new(r"\w+/(\w+)/send/rk_choose_hero")?;
+    let reban_hero= Regex::new(r"\w+/(\w+)/send/ban_hero")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
@@ -296,6 +300,16 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("choose ng hero: userid: {} json: {:?}", userid, v);
                                     event_room::choose_ng_hero(userid, v, sender.clone())?;
+                                } else if rerk_choosehero.is_match(topic_name) {
+                                    let cap = rerk_choosehero.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("choose ng hero: userid: {} json: {:?}", userid, v);
+                                    event_room::rk_choose_hero(userid, v, sender.clone())?;
+                                } else if reban_hero.is_match(topic_name) {
+                                    let cap = reban_hero.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("choose ng hero: userid: {} json: {:?}", userid, v);
+                                    event_room::ban_hero(userid, v, sender.clone())?;
                                 } else if rejoin.is_match(topic_name) {
                                     let cap = rejoin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
