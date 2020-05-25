@@ -80,7 +80,22 @@ pub struct RankChooseHeroData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RankChooseHeroHintData {
+    pub game: u32,
+    pub id: String,
+    pub hero: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RankChooseHeroSuggestData {
+    pub game: u32,
+    pub from: String,
+    pub hero: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BanHeroData {
+    pub game: u32,
     pub id: String,
     pub hero: String,
 }
@@ -227,6 +242,8 @@ pub enum RoomEventData {
     ChooseNGHero(UserNGHeroData),
     ChooseNGHeroTimeout(String),
     RankChooseHero(RankChooseHeroData),
+    RankChooseHeroHint(RankChooseHeroHintData),
+    RankChooseHeroSuggest(RankChooseHeroSuggestData),
     BanHero(BanHeroData),
     RankChooseHeroTimeout(String),
     Invite(InviteRoomData),
@@ -1262,11 +1279,21 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 },
                                 RoomEventData::RankChooseHero(x) => {
                                 },
+                                RoomEventData::RankChooseHeroHint(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero_hint", x.game), 
+                                            msg: format!(r#"{{"game":{},"id":"{}","hero":{}}}"#, x.game, x.id, x.hero)};
+                                },
+                                RoomEventData::RankChooseHeroSuggest(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero_suggest", x.game), 
+                                            msg: format!(r#"{{"game":{},"from":"{}","hero":{}}}"#, x.game, x.from, x.hero)};
+                                },
                                 RoomEventData::RankChooseHeroTimeout(x) => {
                                     mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero", x), 
                                             msg: format!(r#"{{"game":{},"msg":"timeout"}}"#, x)};
                                 },
                                 RoomEventData::BanHero(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/ban_hero", x.game), 
+                                            msg: format!(r#"{{"game":{},"id":"{}", "hero":"{}"}}"#, x.game, x.id, x.hero)};
                                 },
                                 RoomEventData::Invite(x) => {
                                     if TotalUsers.contains_key(&x.from) {
@@ -1863,10 +1890,29 @@ pub fn rk_choose_hero(id: String, v: Value, sender: Sender<RoomEventData>)
     Ok(())
 }
 
+pub fn rk_choose_hero_hint(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    println!("here");
+    let data: RankChooseHeroHintData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::RankChooseHeroHint(data));
+    Ok(())
+}
+
+pub fn rk_choose_hero_suggest(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    println!("here");
+    let data: RankChooseHeroSuggestData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::RankChooseHeroSuggest(data));
+    Ok(())
+}
+
 pub fn ban_hero(id: String, v: Value, sender: Sender<RoomEventData>)
  -> std::result::Result<(), Error>
 {
-
+    let data: BanHeroData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::BanHero(data));
     Ok(())
 }
 
