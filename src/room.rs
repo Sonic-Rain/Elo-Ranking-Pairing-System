@@ -17,7 +17,7 @@ pub struct User {
     pub game_id: u32,
     pub online: bool,
     pub start_prestart: bool,
-    pub prestart_get: bool,
+    pub start_get: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -64,15 +64,15 @@ impl RoomData {
     pub fn user_prestart(&mut self) {
         for user in &self.users {
             user.borrow_mut().start_prestart = true;
-            user.borrow_mut().prestart_get = false;
+            user.borrow_mut().start_get = false;
         }
     }
 
-    pub fn check_prestart_get(&mut self) -> bool{
+    pub fn check_start_get(&mut self) -> bool{
         let mut res = false;
         for user in &self.users {
             //println!("User: {}, Prestart_get: {}", user.borrow().id, user.borrow().prestart_get);
-            if user.borrow().prestart_get == true {
+            if user.borrow().start_get == true {
                 res = true;
             }
             else {
@@ -286,6 +286,8 @@ pub struct FightGame {
     pub winteam: i16,
     pub game_status: u16,
     pub game_port: u16,
+    pub ready_cnt: u16,
+    pub choose_time: f32,
 }
 
 #[derive(PartialEq)]
@@ -309,11 +311,11 @@ impl FightGame {
         }
     }
 
-    pub fn check_prestart_get(&self) -> bool {
+    pub fn check_start_get(&self) -> bool {
         let mut res = false;
         for c in &self.teams {
             for r in &c.borrow().rooms {
-                res = r.borrow_mut().check_prestart_get();
+                res = r.borrow_mut().check_start_get();
                 if res == false {
                     break;
                 }
