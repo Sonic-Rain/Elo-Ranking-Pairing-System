@@ -115,6 +115,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
@@ -204,6 +205,7 @@ fn main() -> std::result::Result<(), Error> {
     let readd_black_list = Regex::new(r"\w+/(\w+)/send/add_black_list")?;
     let rerm_black_list = Regex::new(r"\w+/(\w+)/send/rm_black_list")?;
     let requery_black_list = Regex::new(r"\w+/(\w+)/send/query_black_list")?;
+    let reng_loocked_hero = Regex::new(r"\w+/(\w+)/send/ng_locked_hero")?;
     let relogin = Regex::new(r"\w+/(\w+)/send/login")?;
     let relogout = Regex::new(r"\w+/(\w+)/send/logout")?;
     let recreate = Regex::new(r"\w+/(\w+)/send/create")?;
@@ -302,6 +304,10 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     // info!("choose ng hero: userid: {} json: {:?}", userid, v);
                                     event_room::choose_ng_hero(userid, v, sender.clone())?;
+                                } else if reng_loocked_hero.is_match(topic_name) {
+                                    let cap = reng_loocked_hero.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    event_room::lock_ng_hero(userid, v, sender.clone())?;
                                 // }else if rerk_choose_hero_hint.is_match(topic_name) {
                                 //     let cap = rerk_choose_hero_hint.captures(topic_name).unwrap();
                                 //     let userid = cap[1].to_string();

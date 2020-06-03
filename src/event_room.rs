@@ -247,6 +247,7 @@ pub enum RoomEventData {
     Close(CloseRoomData),
     Invite(InviteRoomData),
     ChooseNGHero(UserNGHeroData),
+    LockedNGHero(UserNGHeroData),
     NGGameChooseHero(BTreeMap<u32, Vec<u32>>),
     Join(JoinRoomData),
     Reject(RejectRoomData),
@@ -1302,6 +1303,14 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                     }
                                 },
+                                RoomEventData::LockedNGHero(x) => {
+                                    let u = TotalUsers.get(&x.id);
+                                    if let Some(u) = u {
+                                        u.borrow_mut().hero = x.hero;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_locked_hero", u.borrow().id), 
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
+                                    }
+                                },
                                 RoomEventData::NGGameChooseHero(x) => {
                                     for (id, rg) in &x {
                                         for rid in rg {
@@ -1906,6 +1915,14 @@ pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
     let data: UserNGHeroData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::ChooseNGHero(data));
     Ok(())
+}
+
+pub fn lock_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+   let data: UserNGHeroData = serde_json::from_value(v)?;
+   sender.try_send(RoomEventData::LockedNGHero(data));
+   Ok(())
 }
 
 pub fn rk_choose_hero(id: String, v: Value, sender: Sender<RankChooseRoomData>)
