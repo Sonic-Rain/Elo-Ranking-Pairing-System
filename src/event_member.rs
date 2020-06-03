@@ -71,7 +71,7 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
     }
     //查無此人 建立表
     if count == 0 { 
-        let mut sql = format!("replace into user (id, name, status) values ('{}', '{}', 'online');", id, data.id);
+        let mut sql = format!("replace into user (id, name, status, hero) values ('{}', '{}', 'online', '');", id, data.id);
         conn.query(sql.clone())?;
         sql = format!("replace into user_ng (id, score) values ('{}', 1000);", id);
         conn.query(sql.clone())?;

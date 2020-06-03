@@ -287,7 +287,7 @@ pub struct FightGame {
     pub game_status: u16,
     pub game_port: u16,
     pub ready_cnt: u16,
-    pub choose_time: f32,
+    pub choose_time: u16,
 }
 
 #[derive(PartialEq)]

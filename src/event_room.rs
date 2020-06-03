@@ -28,7 +28,7 @@ use std::process::Command;
 const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
-const CHOOSE_HERO_TIME: f32 = 30.0;
+const CHOOSE_HERO_TIME: u16 = 300;
 const READY_TIME: u16 = 30;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -855,45 +855,6 @@ pub fn HandleRankChooseHeroRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEv
     Ok((tx))
 }
 
-pub fn HandleNGChooseHeroRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
--> Result<Sender<NGChooseRoomData>, Error> {
-    let (tx, rx):(Sender<NGChooseRoomData>, Receiver<NGChooseRoomData>) = bounded(10000);
-    let update = tick(Duration::from_millis(1000));
-    let time_limit = CHOOSE_HERO_TIME;
-    loop {
-        select! {
-            recv(update) -> _ => {
-                println!("1");
-            }
-            recv(rx) -> d => {
-                let handle = || -> Result<(), Error> {
-                    let mut mqttmsg: MqttMsg = MqttMsg{topic: format!(""), msg: format!("")};
-                    if let Ok(d) = d {
-                        match d {
-                            NGChooseRoomData::ChooseNGHeroTimeout(x) => {
-                                mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", x), 
-                                        msg: format!(r#"{{"msg":"timeout"}}"#)};
-                            },
-                        }
-                    }
-                    if msgtx.is_full() {
-                        println!("FULL!!");
-                    }
-                    Ok(())
-                };
-                if let Err(msg) = handle() {            
-                    println!("Error msgtx len: {}", msgtx.len());
-                    println!("Error rx len: {}", rx.len());
-                    println!("init {:?}", msg);
-                    continue;              
-                    panic!("Error found");                    
-                }
-            }
-        }
-    }
-    Ok((tx))
-}
-
 pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, QueueSender1: Option<Sender<QueueData>>, isBackup: bool) 
     -> Result<(Sender<RoomEventData>, Sender<QueueData>), Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(10000);
@@ -990,9 +951,11 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                             
                             PrestartStatus::Ready => {
                                 //here to select hero
-                                for user in group.borrow().user_names.clone() {
-                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
-                                            msg: format!(r#"{{"id":"{}","hero":""}}"#, user)})?;
+                                if group.borrow().choose_time == 0 {
+                                   for user in group.borrow().user_names.clone() {
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
+                                                msg: format!(r#"{{"id":"{}","hero":""}}"#, user)})?;
+                                    }
                                 }
                                 let mut choose_cnt = 0;
                                 for user in group.borrow().user_names.clone() {
@@ -1016,23 +979,17 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
 
                                     GameingGroups.remove(&group.borrow().game_id);
                                     GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
-
                                     // start game
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
+                                                msg: format!(r#"{{"id":"{}","hero":""}}"#, group.borrow().game_id)})?;
                                 }else if group.borrow().choose_time >= CHOOSE_HERO_TIME {
                                     rm_ids.push(*id);
-                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/ng_choose_hero", group.borrow().game_id), 
-                                        msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)})?;
+                                    for user in group.borrow().user_names.clone() {
+                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
+                                            msg: format!(r#"{{"msg":"timout"}}"#)})?;
+                                    }
                                 }
-                                group.borrow_mut().choose_time += 0.2;
-                                //info!("game_port: {}", game_port);
-                                //info!("game id {}", group.borrow().game_id);
-                                // if !isBackup || (isBackup && isServerLive == false){
-                                //     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
-                                //         msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)})?;
-                                //     LossSend.push(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
-                                //         msg: format!(r#"{{"game":{}}}"#, group.borrow().game_id)});
-                                // }
-                                
+                                group.borrow_mut().choose_time += 2;
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
@@ -1340,6 +1297,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
+                                        conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id), 
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                     }
