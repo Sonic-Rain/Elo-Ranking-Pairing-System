@@ -1,3 +1,6 @@
+extern crate redis;
+use redis::Commands;
+
 use serde_json::{self, Value};
 use std::env;
 use std::io::{self, Write};
@@ -1298,7 +1301,11 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
-                                        conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
+                                        // conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
+                                        let client = redis::Client::open("redis://127.0.0.1:6379/")?;
+                                        let mut con = client.get_connection()?;
+                                        // key : steamid, value : hero
+                                        let _ : () = con.set(u.borrow().id.clone(), u.borrow().hero.clone())?;
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id), 
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                     }
