@@ -1376,13 +1376,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     r.borrow_mut().add_user(Rc::clone(j));
                                                     let m = r.borrow().master.clone();
                                                     r.borrow().publish_update(&msgtx, m)?;
-                                                    // r.borrow().publish_update(&msgtx, x.join.clone())?;
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                                         msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)};
-                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                                    //    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)})?;
-                                                    //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                                    //    msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, x.room.clone())})?;
                                                     sendok = true;
                                                     let rid = x.room.parse::<u32>().unwrap();
                                                     u.borrow_mut().rid = rid;
@@ -1390,13 +1385,13 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             }
                                         }
                                     }
-                                    if sendok == false {
+                                    if x.join == "-1" {
+                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                            msg: format!(r#"{{"room":"{}","msg":"rejected"}}"#, x.room.clone())};
+                                    }else if sendok == false {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                             msg: format!(r#"{{"room":"{}","msg":"full"}}"#, x.room.clone())};
-                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
-                                        //    msg: format!(r#"{{"room":"{}","msg":"fail"}}"#, x.room.clone())})?;
                                     }
-                                    //println!("TotalRoom {:#?}", TotalRoom);
                                 },
                                 RoomEventData::Reject(x) => {
                                     if TotalUsers.contains_key(&x.id) {
@@ -1771,13 +1766,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if success {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok"}}"#)};
-                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                        //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"fail"}}"#)};
-                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/create", x.id.clone()), 
-                                        //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
                                 },
                                 RoomEventData::Close(x) => {
@@ -1788,13 +1779,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if success {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/close", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok"}}"#)};
-                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                        //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/close", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"fail"}}"#)};
-                                        //msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", x.id.clone()), 
-                                        //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
                                 },
                                 RoomEventData::MainServerDead(x) => {

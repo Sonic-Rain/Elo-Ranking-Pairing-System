@@ -47,9 +47,17 @@ impl RoomData {
     }
 
     pub fn add_user(&mut self, user: Rc<RefCell<User>>) {
-        user.borrow_mut().rid = self.rid;
-        self.users.push(Rc::clone(&user));
-        self.update_avg();
+        let mut isInTeam = false;
+        for u in &self.users {
+            if user.borrow().id == u.borrow().id {
+                isInTeam = true;
+            }
+        }
+        if !isInTeam {
+            user.borrow_mut().rid = self.rid;
+            self.users.push(Rc::clone(&user));
+            self.update_avg();
+        }
     }
 
     pub fn leave_room(&mut self) {
@@ -100,7 +108,16 @@ impl RoomData {
         let mut t = teamCell {room: self.master.clone(), team: vec![]};
         
         for user in &self.users {
-            t.team.push(user.borrow().id.clone());
+            let mut isInTeam = false;
+            for u in &t.team {
+                if user.borrow().id == u.clone() {
+                    isInTeam = true;
+                    break;
+                }
+            }
+            if !isInTeam {
+                t.team.push(user.borrow().id.clone());
+            }
         }
         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", r), msg: serde_json::to_string(&t).unwrap()})?;
         Ok(())
