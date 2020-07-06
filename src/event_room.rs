@@ -859,7 +859,7 @@ pub fn HandleRankChooseHeroRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEv
     Ok((tx))
 }
 
-pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, QueueSender1: Option<Sender<QueueData>>, isBackup: bool) 
+pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, redis_client: redis::Client,QueueSender1: Option<Sender<QueueData>>, isBackup: bool) 
     -> Result<(Sender<RoomEventData>, Sender<QueueData>), Error> {
     let (tx, rx):(Sender<RoomEventData>, Receiver<RoomEventData>) = bounded(10000);
     let mut tx1: Sender<QueueData>;
@@ -884,6 +884,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
     let tx2 = tx.clone();
     thread::spawn(move || -> Result<(), Error> {
         let mut conn = pool.get_conn()?;
+        let mut redis_conn = redis_client.get_connection()?;
         let mut isServerLive = true;
         let mut isBackup = isBackup.clone();
         let mut TotalRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
@@ -1062,6 +1063,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                         group.borrow_mut().ready_cnt += 5;
                         let res1 = group.borrow().check_start_get();
                         if res1 == true {
+                            for r in &group.borrow().room_names {
+                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}", "game":101}}"#, r)}); 
+                            }
                         }else if group.borrow().ready_cnt >= READY_TIME {
                             for r in &group.borrow().room_names {
                                 if !isBackup || (isBackup && isServerLive == false) {
@@ -1302,10 +1306,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
                                         // conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
-                                        let client = redis::Client::open("redis://127.0.0.1:6379/")?;
-                                        let mut con = client.get_connection()?;
                                         // key : steamid, value : hero
-                                        let _ : () = con.set(u.borrow().id.clone(), u.borrow().hero.clone())?;
+                                        let _ : () = redis_conn.set(u.borrow().id.clone(), u.borrow().hero.clone())?;
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id), 
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                     }
@@ -1334,28 +1336,6 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         }
                                     }
                                 },
-                                // RoomEventData::ChooseNGHeroTimeout(x) => {
-                                //     mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", x), 
-                                //             msg: format!(r#"{{"msg":"timeout"}}"#)};
-                                // },
-                                // RoomEventData::RankChooseHero(x) => {
-                                // },
-                                // RoomEventData::RankChooseHeroHint(x) => {
-                                //     mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero_hint", x.game), 
-                                //             msg: format!(r#"{{"game":{},"id":"{}","hero":{}}}"#, x.game, x.id, x.hero)};
-                                // },
-                                // RoomEventData::RankChooseHeroSuggest(x) => {
-                                //     mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero_suggest", x.game), 
-                                //             msg: format!(r#"{{"game":{},"from":"{}","hero":{}}}"#, x.game, x.from, x.hero)};
-                                // },
-                                // RoomEventData::RankChooseHeroTimeout(x) => {
-                                //     mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero", x), 
-                                //             msg: format!(r#"{{"game":{},"msg":"timeout"}}"#, x)};
-                                // },
-                                // RoomEventData::BanHero(x) => {
-                                //     mqttmsg = MqttMsg{topic:format!("game/{}/res/ban_hero", x.game), 
-                                //             msg: format!(r#"{{"game":{},"id":"{}", "hero":"{}"}}"#, x.game, x.id, x.hero)};
-                                // },
                                 RoomEventData::Invite(x) => {
                                     if TotalUsers.contains_key(&x.from) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/invite", x.invite.clone()), 
@@ -1409,7 +1389,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     room_id = 0;
                                 },
                                 RoomEventData::PreStart(x) => {
-                                    let u = TotalUsers.get(&x.room);
+                                    let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         let gid = u.borrow().gid;
                                         if u.borrow().start_get == false {
@@ -1419,8 +1399,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     if x.accept == true {
                                                         gr.borrow_mut().user_ready(&x.id);
                                                         u.borrow_mut().start_get = true;
-                                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
-                                                            msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
+                                                        // mqttmsg = MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id), 
+                                                        //     msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
                                                     } else {
                                                         println!("accept false!");
                                                         gr.borrow_mut().user_cancel(&x.id);

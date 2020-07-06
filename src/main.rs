@@ -147,6 +147,7 @@ fn main() -> std::result::Result<(), Error> {
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(10000);
     let pool = mysql::Pool::new(get_url().as_str())?;
+    let redis_client = redis::Client::open("redis://127.0.0.1:6379/")?;
     thread::sleep_ms(100);
     
     for _ in 0..8 {
@@ -233,7 +234,7 @@ fn main() -> std::result::Result<(), Error> {
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
-    let (mut sender, mut QueueSender): (Sender<RoomEventData>, Sender<QueueData>) = event_room::init(tx.clone(), sender1.clone(), pool.clone(), None, isBackup)?;
+    let (mut sender, mut QueueSender): (Sender<RoomEventData>, Sender<QueueData>) = event_room::init(tx.clone(), sender1.clone(), pool.clone(), redis_client.clone(), None, isBackup)?;
     let update = tick(Duration::from_millis(500));
     let mut is_live = true;
     let mut sender = sender.clone();
@@ -261,7 +262,7 @@ fn main() -> std::result::Result<(), Error> {
                 if !is_live{
                     println!("Reconnect!");
                     
-                    let (mut sender1, mut QueueSender1): (Sender<RoomEventData>, Sender<QueueData>) = event_room::init(tx.clone(), sender1.clone(), pool.clone(), None, isBackup)?;
+                    let (mut sender1, mut QueueSender1): (Sender<RoomEventData>, Sender<QueueData>) = event_room::init(tx.clone(), sender1.clone(), pool.clone(), redis_client.clone(), None, isBackup)?;
                     sender = sender1.clone();
                     QueueSender = QueueSender1.clone();
 
