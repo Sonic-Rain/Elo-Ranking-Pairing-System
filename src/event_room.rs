@@ -76,33 +76,6 @@ pub struct UserNGHeroData {
     pub hero: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RankChooseHeroData {
-    pub game: u32,
-    pub id: String,
-    pub hero: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RankChooseHeroHintData {
-    pub game: u32,
-    pub id: String,
-    pub hero: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RankChooseHeroSuggestData {
-    pub game: u32,
-    pub from: String,
-    pub hero: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct BanHeroData {
-    pub game: u32,
-    pub id: String,
-    pub hero: String,
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserLogoutData {
@@ -250,6 +223,7 @@ pub enum RoomEventData {
     Close(CloseRoomData),
     Invite(InviteRoomData),
     ChooseNGHero(UserNGHeroData),
+    BanHero(UserNGHeroData),
     LockedNGHero(UserNGHeroData),
     NGGameChooseHero(BTreeMap<u32, Vec<u32>>),
     Join(JoinRoomData),
@@ -343,18 +317,6 @@ pub struct RemoveRoomData {
 pub enum QueueData {
     UpdateRoom(QueueRoomData),
     RemoveRoom(RemoveRoomData),
-}
-
-pub enum RankChooseRoomData {
-    RankChooseHero(RankChooseHeroData),
-    RankChooseHeroHint(RankChooseHeroHintData),
-    RankChooseHeroSuggest(RankChooseHeroSuggestData),
-    BanHero(BanHeroData),
-    RankChooseHeroTimeout(String),
-}
-
-pub enum NGChooseRoomData {
-    ChooseNGHeroTimeout(String),
 }
 
 // Prints the elapsed time.
@@ -799,64 +761,6 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
         }
     });
     Ok(tx)
-}
-
-pub fn HandleRankChooseHeroRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
--> Result<Sender<RankChooseRoomData>, Error> {
-    let (tx, rx):(Sender<RankChooseRoomData>, Receiver<RankChooseRoomData>) = bounded(10000);
-    let mut ban_count = 0;
-    let mut choose_count = 0;
-    let update = tick(Duration::from_millis(1000));
-    loop {
-        select! {
-            recv(update) -> _ => {
-                
-            }
-            recv(rx) -> d => {
-                let handle = || -> Result<(), Error> {
-                    let mut mqttmsg: MqttMsg = MqttMsg{topic: format!(""), msg: format!("")};
-                    if let Ok(d) = d {
-                        match d {
-                            RankChooseRoomData::RankChooseHero(x) => {
-                                mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero", x.game), 
-                                        msg: format!(r#"{{"game":{},"id":"{}","hero":{}}}"#, x.game, x.id, x.hero)};
-                            },
-                            RankChooseRoomData::RankChooseHeroHint(x) => {
-                                mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero_hint", x.game), 
-                                        msg: format!(r#"{{"game":{},"id":"{}","hero":{}}}"#, x.game, x.id, x.hero)};
-                            },
-                            RankChooseRoomData::RankChooseHeroSuggest(x) => {
-                                mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero_suggest", x.game), 
-                                        msg: format!(r#"{{"game":{},"from":"{}","hero":{}}}"#, x.game, x.from, x.hero)};
-                            },
-                            RankChooseRoomData::RankChooseHeroTimeout(x) => {
-                                mqttmsg = MqttMsg{topic:format!("game/{}/res/rk_choose_hero", x), 
-                                        msg: format!(r#"{{"game":{},"msg":"timeout"}}"#, x)};
-                            },
-                            RankChooseRoomData::BanHero(x) => {
-                                mqttmsg = MqttMsg{topic:format!("game/{}/res/ban_hero", x.game), 
-                                        msg: format!(r#"{{"game":{},"id":"{}", "hero":"{}"}}"#, x.game, x.id, x.hero)};
-                            },
-                        }
-                    }
-                    if msgtx.is_full() {
-                        println!("FULL!!");
-                        //thread::sleep(Duration::from_millis(5000));  
-                    }
-                    Ok(())
-                };
-                if let Err(msg) = handle() {            
-                    println!("Error msgtx len: {}", msgtx.len());
-                    println!("Error rx len: {}", rx.len());
-                    println!("init {:?}", msg);
-                    continue;              
-                    panic!("Error found");                    
-                }
-                
-            }
-        }
-    }
-    Ok((tx))
 }
 
 pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, redis_client: redis::Client,QueueSender1: Option<Sender<QueueData>>, isBackup: bool) 
@@ -1318,6 +1222,13 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         u.borrow_mut().hero = x.hero;
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_locked_hero", u.borrow().id), 
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
+                                    }
+                                },
+                                RoomEventData::BanHero(x) => {
+                                    let u = TotalUsers.get(&x.id);
+                                    if let Some(u) = u {
+                                        u.borrow_mut().hero = x.hero;
+                                        let _ : () = redis_conn.set(format!("b{}", u.borrow().id.clone()), u.borrow().hero.clone())?;
                                     }
                                 },
                                 RoomEventData::NGGameChooseHero(x) => {
@@ -1891,48 +1802,20 @@ pub fn choose_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
     Ok(())
 }
 
+pub fn ban_hero(id: String, v: Value, sender: Sender<RoomEventData>)
+ -> std::result::Result<(), Error>
+{
+    let data: UserNGHeroData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::BanHero(data));
+    Ok(())
+}
+
 pub fn lock_ng_hero(id: String, v: Value, sender: Sender<RoomEventData>)
 -> std::result::Result<(), Error>
 {
    let data: UserNGHeroData = serde_json::from_value(v)?;
    sender.try_send(RoomEventData::LockedNGHero(data));
    Ok(())
-}
-
-pub fn rk_choose_hero(id: String, v: Value, sender: Sender<RankChooseRoomData>)
- -> std::result::Result<(), Error>
-{
-    let data: RankChooseHeroData = serde_json::from_value(v)?;
-    if (data.hero.chars().count() < 2) {
-        sender.try_send(RankChooseRoomData::RankChooseHeroTimeout(id.clone()));
-    } else {
-        sender.try_send(RankChooseRoomData::RankChooseHero(data));
-    }
-    Ok(())
-}
-
-pub fn rk_choose_hero_hint(id: String, v: Value, sender: Sender<RankChooseRoomData>)
- -> std::result::Result<(), Error>
-{
-    let data: RankChooseHeroHintData = serde_json::from_value(v)?;
-    sender.try_send(RankChooseRoomData::RankChooseHeroHint(data));
-    Ok(())
-}
-
-pub fn rk_choose_hero_suggest(id: String, v: Value, sender: Sender<RankChooseRoomData>)
- -> std::result::Result<(), Error>
-{
-    let data: RankChooseHeroSuggestData = serde_json::from_value(v)?;
-    sender.try_send(RankChooseRoomData::RankChooseHeroSuggest(data));
-    Ok(())
-}
-
-pub fn ban_hero(id: String, v: Value, sender: Sender<RankChooseRoomData>)
- -> std::result::Result<(), Error>
-{
-    let data: BanHeroData = serde_json::from_value(v)?;
-    sender.try_send(RankChooseRoomData::BanHero(data));
-    Ok(())
 }
 
 pub fn invite(id: String, v: Value, sender: Sender<RoomEventData>)

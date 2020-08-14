@@ -116,6 +116,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
@@ -131,10 +132,6 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("room/+/send/start_get", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/start", QoS::AtMostOnce)?;
 
-    mqtt_client.subscribe("game/+/send/rk_choose_hero", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/rk_choose_hero_hint", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/rk_choose_hero_suggest", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/ban_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;
@@ -220,10 +217,7 @@ fn main() -> std::result::Result<(), Error> {
     let rereject = Regex::new(r"\w+/(\w+)/send/reject")?;
     let reset = Regex::new(r"reset")?;
     let rechoose_hero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
-    let rerk_choose_hero = Regex::new(r"\w+/(\w+)/send/rk_choose_hero")?;
-    let rerk_choose_hero_hint= Regex::new(r"\w+/(\w+)/send/rk_choose_hero_hint")?;
-    let rerk_choose_hero_suggest = Regex::new(r"\w+/(\w+)/send/rk_choose_hero_suggest")?;
-    let reban_hero= Regex::new(r"\w+/(\w+)/send/ban_hero")?;
+    let reban_hero = Regex::new(r"\w+/(\w+)/send/ban_hero")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
@@ -295,6 +289,7 @@ fn main() -> std::result::Result<(), Error> {
                             }
                             let vo : serde_json::Result<Value> = serde_json::from_str(msg);
                             if let Ok(v) = vo {
+                                info!("topic_name : {}", topic_name);
                                 if reinvite.is_match(topic_name) {
                                     let cap = reinvite.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
@@ -303,32 +298,18 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if rechoose_hero.is_match(topic_name) {
                                     let cap = rechoose_hero.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("choose ng hero: userid: {} json: {:?}", userid, v);
+                                    info!("choose ng hero: userid: {} json: {:?}", userid, v);
                                     event_room::choose_ng_hero(userid, v, sender.clone())?;
+                                } else if reban_hero.is_match(topic_name) {
+                                    let cap = reban_hero.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    info!("ban hero: userid: {} json: {:?}", userid, v);
+                                    event_room::ban_hero(userid, v, sender.clone())?;
                                 } else if reng_loocked_hero.is_match(topic_name) {
                                     let cap = reng_loocked_hero.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
+                                    info!("choose lock hero: userid: {} json: {:?}", userid, v);
                                     event_room::lock_ng_hero(userid, v, sender.clone())?;
-                                // }else if rerk_choose_hero_hint.is_match(topic_name) {
-                                //     let cap = rerk_choose_hero_hint.captures(topic_name).unwrap();
-                                //     let userid = cap[1].to_string();
-                                //     // info!("choose hero hint: userid: {} json: {:?}", userid, v);
-                                //     event_room::rk_choose_hero_hint(userid, v, RKSender.clone())?;
-                                // } else if rerk_choose_hero_suggest.is_match(topic_name) {
-                                //     let cap = rerk_choose_hero_suggest.captures(topic_name).unwrap();
-                                //     let userid = cap[1].to_string();
-                                //     // info!("choose hero suggest: userid: {} json: {:?}", userid, v);
-                                //     event_room::rk_choose_hero_suggest(userid, v, RKSender.clone())?;
-                                // } else if rerk_choose_hero.is_match(topic_name) {
-                                //     let cap = rerk_choose_hero.captures(topic_name).unwrap();
-                                //     let userid = cap[1].to_string();
-                                //     // info!("choose rk hero: userid: {} json: {:?}", userid, v);
-                                //     event_room::rk_choose_hero(userid, v, RKSender.clone())?;
-                                // } else if reban_hero.is_match(topic_name) {
-                                //     let cap = reban_hero.captures(topic_name).unwrap();
-                                //     let userid = cap[1].to_string();
-                                //     //info!("choose ng hero: userid: {} json: {:?}", userid, v);
-                                //     event_room::ban_hero(userid, v, RKSender.clone())?;
                                 } else if rejoin.is_match(topic_name) {
                                     let cap = rejoin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
