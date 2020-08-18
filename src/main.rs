@@ -355,7 +355,7 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if restart_queue.is_match(topic_name) {
                                     let cap = restart_queue.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("start_queue: userid: {} json: {:?}", userid, v);
+                                    info!("start_queue: userid: {} json: {:?}", userid, v);
                                     event_room::start_queue(userid, v, sender.clone())?;
                                 } else if recancel_queue.is_match(topic_name) {
                                     let cap = recancel_queue.captures(topic_name).unwrap();

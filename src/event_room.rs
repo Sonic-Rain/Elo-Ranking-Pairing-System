@@ -968,8 +968,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                         let res1 = group.borrow().check_start_get();
                         if res1 == true {
                             for r in &group.borrow().room_names {
-                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}", "game":101}}"#, r)}); 
+                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}",
+                                "game":101, "players":{:?}}}"#, r, &group.borrow().user_names)}); 
                             }
+                            rm_list.push(id.clone());
                         }else if group.borrow().ready_cnt >= READY_TIME {
                             for r in &group.borrow().room_names {
                                 if !isBackup || (isBackup && isServerLive == false) {
