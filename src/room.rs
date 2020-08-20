@@ -30,6 +30,7 @@ pub struct RoomData {
     pub avg_rk: i16,
     pub ready: i8,
     pub queue_cnt: i16,
+    pub mode: String,
 }
 
 impl RoomData {
