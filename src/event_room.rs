@@ -1130,7 +1130,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                         if res1 == true {
                             for r in &group.borrow().room_names {
                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}",
-                                "game":101, "players":{:?}}}"#, r, &group.borrow().user_names)}); 
+                                "game":"{}", "players":{:?}}}"#, r, game_id, &group.borrow().user_names)}); 
                             }
                             rm_list.push(id.clone());
                         }else if group.borrow().ready_cnt >= READY_TIME {
@@ -1433,7 +1433,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
                                                         msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)};
                                                     sendok = true;
-                                                    let rid = x.room.parse::<u32>().unwrap();
+                                                    // let rid = x.room.parse::<u32>().unwrap();
+                                                    let rid = u.borrow().rid;
                                                     u.borrow_mut().rid = rid;
                                                 }
                                             }
@@ -1797,7 +1798,8 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let mut success = false;
                                     //println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
                                     if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
-                                        room_id = x.id.parse::<u32>().unwrap();
+                                        // room_id = x.id.parse::<u32>().unwrap();
+                                        room_id += 1;
                                         let mut new_room = RoomData {
                                             rid: room_id,
                                             users: vec![],
