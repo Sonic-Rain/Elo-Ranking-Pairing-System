@@ -117,6 +117,8 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/jump", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
@@ -225,6 +227,8 @@ fn main() -> std::result::Result<(), Error> {
     let regame_close = Regex::new(r"\w+/(\w+)/send/game_close")?;
     let restatus = Regex::new(r"\w+/(\w+)/send/status")?;
     let rereconnect = Regex::new(r"\w+/(\w+)/send/reconnect")?;
+    let rejump = Regex::new(r"\w+/(\w+)/send/jump")?;
+    let recheck_restriction = Regex::new(r"\w+/(\w+)/send/check_restriction")?;
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
@@ -320,6 +324,16 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("join: userid: {} json: {:?}", userid, v);
                                     event_room::reject(userid, v, sender.clone())?;
+                                } else if rejump.is_match(topic_name) {
+                                    let cap = rejump.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    event_room::jump(userid, v, sender.clone())?;
+                                } else if recheck_restriction.is_match(topic_name) {
+                                    let cap = recheck_restriction.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    event_room::checkRestriction(userid, v, sender.clone())?;
                                 } else if relogin.is_match(topic_name) {
                                     let cap = relogin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
@@ -328,7 +342,7 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if relogout.is_match(topic_name) {
                                     let cap = relogout.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("logout: userid: {} json: {:?}", userid, v);
+                                    // info!("logout: userid: {} json: {:?}", userid, v);
                                     event_member::logout(userid, v, pool.clone(), sender.clone())?;
                                 } else if readd_black_list.is_match(topic_name){
                                     let cap = readd_black_list.captures(topic_name).unwrap();

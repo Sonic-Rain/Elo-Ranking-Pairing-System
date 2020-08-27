@@ -65,6 +65,23 @@ pub struct RejectRoomData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct JumpData {
+    pub id: String,
+    pub msg: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RestrictedData {
+    pub id: String,
+    pub time: u16,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CheckRestrctionData {
+    pub id: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct UserLoginData {
     pub u: User,
@@ -229,6 +246,8 @@ pub enum RoomEventData {
     NGGameChooseHero(BTreeMap<u32, Vec<u32>>),
     Join(JoinRoomData),
     Reject(RejectRoomData),
+    Jump(JumpData),
+    CheckRestrction(CheckRestrctionData),
     StartQueue(StartQueueData),
     Ready(ReadyData),
     CancelQueue(CancelQueueData),
@@ -957,6 +976,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let mut PreStartGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut GameingGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
+        let mut RestrictedUsers: BTreeMap<String, Rc<RefCell<RestrictedData>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
         let mut room_id: u32 = 0;
         let mut group_id: u32 = 0;
@@ -1055,7 +1075,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     rm_ids.push(*id);
                                     for user in group.borrow().user_names.clone() {
                                         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
-                                            msg: format!(r#"{{"msg":"timout"}}"#)})?;
+                                            msg: format!(r#"{{"msg":"timeout"}}"#)})?;
                                     }
                                 }
                                 group.borrow_mut().choose_time += 2;
@@ -1117,6 +1137,16 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                     if !isBackup || (isBackup && isServerLive == false) {
                         //msgtx.try_send(MqttMsg{topic:format!("server/0/res/heartbeat"), 
                         //                    msg: format!(r#"{{"msg":"live"}}"#)})?;
+                    }
+                    let mut rm_list: Vec<String> = Vec::new();
+                    for (id, restriction) in &mut RestrictedUsers {
+                        restriction.borrow_mut().time -= 1;
+                        if restriction.borrow().time == 0 {
+                            rm_list.push(id.clone());
+                        }
+                    }
+                    for rm in rm_list {
+                        RestrictedUsers.remove(&rm);
                     }
                 }
 
@@ -1453,7 +1483,29 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()), 
                                             msg: format!(r#"{{"room":"{}","id":"{}","mgs":"reject"}}"#, x.room.clone(), x.id.clone())};
                                     }
-                                }
+                                },
+                                RoomEventData::Jump(x) => {
+                                    if TotalUsers.contains_key(&x.id) {
+                                        let mut new_restriced = RestrictedData {
+                                            id: x.id.clone(),
+                                            time: 300,
+                                        };
+                                        let r = Rc::new(RefCell::new(new_restriced));
+                                        RestrictedUsers.insert(
+                                            x.id.clone(),
+                                            Rc::clone(&r),
+                                        );
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.id.clone()), 
+                                            msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
+                                    }
+                                },
+                                RoomEventData::CheckRestrction(x) => {
+                                    let r = RestrictedUsers.get(&x.id);
+                                    if let Some(r) = r {
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/check_restriction", x.id.clone()), 
+                                            msg: format!(r#"{{"time":"{}"}}"#, r.borrow().time)};
+                                    }
+                                },
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
                                     //QueueRoom.clear();
@@ -1796,7 +1848,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 },
                                 RoomEventData::Create(x) => {
                                     let mut success = false;
-                                    //println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
+                                    println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
                                     if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
                                         // room_id = x.id.parse::<u32>().unwrap();
                                         room_id += 1;
@@ -1963,6 +2015,22 @@ pub fn reject(id: String, v: Value, sender: Sender<RoomEventData>)
 {
    let data: RejectRoomData = serde_json::from_value(v)?;
    sender.try_send(RoomEventData::Reject(data));
+   Ok(())
+}
+
+pub fn jump(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+   let data: JumpData = serde_json::from_value(v)?;
+   sender.try_send(RoomEventData::Jump(data));
+   Ok(())
+}
+
+pub fn checkRestriction(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+   let data: CheckRestrctionData = serde_json::from_value(v)?;
+   sender.try_send(RoomEventData::CheckRestrction(data));
    Ok(())
 }
 
