@@ -69,6 +69,7 @@ pub struct RejectRoomData {
 pub struct JumpData {
     pub id: String,
     pub msg: String,
+    pub game: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -978,6 +979,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut RestrictedUsers: BTreeMap<String, Rc<RefCell<RestrictedData>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
+        let mut AbandonGames: BTreeMap<u32, bool> = BTreeMap::new();
         let mut room_id: u32 = 0;
         let mut group_id: u32 = 0;
         let mut game_id: u32 = 0;
@@ -1486,15 +1488,18 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 },
                                 RoomEventData::Jump(x) => {
                                     if TotalUsers.contains_key(&x.id) {
-                                        let mut new_restriced = RestrictedData {
-                                            id: x.id.clone(),
-                                            time: 300,
-                                        };
-                                        let r = Rc::new(RefCell::new(new_restriced));
-                                        RestrictedUsers.insert(
-                                            x.id.clone(),
-                                            Rc::clone(&r),
-                                        );
+                                        if !AbandonGames.contains_key(&x.game) {
+                                            let mut new_restriced = RestrictedData {
+                                                id: x.id.clone(),
+                                                time: 300,
+                                            };
+                                            let r = Rc::new(RefCell::new(new_restriced));
+                                            RestrictedUsers.insert(
+                                                x.id.clone(),
+                                                Rc::clone(&r),
+                                            );
+                                            AbandonGames.insert(x.game, true);
+                                        }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.id.clone()), 
                                             msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
