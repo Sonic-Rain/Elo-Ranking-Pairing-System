@@ -32,7 +32,7 @@ const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
-const READY_TIME: u16 = 30;
+const READY_TIME: u16 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -760,14 +760,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                         let mut new_now1 = Instant::now();
                         for (k, v) in &mut RKQueueRoom {
-                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
+                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk {
                                 for r in g.rid {
                                     id.push(r);
                                 }
                                 g = Default::default();
                                 g.rid.push(v.borrow().rid);
-                                let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                g.avg_ng = ng;
+                                let mut rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                g.avg_rk = rk;
                                 g.user_len += v.borrow().user_len;
                                 v.borrow_mut().ready = 1;
                                 v.borrow_mut().gid = group_id + 1;
@@ -777,17 +777,17 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                             if v.borrow().ready == 0 &&
                                 v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
-                                let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
-                                if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                let Difference: i16 = i16::abs(v.borrow().avg_rk - g.avg_rk);
+                                if g.avg_rk == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
                                     g.rid.push(v.borrow().rid);
-                                    let mut ng ;
+                                    let mut rk ;
                                     if (g.user_len + v.borrow().user_len > 0){
-                                        ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                        rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     } else {
                                         g = Default::default();
                                         continue;
                                     }
-                                    g.avg_ng = ng;
+                                    g.avg_rk = rk;
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
                                     v.borrow_mut().gid = group_id + 1;
@@ -830,14 +830,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                     if RKReadyGroups.len() >= MATCH_SIZE {
                         let mut fg: ReadyGameData = Default::default();
                         let mut prestart = false;
-                        let mut total_ng: i16 = 0;
+                        let mut total_rk: i16 = 0;
                         let mut rm_ids: Vec<u32> = vec![];
                         println!("RKReadyGroup!! {}", RKReadyGroups.len());
                         let mut new_now2 = Instant::now();
                         for (id, rg) in &mut RKReadyGroups {
                             if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                if total_ng == 0 {
-                                    total_ng += rg.borrow().avg_ng as i16;
+                                if total_rk == 0 {
+                                    total_rk += rg.borrow().avg_rk as i16;
                                     fg.group.push(rg.borrow().rid.clone());
                                     fg.gid.push(*id);
                                     fg.team_len += 1;
@@ -846,10 +846,10 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
 
                                 let mut difference = 0;
                                 if fg.team_len > 0 {
-                                    difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
+                                    difference = i16::abs(rg.borrow().avg_rk as i16 - total_rk/fg.team_len as i16);
                                 }
                                 if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_ng += rg.borrow().avg_ng as i16;
+                                    total_rk += rg.borrow().avg_rk as i16;
                                     fg.group.push(rg.borrow().rid.clone());
                                     fg.team_len += 1;
                                     fg.gid.push(*id);
@@ -1073,6 +1073,12 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     // start game
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
                                                 msg: format!(r#"{{"id":"{}","hero":""}}"#, group.borrow().game_id)})?;
+                                    for user in group.borrow().user_names.clone() {
+                                        let u = get_user(&user, &TotalUsers);
+                                        if let Some(u) = u {
+                                            let _ : () = redis_conn.set(format!("g{}", u.borrow().id), game_id)?;
+                                        }
+                                    }
                                 }else if group.borrow().choose_time >= CHOOSE_HERO_TIME {
                                     rm_ids.push(*id);
                                     for user in group.borrow().user_names.clone() {
@@ -1359,13 +1365,17 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                 RoomEventData::StartGame(x) => {
                                     let g = GameingGroups.get(&x.game);
                                     if let Some(g) = g {
-                                        SendGameList(&g, &msgtx, &mut conn);
-                                        for r in &g.borrow().room_names {
-                                            if !isBackup || (isBackup && isServerLive == false) {
-                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                                    msg: format!(r#"{{"room":"{}","msg":"start","server":"172.104.78.55:{}","game":{}}}"#, 
-                                                        r, g.borrow().game_port, g.borrow().game_id)})?;
-                                            }
+                                        // SendGameList(&g, &msgtx, &mut conn);
+                                        // for r in &g.borrow().room_names {
+                                        //     if !isBackup || (isBackup && isServerLive == false) {
+                                        //         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
+                                        //             msg: format!(r#"{{"room":"{}","msg":"start","server":"172.104.78.55:{}","game":{}}}"#, 
+                                        //                 r, g.borrow().game_port, g.borrow().game_id)})?;
+                                        //     }
+                                        // }
+                                        if !isBackup || (isBackup && isServerLive == false) {
+                                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/start", x.game), 
+                                                msg: format!(r#"{{"msg":"start"}}"#, )})?;
                                         }
                                     }
                                     
