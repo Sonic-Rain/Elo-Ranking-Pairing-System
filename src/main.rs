@@ -295,7 +295,9 @@ fn main() -> std::result::Result<(), Error> {
                             }
                             let vo : serde_json::Result<Value> = serde_json::from_str(msg);
                             if let Ok(v) = vo {
-                                info!("topic_name : {}", topic_name);
+                                if !recheckInGame.is_match(topic_name){
+                                    info!("topic_name : {}", topic_name);
+                                }
                                 if reinvite.is_match(topic_name) {
                                     let cap = reinvite.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
@@ -334,12 +336,12 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if recheck_restriction.is_match(topic_name) {
                                     let cap = recheck_restriction.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    // info!("logout: userid: {} json: {:?}", userid, v);
                                     event_room::checkRestriction(userid, v, sender.clone())?;
                                 } else if recheckInGame.is_match(topic_name) {
                                     let cap = recheckInGame.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    // info!("logout: userid: {} json: {:?}", userid, v);
                                     event_room::checkInGame(userid, v, sender.clone())?;
                                 } else if relogin.is_match(topic_name) {
                                     let cap = relogin.captures(topic_name).unwrap();

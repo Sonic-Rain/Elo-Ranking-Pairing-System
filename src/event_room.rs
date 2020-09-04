@@ -158,6 +158,7 @@ pub struct LeaveData {
 pub struct StartGameData {
     pub game: u32,
     pub id: String,
+    pub players: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -1380,6 +1381,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     if let Some(u) = u {
                                         if !isBackup || (isBackup && isServerLive == false) {
                                             let _ : () = redis_conn.set(format!("g{}", u.borrow().id), x.game.clone())?;
+                                            let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
                                             msgtx.try_send(MqttMsg{topic:format!("member/{}/res/start", u.borrow().id), 
                                                 msg: format!(r#"{{"msg":"start"}}"#, )})?;
                                         }
