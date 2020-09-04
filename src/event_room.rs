@@ -32,7 +32,7 @@ const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
-const READY_TIME: u16 = 10;
+const READY_TIME: u16 = 30;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -80,6 +80,11 @@ pub struct RestrictedData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CheckRestrctionData {
+    pub id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CheckInGameData {
     pub id: String,
 }
 
@@ -152,7 +157,7 @@ pub struct LeaveData {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct StartGameData {
     pub game: u32,
-    pub action: String,
+    pub id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -248,7 +253,8 @@ pub enum RoomEventData {
     Join(JoinRoomData),
     Reject(RejectRoomData),
     Jump(JumpData),
-    CheckRestrction(CheckRestrctionData),
+    CheckRestriction(CheckRestrctionData),
+    CheckInGame(CheckInGameData),
     StartQueue(StartQueueData),
     Ready(ReadyData),
     CancelQueue(CancelQueueData),
@@ -1041,52 +1047,52 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                         match res {
                             
                             PrestartStatus::Ready => {
-                                //here to select hero
-                                if group.borrow().choose_time == 0 {
-                                   for user in group.borrow().user_names.clone() {
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
-                                                msg: format!(r#"{{"id":"{}","hero":""}}"#, user)})?;
-                                    }
-                                }
-                                let mut choose_cnt = 0;
-                                for user in group.borrow().user_names.clone() {
-                                    let u = get_user(&user, &TotalUsers);
-                                    if let Some(u) = u {
-                                        if u.borrow().hero.chars().count() > 2 {
-                                            choose_cnt += 1;
-                                        }
-                                    }
-                                }
-                                if choose_cnt >= 10 {
-                                    start_cnt += 1;
-                                    rm_ids.push(*id);
-                                    game_port += 1;
-                                    if game_port > 65500 {
-                                        game_port = 7777;
-                                    }
-                                    group.borrow_mut().ready();
-                                    group.borrow_mut().update_names();
-                                    group.borrow_mut().game_port = game_port;
+                                // //here to select hero
+                                // if group.borrow().choose_time == 0 {
+                                //    for user in group.borrow().user_names.clone() {
+                                //         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
+                                //                 msg: format!(r#"{{"id":"{}","hero":""}}"#, user)})?;
+                                //     }
+                                // }
+                                // let mut choose_cnt = 0;
+                                // for user in group.borrow().user_names.clone() {
+                                //     let u = get_user(&user, &TotalUsers);
+                                //     if let Some(u) = u {
+                                //         if u.borrow().hero.chars().count() > 2 {
+                                //             choose_cnt += 1;
+                                //         }
+                                //     }
+                                // }
+                                // if choose_cnt >= 10 {
+                                //     start_cnt += 1;
+                                //     rm_ids.push(*id);
+                                //     game_port += 1;
+                                //     if game_port > 65500 {
+                                //         game_port = 7777;
+                                //     }
+                                //     group.borrow_mut().ready();
+                                //     group.borrow_mut().update_names();
+                                //     group.borrow_mut().game_port = game_port;
 
-                                    GameingGroups.remove(&group.borrow().game_id);
-                                    GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
-                                    // start game
-                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
-                                                msg: format!(r#"{{"id":"{}","hero":""}}"#, group.borrow().game_id)})?;
-                                    for user in group.borrow().user_names.clone() {
-                                        let u = get_user(&user, &TotalUsers);
-                                        if let Some(u) = u {
-                                            let _ : () = redis_conn.set(format!("g{}", u.borrow().id), game_id)?;
-                                        }
-                                    }
-                                }else if group.borrow().choose_time >= CHOOSE_HERO_TIME {
-                                    rm_ids.push(*id);
-                                    for user in group.borrow().user_names.clone() {
-                                        msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
-                                            msg: format!(r#"{{"msg":"timeout"}}"#)})?;
-                                    }
-                                }
-                                group.borrow_mut().choose_time += 2;
+                                //     GameingGroups.remove(&group.borrow().game_id);
+                                //     GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
+                                //     // start game
+                                //     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id), 
+                                //                 msg: format!(r#"{{"id":"{}","hero":""}}"#, group.borrow().game_id)})?;
+                                //     for user in group.borrow().user_names.clone() {
+                                //         let u = get_user(&user, &TotalUsers);
+                                //         if let Some(u) = u {
+                                //             let _ : () = redis_conn.set(format!("g{}", u.borrow().id), game_id)?;
+                                //         }
+                                //     }
+                                // }else if group.borrow().choose_time >= CHOOSE_HERO_TIME {
+                                //     rm_ids.push(*id);
+                                //     for user in group.borrow().user_names.clone() {
+                                //         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user), 
+                                //             msg: format!(r#"{{"msg":"timeout"}}"#)})?;
+                                //     }
+                                // }
+                                // group.borrow_mut().choose_time += 2;
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
@@ -1370,22 +1376,14 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     }
                                 },
                                 RoomEventData::StartGame(x) => {
-                                    let g = GameingGroups.get(&x.game);
-                                    if let Some(g) = g {
-                                        // SendGameList(&g, &msgtx, &mut conn);
-                                        // for r in &g.borrow().room_names {
-                                        //     if !isBackup || (isBackup && isServerLive == false) {
-                                        //         msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start", r), 
-                                        //             msg: format!(r#"{{"room":"{}","msg":"start","server":"172.104.78.55:{}","game":{}}}"#, 
-                                        //                 r, g.borrow().game_port, g.borrow().game_id)})?;
-                                        //     }
-                                        // }
+                                    let u = TotalUsers.get(&x.id);
+                                    if let Some(u) = u {
                                         if !isBackup || (isBackup && isServerLive == false) {
-                                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/start", x.game), 
+                                            let _ : () = redis_conn.set(format!("g{}", u.borrow().id), x.game.clone())?;
+                                            msgtx.try_send(MqttMsg{topic:format!("member/{}/res/start", u.borrow().id), 
                                                 msg: format!(r#"{{"msg":"start"}}"#, )})?;
                                         }
                                     }
-                                    
                                 },
                                 RoomEventData::Leave(x) => {
                                     let u = TotalUsers.get(&x.id);
@@ -1521,11 +1519,21 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
                                 },
-                                RoomEventData::CheckRestrction(x) => {
+                                RoomEventData::CheckRestriction(x) => {
                                     let r = RestrictedUsers.get(&x.id);
                                     if let Some(r) = r {
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_restriction", x.id.clone()), 
                                             msg: format!(r#"{{"time":"{}"}}"#, r.borrow().time)};
+                                    }
+                                },
+                                RoomEventData::CheckInGame(x) => {
+                                    let inGame: std::result::Result<u32, redis::RedisError> = redis_conn.get(format!("g{}",x.id.clone()));
+                                    match inGame {
+                                       Ok(v) => {
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"in game"}}"#)};
+                                       },
+                                       Err(e) => {}
                                     }
                                 },
                                 RoomEventData::Reset() => {
@@ -2052,7 +2060,15 @@ pub fn checkRestriction(id: String, v: Value, sender: Sender<RoomEventData>)
 -> std::result::Result<(), Error>
 {
    let data: CheckRestrctionData = serde_json::from_value(v)?;
-   sender.try_send(RoomEventData::CheckRestrction(data));
+   sender.try_send(RoomEventData::CheckRestriction(data));
+   Ok(())
+}
+
+pub fn checkInGame(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+   let data: CheckInGameData = serde_json::from_value(v)?;
+   sender.try_send(RoomEventData::CheckInGame(data));
    Ok(())
 }
 
