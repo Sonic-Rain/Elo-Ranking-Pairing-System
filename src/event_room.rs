@@ -1172,9 +1172,16 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                             }
                             rm_list.push(id.clone());
                         }else if group.borrow().ready_cnt >= READY_TIME {
-                            for r in &group.borrow().room_names {
-                                if !isBackup || (isBackup && isServerLive == false) {
-                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: r#"{"msg":"timeout"}"#.to_string()})?;
+                            for team in &group.borrow().teams {
+                                for r in &team.borrow().rooms {
+                                    let res = r.borrow_mut().check_start_get();
+                                    if res == false {
+                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
+                                    } else {
+                                        let mqttmsg = MqttMsg{topic:format!("room/{}/send/start_queue", r.borrow().master.clone()), 
+                                            msg: format!(r#"{{"room":"{}", "action": "start queue", "mode":"{}", "id":"{}"}}"#,r.borrow().master.clone(), r.borrow().mode.clone(), r.borrow().master.clone())};
+                                        msgtx.try_send(mqttmsg)?;
+                                    }
                                 }
                             }
                             rm_list.push(id.clone());
