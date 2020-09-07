@@ -120,6 +120,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/jump", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
@@ -231,6 +232,7 @@ fn main() -> std::result::Result<(), Error> {
     let rejump = Regex::new(r"\w+/(\w+)/send/jump")?;
     let recheck_restriction = Regex::new(r"\w+/(\w+)/send/check_restriction")?;
     let recheckInGame = Regex::new(r"\w+/(\w+)/send/check_in_game")?;
+    let releave_game = Regex::new(r"\w+/(\w+)/send/leave_game")?;
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
@@ -343,6 +345,11 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     // info!("logout: userid: {} json: {:?}", userid, v);
                                     event_room::checkInGame(userid, v, sender.clone())?;
+                                } else if releave_game.is_match(topic_name) {
+                                    let cap = releave_game.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    // info!("logout: userid: {} json: {:?}", userid, v);
+                                    event_room::leaveGame(userid, v, sender.clone())?;
                                 } else if relogin.is_match(topic_name) {
                                     let cap = relogin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();

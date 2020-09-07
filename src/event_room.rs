@@ -88,6 +88,11 @@ pub struct CheckInGameData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LeaveGameData {
+    pub id: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct UserLoginData {
     pub u: User,
@@ -256,6 +261,7 @@ pub enum RoomEventData {
     Jump(JumpData),
     CheckRestriction(CheckRestrctionData),
     CheckInGame(CheckInGameData),
+    LeaveGame(LeaveGameData),
     StartQueue(StartQueueData),
     Ready(ReadyData),
     CancelQueue(CancelQueueData),
@@ -1541,6 +1547,9 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                        }
                                     }
                                 },
+                                RoomEventData::LeaveGame(x) => {
+                                    let _: () = redis_conn.del(format!("g{}", x.id))?;
+                                },
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
                                     //QueueRoom.clear();
@@ -2074,6 +2083,14 @@ pub fn checkInGame(id: String, v: Value, sender: Sender<RoomEventData>)
 {
    let data: CheckInGameData = serde_json::from_value(v)?;
    sender.try_send(RoomEventData::CheckInGame(data));
+   Ok(())
+}
+
+pub fn leaveGame(id: String, v: Value, sender: Sender<RoomEventData>)
+-> std::result::Result<(), Error>
+{
+   let data: LeaveGameData = serde_json::from_value(v)?;
+   sender.try_send(RoomEventData::LeaveGame(data));
    Ok(())
 }
 
