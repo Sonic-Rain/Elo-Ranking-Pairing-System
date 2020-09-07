@@ -1535,7 +1535,10 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()), 
                                             msg: format!(r#"{{"msg":"in game"}}"#)};
                                        },
-                                       Err(e) => {}
+                                       Err(e) => {
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()), 
+                                            msg: format!(r#"{{"msg":"game over"}}"#)};
+                                       }
                                     }
                                 },
                                 RoomEventData::Reset() => {
