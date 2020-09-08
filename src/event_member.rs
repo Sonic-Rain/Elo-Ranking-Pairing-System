@@ -51,13 +51,12 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
 {
     let data: LoginData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
-    let sql = format!(r#"select a.score as ng, b.score as rk, name from user as c 
-                        join user_ng as a on a.id=c.id 
-                        join user_rk as b on b.id=c.id  where c.id='{}';"#, id);
+    let sql = format!(r#"select ng, rk, at, name from user where id='{}';"#, id);
     
     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
     let mut ng: i16 = 0;
     let mut rk: i16 = 0;
+    let mut at: i16 = 0;
     let mut name: String = "".to_owned();
     
     let mut count = 0;
@@ -66,6 +65,7 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
         let a = row?.clone();
         ng = mysql::from_value(a.get("ng").unwrap());
         rk = mysql::from_value(a.get("rk").unwrap());
+        at = mysql::from_value(a.get("at").unwrap());
         name = mysql::from_value(a.get("name").unwrap());
         break;
     }
@@ -73,12 +73,6 @@ pub fn login(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventDa
     if count == 0 { 
         let mut sql = format!("replace into user (id, name, status, hero) values ('{}', '{}', 'online', '');", id, data.id);
         conn.query(sql.clone())?;
-        sql = format!("replace into user_ng (id, score) values ('{}', 1000);", id);
-        conn.query(sql.clone())?;
-        ng = 1000;
-        sql = format!("replace into user_rk (id, score) values ('{}', 1000);", id);
-        conn.query(sql.clone())?;
-        rk = 1000;
         sender1.send(SqlData::Login(SqlLoginData {id: id.clone(), name: name.clone()}));
         //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: 1000, rk: 1000, ..Default::default()}}));
     }

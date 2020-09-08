@@ -436,7 +436,7 @@ fn user_score(u: &Rc<RefCell<User>>, value: i16, msgtx: &Sender<MqttMsg>, sender
         msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u.borrow().ng, u.borrow().rk)})?;
     //println!("Update!");
     sender.send(SqlData::UpdateScore(SqlScoreData {id: u.borrow().id.clone(), score: u.borrow().ng.clone()}));
-        //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
+    //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
     //println!("sql: {}", sql);
     //let qres = conn.query(sql.clone())?;
     Ok(())
@@ -493,58 +493,20 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                     recv(update1000ms) -> _ => {
                         if len > 0 {
                             // insert new user in NewUsers
-                            let mut insert_str: String = "insert into user (userid, name, status) values".to_string();
+                            let mut insert_str: String = "insert into user (userid, name, status, hero) values".to_string();
                             for (i, u) in NewUsers.iter().enumerate() {
-                                let mut new_user = format!(" ('{}', 'default name', 'online')", u);
+                                let mut new_user = format!(" ('{}', 'default name', 'online', '')", u);
                                 insert_str += &new_user;
                                 if i < len-1 {
                                     insert_str += ",";
                                 }
                             }
                             insert_str += ";";
-                            //println!("{}", insert_str);
+                            // println!("{}", insert_str);
                             {
                                 conn.query(insert_str.clone())?;
                             }
 
-                            let sql = format!("select id from user where userid='{}';", NewUsers[0]);
-                            //println!("sql: {}", sql);
-                            let qres = conn.query(sql.clone())?;
-                            let mut id = 0;
-                            let mut name: String = "".to_owned();
-                            for row in qres {
-                                let a = row?.clone();
-                                id = mysql::from_value(a.get("id").unwrap());
-                            }
-
-                            let mut insert_rk: String = "insert into user_rank (id, score) values".to_string();
-                            for i in 0..len {
-                                let mut new_user = format!(" ({}, 1000)", id+i);
-                                insert_rk += & new_user;
-                                if i < len-1 {
-                                    insert_rk += ",";
-                                }
-                            }
-                            insert_rk += ";";
-                            //println!("{}", insert_rk);
-                            {
-                                conn.query(insert_rk.clone())?;
-                            }
-
-                            let mut insert_ng: String = "insert into user_ng (id, score) values".to_string();
-                            for i in 0..len {
-                                let mut new_user = format!(" ({}, 1000)", id+i);
-                                insert_ng += &new_user;
-                                if i < len-1 {
-                                    insert_ng += ",";
-                                }
-                            }
-                            insert_ng += ";";
-                            //println!("{}", insert_ng);
-                            {
-                                conn.query(insert_ng.clone())?;
-                            }
-                            
                             len = 0;
                             NewUsers.clear();
                         }
@@ -589,9 +551,9 @@ pub fn HandleSqlRequest(pool: mysql::Pool)
                                         len+=1;                                        
                                     }
                                     SqlData::UpdateScore(x) => {
-                                        //println!("in");
+                                        // println!("in");
                                         let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", x.score, x.id);
-                                        //println!("sql: {}", sql);
+                                        // println!("sql: {}", sql);
                                         let qres = conn.query(sql.clone())?;
                                     }
                                     SqlData::UpdateGameInfo(x) => {
@@ -1958,7 +1920,6 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     }
                                     else {
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
-                                        //thread::sleep(Duration::from_millis(50));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()), 
                                             msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)};
