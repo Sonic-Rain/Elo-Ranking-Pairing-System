@@ -1605,7 +1605,19 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
-                                                if r.borrow().ready == 0 && r.borrow().users.len() < TEAM_SIZE as usize {
+                                                if r.borrow().mode == "rk"{
+                                                    if r.borrow().ready == 0 && r.borrow().users.len() < 2 as usize {
+                                                        r.borrow_mut().add_user(Rc::clone(j));
+                                                        let m = r.borrow().master.clone();
+                                                        r.borrow().publish_update(&msgtx, m)?;
+                                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()), 
+                                                            msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)};
+                                                        sendok = true;
+                                                        // let rid = x.room.parse::<u32>().unwrap();
+                                                        let rid = u.borrow().rid;
+                                                        u.borrow_mut().rid = rid;
+                                                    } 
+                                                }else if r.borrow().ready == 0 && r.borrow().users.len() < TEAM_SIZE as usize {
                                                     r.borrow_mut().add_user(Rc::clone(j));
                                                     let m = r.borrow().master.clone();
                                                     r.borrow().publish_update(&msgtx, m)?;
