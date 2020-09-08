@@ -320,6 +320,7 @@ pub struct QueueRoomData {
     pub user_len: i16,
     pub avg_ng: i16,
     pub avg_rk: i16,
+    pub avg_at: i16,
     pub ready: i8,
     pub notify: bool,
     pub queue_cnt: i16,
@@ -333,6 +334,7 @@ pub struct ReadyGroupData {
     pub user_len: i16,
     pub avg_ng: i16,
     pub avg_rk: i16,
+    pub avg_at: i16,
     pub game_status: u16,
     pub queue_cnt: i16,
 }
@@ -908,14 +910,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                         //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                         let mut new_now1 = Instant::now();
                         for (k, v) in &mut ATQueueRoom {
-                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk {
+                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_at {
                                 for r in g.rid {
                                     id.push(r);
                                 }
                                 g = Default::default();
                                 g.rid.push(v.borrow().rid);
-                                let mut rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                g.avg_rk = rk;
+                                let mut at = (g.avg_at * g.user_len + v.borrow().avg_at * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                g.avg_at = at;
                                 g.user_len += v.borrow().user_len;
                                 v.borrow_mut().ready = 1;
                                 v.borrow_mut().gid = group_id + 1;
@@ -925,17 +927,17 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                             if v.borrow().ready == 0 &&
                                 v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
-                                let Difference: i16 = i16::abs(v.borrow().avg_rk - g.avg_rk);
-                                if g.avg_rk == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                let Difference: i16 = i16::abs(v.borrow().avg_at - g.avg_at);
+                                if g.avg_at == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
                                     g.rid.push(v.borrow().rid);
-                                    let mut rk ;
+                                    let mut at ;
                                     if (g.user_len + v.borrow().user_len > 0){
-                                        rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                        at = (g.avg_at * g.user_len + v.borrow().avg_at * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     } else {
                                         g = Default::default();
                                         continue;
                                     }
-                                    g.avg_rk = rk;
+                                    g.avg_at = at;
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
                                     v.borrow_mut().gid = group_id + 1;
@@ -978,14 +980,14 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
                     if ATReadyGroups.len() >= MATCH_SIZE {
                         let mut fg: ReadyGameData = Default::default();
                         let mut prestart = false;
-                        let mut total_rk: i16 = 0;
+                        let mut total_at: i16 = 0;
                         let mut rm_ids: Vec<u32> = vec![];
                         println!("ATReadyGroup!! {}", ATReadyGroups.len());
                         let mut new_now2 = Instant::now();
                         for (id, rg) in &mut ATReadyGroups {
                             if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                if total_rk == 0 {
-                                    total_rk += rg.borrow().avg_rk as i16;
+                                if total_at == 0 {
+                                    total_at += rg.borrow().avg_at as i16;
                                     fg.group.push(rg.borrow().rid.clone());
                                     fg.gid.push(*id);
                                     fg.team_len += 1;
@@ -994,10 +996,10 @@ pub fn HandleQueueRequest(msgtx: Sender<MqttMsg>, sender: Sender<RoomEventData>)
 
                                 let mut difference = 0;
                                 if fg.team_len > 0 {
-                                    difference = i16::abs(rg.borrow().avg_rk as i16 - total_rk/fg.team_len as i16);
+                                    difference = i16::abs(rg.borrow().avg_at as i16 - total_at/fg.team_len as i16);
                                 }
                                 if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_rk += rg.borrow().avg_rk as i16;
+                                    total_at += rg.borrow().avg_at as i16;
                                     fg.group.push(rg.borrow().rid.clone());
                                     fg.team_len += 1;
                                     fg.gid.push(*id);
@@ -1158,9 +1160,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
         let mut game_id: u32 = 0;
         let mut game_port: u16 = 7777;
 
-        let sql = format!(r#"select c.id, a.score as ng, b.score as rk, name from user as c 
-                            join user_ng as a on a.id=c.id 
-                            join user_rk as b on b.id=c.id;"#);
+        let sql = format!(r#"select id, ng, rk, at, name from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
@@ -1174,6 +1174,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                 name: mysql::from_value(a.get("name").unwrap()),
                 ng: mysql::from_value(a.get("ng").unwrap()),
                 rk: mysql::from_value(a.get("rk").unwrap()),
+                at: mysql::from_value(a.get("at").unwrap()),
                 ..Default::default()
             };
             userid = mysql::from_value(a.get("id").unwrap());
@@ -1294,6 +1295,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 user_len: r.borrow().users.len().clone() as i16,
                                                 avg_ng: r.borrow().avg_ng.clone(),
                                                 avg_rk: r.borrow().avg_rk.clone(),
+                                                avg_at: r.borrow().avg_at.clone(),
                                                 ready: 0,
                                                 notify: false,
                                                 queue_cnt: 1,
@@ -1744,6 +1746,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                                     user_len: r.borrow().users.len().clone() as i16,
                                                                     avg_ng: r.borrow().avg_ng.clone(),
                                                                     avg_rk: r.borrow().avg_rk.clone(),
+                                                                    avg_at: r.borrow().avg_at.clone(),
                                                                     ready: 0,
                                                                     notify: false,
                                                                     queue_cnt: 1,
@@ -1821,6 +1824,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                     let mut rid = 0;
                                     let mut ng = 0;
                                     let mut rk = 0;
+                                    let mut at = 0;
                                     if let Some(u) = u {
                                         if u.borrow().rid != 0 {
                                             hasRoom = true;
@@ -1829,6 +1833,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             rid = u.borrow().id.parse().unwrap();
                                             ng = u.borrow().ng;
                                             rk = u.borrow().rk;
+                                            at = u.borrow().at;
                                         }
                                         if hasRoom {
                                             let r = TotalRoom.get(&rid);
@@ -1840,6 +1845,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                     user_len: y.borrow().users.len().clone() as i16,
                                                     avg_ng: y.borrow().avg_ng.clone(),
                                                     avg_rk: y.borrow().avg_rk.clone(),
+                                                    avg_at: y.borrow().avg_at.clone(),
                                                     ready: 0,
                                                     notify: false,
                                                     queue_cnt: 1,
@@ -1863,6 +1869,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 user_len: 1,
                                                 avg_ng: ng,
                                                 avg_rk: rk,
+                                                avg_at: at,
                                                 ready: 0,
                                                 notify: false,
                                                 queue_cnt: 1,
@@ -1898,6 +1905,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                                 user_len: y.borrow().users.len().clone() as i16,
                                                 avg_ng: y.borrow().avg_ng.clone(),
                                                 avg_rk: y.borrow().avg_rk.clone(),
+                                                avg_at: y.borrow().avg_at.clone(),
                                                 ready: ready + 1,
                                                 notify: true,
                                                 queue_cnt: 1,
@@ -2063,6 +2071,7 @@ pub fn init(msgtx: Sender<MqttMsg>, sender: Sender<SqlData>, pool: mysql::Pool, 
                                             last_master: "".to_owned(),
                                             avg_ng: 0,
                                             avg_rk: 0,
+                                            avg_at: 0,
                                             ready: 0,
                                             queue_cnt: 1,
                                             mode: x.mode.clone(),

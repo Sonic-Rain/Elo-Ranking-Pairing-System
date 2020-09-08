@@ -12,6 +12,7 @@ pub struct User {
     pub hero: String,
     pub ng: i16,
     pub rk: i16,
+    pub at: i16,
     pub rid: u32,
     pub gid: u32,
     pub game_id: u32,
@@ -28,6 +29,7 @@ pub struct RoomData {
     pub last_master: String,
     pub avg_ng: i16,
     pub avg_rk: i16,
+    pub avg_at: i16,
     pub ready: i8,
     pub queue_cnt: i16,
     pub mode: String,
@@ -37,13 +39,16 @@ impl RoomData {
     pub fn update_avg(&mut self) {
         let mut sum_ng = 0;
         let mut sum_rk = 0;
+        let mut sum_at = 0;
         for user in &self.users {
             sum_ng += user.borrow().ng;
             sum_rk += user.borrow().rk;
+            sum_at += user.borrow().at;
         }
         if self.users.len() > 0 {
             self.avg_ng = sum_ng/self.users.len() as i16;
             self.avg_rk = sum_rk/self.users.len() as i16;
+            self.avg_at = sum_at/self.users.len() as i16;
         }
     }
 
