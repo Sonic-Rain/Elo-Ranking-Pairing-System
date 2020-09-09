@@ -161,6 +161,7 @@ pub struct LeaveData {
 pub struct StartGameData {
     pub game: u32,
     pub id: String,
+    pub mode: String,
     pub players: Vec<String>,
 }
 
@@ -286,7 +287,9 @@ pub struct SqlLoginData {
 #[derive(Clone, Debug)]
 pub struct SqlScoreData {
     pub id: String,
-    pub score: i16,
+    pub ng: i16,
+    pub rk: i16,
+    pub at: i16,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -452,15 +455,18 @@ fn user_score(
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/login", u.borrow().id),
         msg: format!(
-            r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#,
+            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#,
             u.borrow().ng,
-            u.borrow().rk
+            u.borrow().rk,
+            u.borrow().at
         ),
     })?;
     //println!("Update!");
     sender.send(SqlData::UpdateScore(SqlScoreData {
         id: u.borrow().id.clone(),
-        score: u.borrow().ng.clone(),
+        ng: u.borrow().ng.clone(),
+        rk: u.borrow().rk.clone(),
+        at: u.borrow().at.clone(),
     }));
     //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
     //println!("sql: {}", sql);
@@ -484,26 +490,42 @@ fn get_rk(team: &Vec<Rc<RefCell<User>>>) -> Vec<i32> {
     res
 }
 
-fn settlement_ng_score(
+fn get_at(team: &Vec<Rc<RefCell<User>>>) -> Vec<i32> {
+    let mut res: Vec<i32> = vec![];
+    for u in team {
+        res.push(u.borrow().at.into());
+    }
+    res
+}
+
+fn settlement_score(
     win: &Vec<Rc<RefCell<User>>>,
     lose: &Vec<Rc<RefCell<User>>>,
     msgtx: &Sender<MqttMsg>,
     sender: &Sender<SqlData>,
     conn: &mut mysql::PooledConn,
+    mode: String,
 ) {
     if win.len() == 0 || lose.len() == 0 {
         return;
     }
-    let win_ng = get_ng(win);
-    let lose_ng = get_ng(lose);
+    let mut win_score: Vec<i32> = get_ng(win);
+    let mut lose_score: Vec<i32> = get_ng(lose);
+    if mode == "rk" {
+        win_score = get_rk(win);
+        lose_score = get_rk(lose);    
+    }else if mode == "at" {
+        win_score = get_at(win);
+        lose_score = get_at(lose);   
+    }
     let elo = EloRank { k: 20.0 };
-    let (rw, rl) = elo.compute_elo_team(&win_ng, &lose_ng);
+    let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
     println!("Game Over");
     for (i, u) in win.iter().enumerate() {
-        user_score(u, (rw[i] - win_ng[i]) as i16, msgtx, sender, conn);
+        user_score(u, (rw[i] - win_score[i]) as i16, msgtx, sender, conn);
     }
     for (i, u) in lose.iter().enumerate() {
-        user_score(u, (rl[i] - lose_ng[i]) as i16, msgtx, sender, conn);
+        user_score(u, (rl[i] - lose_score[i]) as i16, msgtx, sender, conn);
     }
 }
 
@@ -583,7 +605,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                                 }
                                 SqlData::UpdateScore(x) => {
                                     // println!("in");
-                                    let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", x.score, x.id);
+                                    let sql = format!("UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';", x.ng, x.rk, x.at, x.id);
                                     // println!("sql: {}", sql);
                                     let qres = conn.query(sql.clone())?;
                                 }
@@ -1318,16 +1340,75 @@ pub fn init(
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
                     for (id, u) in &mut InGameUsers {
-                        println!("ingame : {}", id);
-                        let inGame: std::result::Result<u32, redis::RedisError> = redis_conn.get(format!("g{}",id.clone()));
+                        let inGame: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("g{}",id.clone()));
                         match inGame {
                            Ok(v) => {
+                                let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",id.clone()));
+                                match isGameOver {
+                                    Ok(v2) => {
+                                        let gameInfo: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("gid{}",v));
+                                        match gameInfo {
+                                            Ok(v3) => {
+                                                println!("gid{} : {}",v ,v3);
+                                                println!("r : {}", v2);
+                                                let data: StartGameData = serde_json::from_str(&String::from(v3))?;
+                                                let mut gameOverData = GameOverData{
+                                                    game: data.game,
+                                                    mode: data.mode,
+                                                    win: Vec::new(),
+                                                    lose: Vec::new()
+                                                };
+                                                let mut i = 0;
+                                                if v2 == "W" {
+                                                   for player_id in data.players.clone() {
+                                                        let _: () = redis_conn.del(format!("g{}", player_id))?;
+                                                        let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
+                                                            msg: format!(r#"{{"msg":"game over"}}"#)};
+                                                        msgtx.try_send(mqttmsg);
+                        
+                                                        inGameRm_list.push(player_id.clone());
+                                                        if i < 5 {
+                                                            gameOverData.win.push(player_id);
+                                                        } else {
+                                                            gameOverData.lose.push(player_id);
+                                                        }
+                                                        i += 1;
+                                                   }
+                                                }
+                                                if v2 == "L" {
+                                                    for player_id in data.players {
+                                                         let _: () = redis_conn.del(format!("g{}", player_id))?;
+                                                         let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
+                                                            msg: format!(r#"{{"msg":"game over"}}"#)};
+                                                         msgtx.try_send(mqttmsg);
+                         
+                                                         inGameRm_list.push(player_id.clone());
+                                                         if i < 5 {
+                                                            gameOverData.lose.push(player_id);
+                                                         } else {
+                                                            gameOverData.win.push(player_id);
+                                                         }
+                                                         i += 1;
+                                                    }
+                                                }
+                                                let _: () = redis_conn.del(format!("gid{}", v))?;
+                                                println!("goto gameover");
+                                                tx2.try_send(RoomEventData::GameOver(gameOverData));
+                                                ;
+                                            },
+                                            Err(e) => {
+
+                                            }
+                                        }
+                                        
+                                    },
+                                    Err(e) => {
+
+                                    }
+                                }
+                                let _: () = redis_conn.del(format!("r{}", id.clone()))?;
                            },
                            Err(e) => {
-                                let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", id.clone()),
-                                    msg: format!(r#"{{"msg":"game over"}}"#)};
-                                msgtx.try_send(mqttmsg);
-                                inGameRm_list.push(id.clone())
                            }
                         }
                     }
@@ -1448,9 +1529,11 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::GameOver(x) => {
+                                    println!("game over {:?}", x);
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
-                                    settlement_ng_score(&win, &lose, &msgtx, &sender, &mut conn);
+                                    println!("game over : win : {:?}, lose : {:?}", win, lose);
+                                    settlement_score(&win, &lose, &msgtx, &sender, &mut conn, x.mode);
                                     // // remove game
                                     // let g = GameingGroups.remove(&x.game);
                                     // match g {
