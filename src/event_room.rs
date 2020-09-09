@@ -450,8 +450,15 @@ fn user_score(
     msgtx: &Sender<MqttMsg>,
     sender: &Sender<SqlData>,
     conn: &mut mysql::PooledConn,
+    mode: String,
 ) -> Result<(), Error> {
-    u.borrow_mut().ng += value;
+    if mode == "ng" {
+        u.borrow_mut().ng += value;
+    }else if mode == "rk" { 
+        u.borrow_mut().rk += value;
+    }else if mode == "at" {
+        u.borrow_mut().at += value;
+    }
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/login", u.borrow().id),
         msg: format!(
@@ -461,13 +468,17 @@ fn user_score(
             u.borrow().at
         ),
     })?;
-    //println!("Update!");
-    sender.send(SqlData::UpdateScore(SqlScoreData {
-        id: u.borrow().id.clone(),
-        ng: u.borrow().ng.clone(),
-        rk: u.borrow().rk.clone(),
-        at: u.borrow().at.clone(),
-    }));
+    println!("Update!");
+    // sender.send(SqlData::UpdateScore(SqlScoreData {
+    //     id: u.borrow().id.clone(),
+    //     ng: u.borrow().ng.clone(),
+    //     rk: u.borrow().rk.clone(),
+    //     at: u.borrow().at.clone(),
+    // }));
+    println!("in");
+    let sql = format!("UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';", u.borrow().ng.clone(), u.borrow().rk.clone(), u.borrow().at.clone(), u.borrow().id.clone());
+    println!("sql: {}", sql);
+    let qres = conn.query(sql.clone())?;
     //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
     //println!("sql: {}", sql);
     //let qres = conn.query(sql.clone())?;
@@ -518,14 +529,15 @@ fn settlement_score(
         win_score = get_at(win);
         lose_score = get_at(lose);   
     }
+    println!("win : {:?}, lose : {:?}", win_score, lose_score);
     let elo = EloRank { k: 20.0 };
     let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
     println!("Game Over");
     for (i, u) in win.iter().enumerate() {
-        user_score(u, (rw[i] - win_score[i]) as i16, msgtx, sender, conn);
+        user_score(u, (rw[i] - win_score[i]) as i16, msgtx, sender, conn, mode.clone());
     }
     for (i, u) in lose.iter().enumerate() {
-        user_score(u, (rl[i] - lose_score[i]) as i16, msgtx, sender, conn);
+        user_score(u, (rl[i] - lose_score[i]) as i16, msgtx, sender, conn, mode.clone());
     }
 }
 
@@ -604,9 +616,9 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                                     len+=1;
                                 }
                                 SqlData::UpdateScore(x) => {
-                                    // println!("in");
+                                    println!("in");
                                     let sql = format!("UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';", x.ng, x.rk, x.at, x.id);
-                                    // println!("sql: {}", sql);
+                                    println!("sql: {}", sql);
                                     let qres = conn.query(sql.clone())?;
                                 }
                                 SqlData::UpdateGameInfo(x) => {
@@ -786,7 +798,7 @@ pub fn HandleQueueRequest(
                         //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
                         //tq.sort_by_key(|x| x.borrow().avg_rk);
                         let mut new_now = Instant::now();
-                        tq.sort_by_key(|x| x.borrow().avg_ng);
+                        tq.sort_by_key(|x| x.borrow().avg_rk);
                         //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                         let mut new_now1 = Instant::now();
                         for (k, v) in &mut RKQueueRoom {
@@ -825,6 +837,7 @@ pub fn HandleQueueRequest(
                                     v.borrow_mut().queue_cnt += 1;
                                 }
                             }
+                            println!("{}", g.user_len);
                             if g.user_len == TEAM_SIZE {
                                 println!("match team_size!");
                                 group_id += 1;
@@ -914,7 +927,7 @@ pub fn HandleQueueRequest(
                         //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
                         //tq.sort_by_key(|x| x.borrow().avg_rk);
                         let mut new_now = Instant::now();
-                        tq.sort_by_key(|x| x.borrow().avg_ng);
+                        tq.sort_by_key(|x| x.borrow().avg_at);
                         //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                         let mut new_now1 = Instant::now();
                         for (k, v) in &mut ATQueueRoom {
@@ -1529,10 +1542,8 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::GameOver(x) => {
-                                    println!("game over {:?}", x);
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
-                                    println!("game over : win : {:?}, lose : {:?}", win, lose);
                                     settlement_score(&win, &lose, &msgtx, &sender, &mut conn, x.mode);
                                     // // remove game
                                     // let g = GameingGroups.remove(&x.game);
