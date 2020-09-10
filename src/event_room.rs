@@ -454,9 +454,9 @@ fn user_score(
 ) -> Result<(), Error> {
     if mode == "ng" {
         u.borrow_mut().ng += value;
-    }else if mode == "rk" { 
+    } else if mode == "rk" {
         u.borrow_mut().rk += value;
-    }else if mode == "at" {
+    } else if mode == "at" {
         u.borrow_mut().at += value;
     }
     msgtx.try_send(MqttMsg {
@@ -476,7 +476,13 @@ fn user_score(
     //     at: u.borrow().at.clone(),
     // }));
     println!("in");
-    let sql = format!("UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';", u.borrow().ng.clone(), u.borrow().rk.clone(), u.borrow().at.clone(), u.borrow().id.clone());
+    let sql = format!(
+        "UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';",
+        u.borrow().ng.clone(),
+        u.borrow().rk.clone(),
+        u.borrow().at.clone(),
+        u.borrow().id.clone()
+    );
     println!("sql: {}", sql);
     let qres = conn.query(sql.clone())?;
     //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
@@ -524,20 +530,34 @@ fn settlement_score(
     let mut lose_score: Vec<i32> = get_ng(lose);
     if mode == "rk" {
         win_score = get_rk(win);
-        lose_score = get_rk(lose);    
-    }else if mode == "at" {
+        lose_score = get_rk(lose);
+    } else if mode == "at" {
         win_score = get_at(win);
-        lose_score = get_at(lose);   
+        lose_score = get_at(lose);
     }
     println!("win : {:?}, lose : {:?}", win_score, lose_score);
     let elo = EloRank { k: 20.0 };
     let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
     println!("Game Over");
     for (i, u) in win.iter().enumerate() {
-        user_score(u, (rw[i] - win_score[i]) as i16, msgtx, sender, conn, mode.clone());
+        user_score(
+            u,
+            (rw[i] - win_score[i]) as i16,
+            msgtx,
+            sender,
+            conn,
+            mode.clone(),
+        );
     }
     for (i, u) in lose.iter().enumerate() {
-        user_score(u, (rl[i] - lose_score[i]) as i16, msgtx, sender, conn, mode.clone());
+        user_score(
+            u,
+            (rl[i] - lose_score[i]) as i16,
+            msgtx,
+            sender,
+            conn,
+            mode.clone(),
+        );
     }
 }
 
@@ -1378,7 +1398,6 @@ pub fn init(
                                                         let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
                                                             msg: format!(r#"{{"msg":"game over"}}"#)};
                                                         msgtx.try_send(mqttmsg);
-                        
                                                         inGameRm_list.push(player_id.clone());
                                                         if i < 5 {
                                                             gameOverData.win.push(player_id);
@@ -1394,7 +1413,6 @@ pub fn init(
                                                          let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
                                                             msg: format!(r#"{{"msg":"game over"}}"#)};
                                                          msgtx.try_send(mqttmsg);
-                         
                                                          inGameRm_list.push(player_id.clone());
                                                          if i < 5 {
                                                             gameOverData.lose.push(player_id);
@@ -1413,7 +1431,6 @@ pub fn init(
 
                                             }
                                         }
-                                        
                                     },
                                     Err(e) => {
 
@@ -1422,6 +1439,9 @@ pub fn init(
                                 let _: () = redis_conn.del(format!("r{}", id.clone()))?;
                            },
                            Err(e) => {
+                                let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", id.clone()),
+                                    msg: format!(r#"{{"msg":"game over"}}"#)};
+                                msgtx.try_send(mqttmsg);
                            }
                         }
                     }
@@ -1645,9 +1665,9 @@ pub fn init(
                                                 let u2 = get_user(player, &TotalUsers);
                                                 if let Some(u2) = u2 {
                                                     InGameUsers.insert(u2.borrow().id.clone(), u2.clone());
-                                                    let _ : () = redis_conn.set(format!("g{}", player), x.game.clone())?;
-                                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/start", player),
-                                                        msg: format!(r#"{{"msg":"start"}}"#, )})?;
+                                                    let _ : () = redis_conn.set(format!("g{}", u2.borrow().id.clone()), x.game.clone())?;
+                                                    msgtx.try_send(MqttMsg{topic:format!("member/{}/res/check_in_game", u2.borrow().id.clone()),
+                                                        msg: format!(r#"{{"msg":"in game"}}"#, )})?;
                                                 }
                                             }
                                         }
