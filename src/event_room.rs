@@ -248,6 +248,7 @@ pub struct ToGameGroup {
 pub struct ControlData {
     pub mode: String,
     pub msg: String,
+    pub password: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -2287,28 +2288,30 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::Control(x) => {
-                                    QueueSender.send(QueueData::Control(x.clone()));
-                                    if (x.mode == "rk") {
-                                        if x.msg == "close" {
-                                            rkState = "close";
-                                        } else if x.msg == "open" {
-                                            rkState = "open";
+                                    if (x.password == "HibikiHibiki") {
+                                        QueueSender.send(QueueData::Control(x.clone()));
+                                        if (x.mode == "rk") {
+                                            if x.msg == "close" {
+                                                rkState = "close";
+                                            } else if x.msg == "open" {
+                                                rkState = "open";
+                                            }
+                                        } else if (x.mode == "ng") {
+                                            if x.msg == "close" {
+                                                ngState = "close";
+                                            } else if x.msg == "open" {
+                                                ngState = "open";
+                                            }
+                                        } else if (x.mode == "at") {
+                                            if x.msg == "close" {
+                                                atState = "close";
+                                            } else if x.msg == "open" {
+                                                atState = "open";
+                                            }
                                         }
-                                    } else if (x.mode == "ng") {
-                                        if x.msg == "close" {
-                                            ngState = "close";
-                                        } else if x.msg == "open" {
-                                            ngState = "open";
-                                        }
-                                    } else if (x.mode == "at") {
-                                        if x.msg == "close" {
-                                            atState = "close";
-                                        } else if x.msg == "open" {
-                                            atState = "open";
-                                        }
+                                        mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
+                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
                                     }
-                                    mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
-                                        msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
                                 },
                                 RoomEventData::CheckState(x) => {
                                     mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
