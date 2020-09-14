@@ -105,7 +105,8 @@ fn main() -> std::result::Result<(), Error> {
     
     // Server message
     mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
-
+    mqtt_client.subscribe("server/send/control", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;
     // Client message
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;
@@ -233,6 +234,8 @@ fn main() -> std::result::Result<(), Error> {
     let recheck_restriction = Regex::new(r"\w+/(\w+)/send/check_restriction")?;
     let recheckInGame = Regex::new(r"\w+/(\w+)/send/check_in_game")?;
     let releave_game = Regex::new(r"\w+/(\w+)/send/leave_game")?;
+    let recontrol = Regex::new(r"\w+/send/control")?;
+    let recheck_state = Regex::new(r"\w+/send/check_state")?;
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
@@ -437,6 +440,12 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("reconnect: userid: {} json: {:?}", userid, v);
                                     event_room::reconnect(userid, v, sender.clone())?;
+                                } else if recontrol.is_match(topic_name) {
+                                    info!("recontrol: json: {:?}", v);
+                                    event_room::control(v, sender.clone())?;
+                                } else if recheck_state.is_match(topic_name) {
+                                    info!("recheck_state: json: {:?}", v);
+                                    event_room::checkState(v, sender.clone())?;
                                 }
                             } else {
                                 warn!("Json Parser error");

@@ -244,6 +244,17 @@ pub struct ToGameGroup {
     pub rids: Vec<u32>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ControlData {
+    pub mode: String,
+    pub msg: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct CheckStateData {
+    pub msg: String,
+}
+
 #[derive(Debug)]
 pub enum RoomEventData {
     Reset(),
@@ -276,6 +287,8 @@ pub enum RoomEventData {
     Status(StatusData),
     Reconnect(ReconnectData),
     MainServerDead(DeadData),
+    Control(ControlData),
+    CheckState(CheckStateData),
 }
 
 #[derive(Clone, Debug)]
@@ -355,6 +368,7 @@ pub struct RemoveRoomData {
 pub enum QueueData {
     UpdateRoom(QueueRoomData),
     RemoveRoom(RemoveRoomData),
+    Control(ControlData),
 }
 
 // Prints the elapsed time.
@@ -676,389 +690,399 @@ pub fn HandleQueueRequest(
         let mut RKReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut ATReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut group_id = 0;
+        let mut ngState = "open";
+        let mut rkState = "open";
+        let mut atState = "open";
         loop {
             select! {
                 recv(update) -> _ => {
-                    // ng
+                    
                     let mut new_now = Instant::now();
-                    if NGQueueRoom.len() >= MATCH_SIZE {
-                        let mut g: ReadyGroupData = Default::default();
-                        let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                        let mut id: Vec<u32> = vec![];
-                        let mut new_now = Instant::now();
-                        tq = NGQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
-                        //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
-                        //tq.sort_by_key(|x| x.borrow().avg_rk);
-                        let mut new_now = Instant::now();
-                        tq.sort_by_key(|x| x.borrow().avg_ng);
-                        //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
-                        let mut new_now1 = Instant::now();
-                        for (k, v) in &mut NGQueueRoom {
-                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
-                                for r in g.rid {
-                                    id.push(r);
-                                }
-                                g = Default::default();
-                                g.rid.push(v.borrow().rid);
-                                let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                g.avg_ng = ng;
-                                g.user_len += v.borrow().user_len;
-                                v.borrow_mut().ready = 1;
-                                v.borrow_mut().gid = group_id + 1;
-                                v.borrow_mut().queue_cnt += 1;
-                            }
-                            if v.borrow().ready == 0 &&
-                                v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
-
-                                let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
-                                if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                    g.rid.push(v.borrow().rid);
-                                    let mut ng ;
-                                    if (g.user_len + v.borrow().user_len > 0){
-                                        ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                    } else {
-                                        g = Default::default();
-                                        continue;
+                    // ng
+                    if ngState == "open" {
+                        if NGQueueRoom.len() >= MATCH_SIZE {
+                            let mut g: ReadyGroupData = Default::default();
+                            let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
+                            let mut id: Vec<u32> = vec![];
+                            let mut new_now = Instant::now();
+                            tq = NGQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                            //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
+                            //tq.sort_by_key(|x| x.borrow().avg_rk);
+                            let mut new_now = Instant::now();
+                            tq.sort_by_key(|x| x.borrow().avg_ng);
+                            //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
+                            let mut new_now1 = Instant::now();
+                            for (k, v) in &mut NGQueueRoom {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
+                                    for r in g.rid {
+                                        id.push(r);
                                     }
+                                    g = Default::default();
+                                    g.rid.push(v.borrow().rid);
+                                    let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     g.avg_ng = ng;
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
                                     v.borrow_mut().gid = group_id + 1;
-                                }
-                                else {
                                     v.borrow_mut().queue_cnt += 1;
                                 }
-                            }
-                            if g.user_len == TEAM_SIZE {
-                                println!("match team_size!");
-                                group_id += 1;
-                                info!("new group_id: {}", group_id);
-                                g.gid = group_id;
-                                g.queue_cnt = 1;
-                                NGReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
-                                g = Default::default();
-                            }
+                                if v.borrow().ready == 0 &&
+                                    v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
-                        }
-                        //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
-                        if g.user_len < TEAM_SIZE {
-                            for r in g.rid {
-                                let mut room = NGQueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
+                                    let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
+                                    if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                        g.rid.push(v.borrow().rid);
+                                        let mut ng ;
+                                        if (g.user_len + v.borrow().user_len > 0){
+                                            ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                        } else {
+                                            g = Default::default();
+                                            continue;
+                                        }
+                                        g.avg_ng = ng;
+                                        g.user_len += v.borrow().user_len;
+                                        v.borrow_mut().ready = 1;
+                                        v.borrow_mut().gid = group_id + 1;
+                                    }
+                                    else {
+                                        v.borrow_mut().queue_cnt += 1;
+                                    }
                                 }
-                            }
-                            for r in id {
-                                let mut room = NGQueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
-                                }
-                            }
-                        }
-                    }
-                    if NGReadyGroups.len() >= MATCH_SIZE {
-                        let mut fg: ReadyGameData = Default::default();
-                        let mut prestart = false;
-                        let mut total_ng: i16 = 0;
-                        let mut rm_ids: Vec<u32> = vec![];
-                        println!("NGReadyGroup!! {}", NGReadyGroups.len());
-                        let mut new_now2 = Instant::now();
-                        for (id, rg) in &mut NGReadyGroups {
-                            if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                if total_ng == 0 {
-                                    total_ng += rg.borrow().avg_ng as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.gid.push(*id);
-                                    fg.team_len += 1;
-                                    continue;
+                                if g.user_len == TEAM_SIZE {
+                                    println!("match team_size!");
+                                    group_id += 1;
+                                    info!("new group_id: {}", group_id);
+                                    g.gid = group_id;
+                                    g.queue_cnt = 1;
+                                    NGReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                    g = Default::default();
                                 }
 
-                                let mut difference = 0;
-                                if fg.team_len > 0 {
-                                    difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
-                                }
-                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_ng += rg.borrow().avg_ng as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.team_len += 1;
-                                    fg.gid.push(*id);
-                                }
-                                else {
-                                    rg.borrow_mut().queue_cnt += 1;
-                                }
                             }
-                            if fg.team_len == MATCH_SIZE {
-                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
-                                for id in fg.gid {
-                                    rm_ids.push(id);
+                            //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
+                            if g.user_len < TEAM_SIZE {
+                                for r in g.rid {
+                                    let mut room = NGQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
                                 }
-                                fg = Default::default();
+                                for r in id {
+                                    let mut room = NGQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
                             }
                         }
-                        for id in rm_ids {
-                            let rg = NGReadyGroups.remove(&id);
-                            if let Some(rg) = rg {
-                                for rid in &rg.borrow().rid {
-                                    NGQueueRoom.remove(&rid);
+                        if NGReadyGroups.len() >= MATCH_SIZE {
+                            let mut fg: ReadyGameData = Default::default();
+                            let mut prestart = false;
+                            let mut total_ng: i16 = 0;
+                            let mut rm_ids: Vec<u32> = vec![];
+                            println!("NGReadyGroup!! {}", NGReadyGroups.len());
+                            let mut new_now2 = Instant::now();
+                            for (id, rg) in &mut NGReadyGroups {
+                                if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
+                                    if total_ng == 0 {
+                                        total_ng += rg.borrow().avg_ng as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.gid.push(*id);
+                                        fg.team_len += 1;
+                                        continue;
+                                    }
+
+                                    let mut difference = 0;
+                                    if fg.team_len > 0 {
+                                        difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
+                                    }
+                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                        total_ng += rg.borrow().avg_ng as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.team_len += 1;
+                                        fg.gid.push(*id);
+                                    }
+                                    else {
+                                        rg.borrow_mut().queue_cnt += 1;
+                                    }
+                                }
+                                if fg.team_len == MATCH_SIZE {
+                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                    for id in fg.gid {
+                                        rm_ids.push(id);
+                                    }
+                                    fg = Default::default();
+                                }
+                            }
+                            for id in rm_ids {
+                                let rg = NGReadyGroups.remove(&id);
+                                if let Some(rg) = rg {
+                                    for rid in &rg.borrow().rid {
+                                        NGQueueRoom.remove(&rid);
+                                    }
                                 }
                             }
                         }
                     }
                     // ng
                     // rank
-                    new_now = Instant::now();
-                    if RKQueueRoom.len() >= MATCH_SIZE {
-                        let mut g: ReadyGroupData = Default::default();
-                        let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                        let mut id: Vec<u32> = vec![];
-                        let mut new_now = Instant::now();
-                        tq = RKQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
-                        //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
-                        //tq.sort_by_key(|x| x.borrow().avg_rk);
-                        let mut new_now = Instant::now();
-                        tq.sort_by_key(|x| x.borrow().avg_rk);
-                        //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
-                        let mut new_now1 = Instant::now();
-                        for (k, v) in &mut RKQueueRoom {
-                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk {
-                                for r in g.rid {
-                                    id.push(r);
-                                }
-                                g = Default::default();
-                                g.rid.push(v.borrow().rid);
-                                let mut rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                g.avg_rk = rk;
-                                g.user_len += v.borrow().user_len;
-                                v.borrow_mut().ready = 1;
-                                v.borrow_mut().gid = group_id + 1;
-                                v.borrow_mut().queue_cnt += 1;
-                            }
-                            if v.borrow().ready == 0 &&
-                                v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
-
-                                let Difference: i16 = i16::abs(v.borrow().avg_rk - g.avg_rk);
-                                if g.avg_rk == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                    g.rid.push(v.borrow().rid);
-                                    let mut rk ;
-                                    if (g.user_len + v.borrow().user_len > 0){
-                                        rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                    } else {
-                                        g = Default::default();
-                                        continue;
+                    if rkState == "open" {
+                        new_now = Instant::now();
+                        if RKQueueRoom.len() >= MATCH_SIZE {
+                            let mut g: ReadyGroupData = Default::default();
+                            let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
+                            let mut id: Vec<u32> = vec![];
+                            let mut new_now = Instant::now();
+                            tq = RKQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                            //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
+                            //tq.sort_by_key(|x| x.borrow().avg_rk);
+                            let mut new_now = Instant::now();
+                            tq.sort_by_key(|x| x.borrow().avg_rk);
+                            //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
+                            let mut new_now1 = Instant::now();
+                            for (k, v) in &mut RKQueueRoom {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk {
+                                    for r in g.rid {
+                                        id.push(r);
                                     }
+                                    g = Default::default();
+                                    g.rid.push(v.borrow().rid);
+                                    let mut rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     g.avg_rk = rk;
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
                                     v.borrow_mut().gid = group_id + 1;
-                                }
-                                else {
                                     v.borrow_mut().queue_cnt += 1;
                                 }
-                            }
-                            println!("{}", g.user_len);
-                            if g.user_len == TEAM_SIZE {
-                                println!("match team_size!");
-                                group_id += 1;
-                                info!("new group_id: {}", group_id);
-                                g.gid = group_id;
-                                g.queue_cnt = 1;
-                                RKReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
-                                g = Default::default();
-                            }
+                                if v.borrow().ready == 0 &&
+                                    v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
-                        }
-                        //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
-                        if g.user_len < TEAM_SIZE {
-                            for r in g.rid {
-                                let mut room = RKQueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
+                                    let Difference: i16 = i16::abs(v.borrow().avg_rk - g.avg_rk);
+                                    if g.avg_rk == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                        g.rid.push(v.borrow().rid);
+                                        let mut rk ;
+                                        if (g.user_len + v.borrow().user_len > 0){
+                                            rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                        } else {
+                                            g = Default::default();
+                                            continue;
+                                        }
+                                        g.avg_rk = rk;
+                                        g.user_len += v.borrow().user_len;
+                                        v.borrow_mut().ready = 1;
+                                        v.borrow_mut().gid = group_id + 1;
+                                    }
+                                    else {
+                                        v.borrow_mut().queue_cnt += 1;
+                                    }
                                 }
-                            }
-                            for r in id {
-                                let mut room = RKQueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
-                                }
-                            }
-                        }
-                    }
-                    if RKReadyGroups.len() >= MATCH_SIZE {
-                        let mut fg: ReadyGameData = Default::default();
-                        let mut prestart = false;
-                        let mut total_rk: i16 = 0;
-                        let mut rm_ids: Vec<u32> = vec![];
-                        println!("RKReadyGroup!! {}", RKReadyGroups.len());
-                        let mut new_now2 = Instant::now();
-                        for (id, rg) in &mut RKReadyGroups {
-                            if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                if total_rk == 0 {
-                                    total_rk += rg.borrow().avg_rk as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.gid.push(*id);
-                                    fg.team_len += 1;
-                                    continue;
+                                println!("{}", g.user_len);
+                                if g.user_len == TEAM_SIZE {
+                                    println!("match team_size!");
+                                    group_id += 1;
+                                    info!("new group_id: {}", group_id);
+                                    g.gid = group_id;
+                                    g.queue_cnt = 1;
+                                    RKReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                    g = Default::default();
                                 }
 
-                                let mut difference = 0;
-                                if fg.team_len > 0 {
-                                    difference = i16::abs(rg.borrow().avg_rk as i16 - total_rk/fg.team_len as i16);
-                                }
-                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_rk += rg.borrow().avg_rk as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.team_len += 1;
-                                    fg.gid.push(*id);
-                                }
-                                else {
-                                    rg.borrow_mut().queue_cnt += 1;
-                                }
                             }
-                            if fg.team_len == MATCH_SIZE {
-                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
-                                for id in fg.gid {
-                                    rm_ids.push(id);
+                            //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
+                            if g.user_len < TEAM_SIZE {
+                                for r in g.rid {
+                                    let mut room = RKQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
                                 }
-                                fg = Default::default();
+                                for r in id {
+                                    let mut room = RKQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
                             }
                         }
-                        for id in rm_ids {
-                            let rg = RKReadyGroups.remove(&id);
-                            if let Some(rg) = rg {
-                                for rid in &rg.borrow().rid {
-                                    RKQueueRoom.remove(&rid);
+                        if RKReadyGroups.len() >= MATCH_SIZE {
+                            let mut fg: ReadyGameData = Default::default();
+                            let mut prestart = false;
+                            let mut total_rk: i16 = 0;
+                            let mut rm_ids: Vec<u32> = vec![];
+                            println!("RKReadyGroup!! {}", RKReadyGroups.len());
+                            let mut new_now2 = Instant::now();
+                            for (id, rg) in &mut RKReadyGroups {
+                                if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
+                                    if total_rk == 0 {
+                                        total_rk += rg.borrow().avg_rk as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.gid.push(*id);
+                                        fg.team_len += 1;
+                                        continue;
+                                    }
+
+                                    let mut difference = 0;
+                                    if fg.team_len > 0 {
+                                        difference = i16::abs(rg.borrow().avg_rk as i16 - total_rk/fg.team_len as i16);
+                                    }
+                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                        total_rk += rg.borrow().avg_rk as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.team_len += 1;
+                                        fg.gid.push(*id);
+                                    }
+                                    else {
+                                        rg.borrow_mut().queue_cnt += 1;
+                                    }
+                                }
+                                if fg.team_len == MATCH_SIZE {
+                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                    for id in fg.gid {
+                                        rm_ids.push(id);
+                                    }
+                                    fg = Default::default();
+                                }
+                            }
+                            for id in rm_ids {
+                                let rg = RKReadyGroups.remove(&id);
+                                if let Some(rg) = rg {
+                                    for rid in &rg.borrow().rid {
+                                        RKQueueRoom.remove(&rid);
+                                    }
                                 }
                             }
                         }
                     }
                     // rank
                     // AT
-                    new_now = Instant::now();
-                    if ATQueueRoom.len() >= MATCH_SIZE {
-                        let mut g: ReadyGroupData = Default::default();
-                        let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                        let mut id: Vec<u32> = vec![];
-                        let mut new_now = Instant::now();
-                        tq = ATQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
-                        //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
-                        //tq.sort_by_key(|x| x.borrow().avg_rk);
-                        let mut new_now = Instant::now();
-                        tq.sort_by_key(|x| x.borrow().avg_at);
-                        //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
-                        let mut new_now1 = Instant::now();
-                        for (k, v) in &mut ATQueueRoom {
-                            if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_at {
-                                for r in g.rid {
-                                    id.push(r);
-                                }
-                                g = Default::default();
-                                g.rid.push(v.borrow().rid);
-                                let mut at = (g.avg_at * g.user_len + v.borrow().avg_at * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                g.avg_at = at;
-                                g.user_len += v.borrow().user_len;
-                                v.borrow_mut().ready = 1;
-                                v.borrow_mut().gid = group_id + 1;
-                                v.borrow_mut().queue_cnt += 1;
-                            }
-                            if v.borrow().ready == 0 &&
-                                v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
-
-                                let Difference: i16 = i16::abs(v.borrow().avg_at - g.avg_at);
-                                if g.avg_at == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                    g.rid.push(v.borrow().rid);
-                                    let mut at ;
-                                    if (g.user_len + v.borrow().user_len > 0){
-                                        at = (g.avg_at * g.user_len + v.borrow().avg_at * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
-                                    } else {
-                                        g = Default::default();
-                                        continue;
+                    if atState == "open" {
+                        new_now = Instant::now();
+                        if ATQueueRoom.len() >= MATCH_SIZE {
+                            let mut g: ReadyGroupData = Default::default();
+                            let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
+                            let mut id: Vec<u32> = vec![];
+                            let mut new_now = Instant::now();
+                            tq = ATQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                            //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
+                            //tq.sort_by_key(|x| x.borrow().avg_rk);
+                            let mut new_now = Instant::now();
+                            tq.sort_by_key(|x| x.borrow().avg_at);
+                            //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
+                            let mut new_now1 = Instant::now();
+                            for (k, v) in &mut ATQueueRoom {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_at {
+                                    for r in g.rid {
+                                        id.push(r);
                                     }
+                                    g = Default::default();
+                                    g.rid.push(v.borrow().rid);
+                                    let mut at = (g.avg_at * g.user_len + v.borrow().avg_at * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     g.avg_at = at;
                                     g.user_len += v.borrow().user_len;
                                     v.borrow_mut().ready = 1;
                                     v.borrow_mut().gid = group_id + 1;
-                                }
-                                else {
                                     v.borrow_mut().queue_cnt += 1;
                                 }
-                            }
-                            if g.user_len == TEAM_SIZE {
-                                println!("match team_size!");
-                                group_id += 1;
-                                info!("new group_id: {}", group_id);
-                                g.gid = group_id;
-                                g.queue_cnt = 1;
-                                ATReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
-                                g = Default::default();
-                            }
+                                if v.borrow().ready == 0 &&
+                                    v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
-                        }
-                        //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
-                        if g.user_len < TEAM_SIZE {
-                            for r in g.rid {
-                                let mut room = ATQueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
+                                    let Difference: i16 = i16::abs(v.borrow().avg_at - g.avg_at);
+                                    if g.avg_at == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                        g.rid.push(v.borrow().rid);
+                                        let mut at ;
+                                        if (g.user_len + v.borrow().user_len > 0){
+                                            at = (g.avg_at * g.user_len + v.borrow().avg_at * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
+                                        } else {
+                                            g = Default::default();
+                                            continue;
+                                        }
+                                        g.avg_at = at;
+                                        g.user_len += v.borrow().user_len;
+                                        v.borrow_mut().ready = 1;
+                                        v.borrow_mut().gid = group_id + 1;
+                                    }
+                                    else {
+                                        v.borrow_mut().queue_cnt += 1;
+                                    }
                                 }
-                            }
-                            for r in id {
-                                let mut room = ATQueueRoom.get(&r);
-                                if let Some(room) = room {
-                                    room.borrow_mut().ready = 0;
-                                    room.borrow_mut().gid = 0;
-                                }
-                            }
-                        }
-                    }
-                    if ATReadyGroups.len() >= MATCH_SIZE {
-                        let mut fg: ReadyGameData = Default::default();
-                        let mut prestart = false;
-                        let mut total_at: i16 = 0;
-                        let mut rm_ids: Vec<u32> = vec![];
-                        println!("ATReadyGroup!! {}", ATReadyGroups.len());
-                        let mut new_now2 = Instant::now();
-                        for (id, rg) in &mut ATReadyGroups {
-                            if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
-                                if total_at == 0 {
-                                    total_at += rg.borrow().avg_at as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.gid.push(*id);
-                                    fg.team_len += 1;
-                                    continue;
+                                if g.user_len == TEAM_SIZE {
+                                    println!("match team_size!");
+                                    group_id += 1;
+                                    info!("new group_id: {}", group_id);
+                                    g.gid = group_id;
+                                    g.queue_cnt = 1;
+                                    ATReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                    g = Default::default();
                                 }
 
-                                let mut difference = 0;
-                                if fg.team_len > 0 {
-                                    difference = i16::abs(rg.borrow().avg_at as i16 - total_at/fg.team_len as i16);
-                                }
-                                if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
-                                    total_at += rg.borrow().avg_at as i16;
-                                    fg.group.push(rg.borrow().rid.clone());
-                                    fg.team_len += 1;
-                                    fg.gid.push(*id);
-                                }
-                                else {
-                                    rg.borrow_mut().queue_cnt += 1;
-                                }
                             }
-                            if fg.team_len == MATCH_SIZE {
-                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
-                                for id in fg.gid {
-                                    rm_ids.push(id);
+                            //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
+                            if g.user_len < TEAM_SIZE {
+                                for r in g.rid {
+                                    let mut room = ATQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
                                 }
-                                fg = Default::default();
+                                for r in id {
+                                    let mut room = ATQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
                             }
                         }
-                        for id in rm_ids {
-                            let rg = ATReadyGroups.remove(&id);
-                            if let Some(rg) = rg {
-                                for rid in &rg.borrow().rid {
-                                    ATQueueRoom.remove(&rid);
+                        if ATReadyGroups.len() >= MATCH_SIZE {
+                            let mut fg: ReadyGameData = Default::default();
+                            let mut prestart = false;
+                            let mut total_at: i16 = 0;
+                            let mut rm_ids: Vec<u32> = vec![];
+                            println!("ATReadyGroup!! {}", ATReadyGroups.len());
+                            let mut new_now2 = Instant::now();
+                            for (id, rg) in &mut ATReadyGroups {
+                                if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
+                                    if total_at == 0 {
+                                        total_at += rg.borrow().avg_at as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.gid.push(*id);
+                                        fg.team_len += 1;
+                                        continue;
+                                    }
+
+                                    let mut difference = 0;
+                                    if fg.team_len > 0 {
+                                        difference = i16::abs(rg.borrow().avg_at as i16 - total_at/fg.team_len as i16);
+                                    }
+                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                        total_at += rg.borrow().avg_at as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.team_len += 1;
+                                        fg.gid.push(*id);
+                                    }
+                                    else {
+                                        rg.borrow_mut().queue_cnt += 1;
+                                    }
+                                }
+                                if fg.team_len == MATCH_SIZE {
+                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                    for id in fg.gid {
+                                        rm_ids.push(id);
+                                    }
+                                    fg = Default::default();
+                                }
+                            }
+                            for id in rm_ids {
+                                let rg = ATReadyGroups.remove(&id);
+                                if let Some(rg) = rg {
+                                    for rid in &rg.borrow().rid {
+                                        ATQueueRoom.remove(&rid);
+                                    }
                                 }
                             }
                         }
@@ -1140,6 +1164,27 @@ pub fn HandleQueueRequest(
                                     }
                                     ATQueueRoom.remove(&x.rid);
                                     // AT
+                                },
+                                QueueData::Control(x) => {
+                                    if (x.mode == "rk") {
+                                        if x.msg == "close" {
+                                            rkState = "close";
+                                        } else if x.msg == "open" {
+                                            rkState = "open";
+                                        }
+                                    } else if (x.mode == "ng") {
+                                        if x.msg == "close" {
+                                            ngState = "close";
+                                        } else if x.msg == "open" {
+                                            ngState = "open";
+                                        }
+                                    } else if (x.mode == "at") {
+                                        if x.msg == "close" {
+                                            atState = "close";
+                                        } else if x.msg == "open" {
+                                            atState = "open";
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1202,6 +1247,9 @@ pub fn init(
         let mut group_id: u32 = 0;
         let mut game_id: u32 = 0;
         let mut game_port: u16 = 7777;
+        let mut ngState = "open";
+        let mut rkState = "open";
+        let mut atState = "open";
 
         let sql = format!(r#"select id, ng, rk, at, name from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -1439,6 +1487,7 @@ pub fn init(
                                 let _: () = redis_conn.del(format!("r{}", id.clone()))?;
                            },
                            Err(e) => {
+                                inGameRm_list.push(id.clone());
                                 let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", id.clone()),
                                     msg: format!(r#"{{"msg":"game over"}}"#)};
                                 msgtx.try_send(mqttmsg);
@@ -1706,13 +1755,13 @@ pub fn init(
                                 RoomEventData::ChooseNGHero(x) => {
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
-                                        u.borrow_mut().hero = x.hero;
+                                        u.borrow_mut().hero = x.hero.clone();
                                         // conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
                                         // key : steamid, value : hero
-                                        let _ : () = redis_conn.set(u.borrow().id.clone(), u.borrow().hero.clone())?;
-                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id),
-                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                     }
+                                    let _ : () = redis_conn.set(x.id.clone(), x.hero.clone())?;
+                                    mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", x.id.clone()),
+                                        msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, x.id.clone(), x.hero.clone())};
                                 },
                                 RoomEventData::LockedNGHero(x) => {
                                     let u = TotalUsers.get(&x.id);
@@ -2236,7 +2285,35 @@ pub fn init(
                                     for msg in LossSend.clone() {
                                         msgtx.try_send(msg.clone())?;
                                     }
-                                }
+                                },
+                                RoomEventData::Control(x) => {
+                                    QueueSender.send(QueueData::Control(x.clone()));
+                                    if (x.mode == "rk") {
+                                        if x.msg == "close" {
+                                            rkState = "close";
+                                        } else if x.msg == "open" {
+                                            rkState = "open";
+                                        }
+                                    } else if (x.mode == "ng") {
+                                        if x.msg == "close" {
+                                            ngState = "close";
+                                        } else if x.msg == "open" {
+                                            ngState = "open";
+                                        }
+                                    } else if (x.mode == "at") {
+                                        if x.msg == "close" {
+                                            atState = "close";
+                                        } else if x.msg == "open" {
+                                            atState = "open";
+                                        }
+                                    }
+                                    mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
+                                        msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                },
+                                RoomEventData::CheckState(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
+                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                },
                             }
                         }
                         //println!("isBackup: {}, isServerLive: {}", isBackup, isServerLive);
@@ -2510,5 +2587,17 @@ pub fn reconnect(
 
 pub fn server_dead(id: String, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     sender.try_send(RoomEventData::MainServerDead(DeadData { ServerDead: id }));
+    Ok(())
+}
+
+pub fn control(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: ControlData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::Control(data));
+    Ok(())
+}
+
+pub fn checkState(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: CheckStateData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::CheckState(data));
     Ok(())
 }
