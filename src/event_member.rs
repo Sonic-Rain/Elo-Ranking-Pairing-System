@@ -124,18 +124,7 @@ pub fn AddBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttM
 pub fn RemoveBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
     let data: RemoveBlackListData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
-    let mut sql = format!(r#"show tables like '{}_black_list'"#, id);
-    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
-    let mut count = 0;
-    for row in qres2 {
-        count += 1;
-        break;
-    }
-    if count == 0 {
-        sql = format!(r#"create table {}_black_list (id varchar(100) not null, primary key( id ));"#, id);
-        let qres = conn.query(sql);
-    }
-    sql = format!(r#"delete from {}_black_list where id = {};"#, id, data.black);
+    let mut sql = format!(r#"delete from black_list where user={} and black={};"#, id, data.black);
     let qres = conn.query(sql);
     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/rm_black_list", id), 
                     msg: format!(r#"{{"msg":"removed"}}"#)})?;
@@ -145,18 +134,7 @@ pub fn RemoveBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<Mq
 pub fn QueryBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
     let data: QueryBlackListData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
-    let mut sql = format!(r#"show tables like '{}_black_list';"#, id);
-    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
-    let mut count = 0;
-    for row in qres2 {
-        count += 1;
-        break;
-    }
-    if count == 0 {
-        sql = format!(r#"create table {}_black_list (id varchar(100) not null, primary key( id ));"#, id);
-        let qres = conn.query(sql.clone());
-    }
-    sql = format!(r#"select * from {}_black_list;"#, id);
+    let mut sql = format!(r#"select black from black_list where user={};"#, id);
     let qres: mysql::QueryResult = conn.query(sql.clone())?;
     let mut blackid: String;
     let mut list = Vec::new();
