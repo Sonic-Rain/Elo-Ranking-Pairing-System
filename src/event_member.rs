@@ -114,18 +114,7 @@ pub fn logout(id: String, v: Value, pool: mysql::Pool, sender: Sender<RoomEventD
 pub fn AddBlackList(id: String, v: Value, pool: mysql::Pool, msgtx: Sender<MqttMsg>) -> std::result::Result<(), Error> {
     let data: AddBlackListData = serde_json::from_value(v)?;
     let mut conn = pool.get_conn()?;
-    let mut sql = format!(r#"show tables like '{}_black_list'"#, id);
-    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
-    let mut count = 0;
-    for row in qres2 {
-        count += 1;
-        break;
-    }
-    if count == 0 {
-        sql = format!(r#"create table {}_black_list (id varchar(100) not null, primary key( id ));"#, id);
-        let qres = conn.query(sql);
-    }
-    sql = format!(r#"replace into {}_black_list (id) values ('{}');"#, id, data.black);
+    let mut sql = format!(r#"replace into black_list (user, black) values ('{}', {});"#,data.id, data.black);
     let qres = conn.query(sql);
     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/add_black_list", id), 
                     msg: format!(r#"{{"msg":"added"}}"#)})?;

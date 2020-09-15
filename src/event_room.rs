@@ -333,6 +333,7 @@ pub struct QueueRoomData {
     pub rid: u32,
     pub gid: u32,
     pub user_len: i16,
+    pub user_ids: Vec<String>,
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub avg_at: i16,
@@ -347,6 +348,7 @@ pub struct ReadyGroupData {
     pub gid: u32,
     pub rid: Vec<u32>,
     pub user_len: i16,
+    pub user_ids: Vec<String>,
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub avg_at: i16,
@@ -530,6 +532,41 @@ fn get_at(team: &Vec<Rc<RefCell<User>>>) -> Vec<i32> {
     res
 }
 
+fn check_is_black(user_ids: Vec<String>, g_user_ids: Vec<String>, conn: &mut mysql::PooledConn) -> Result<bool, Error>  {
+    let mut isBlack = false;
+    for user_id in user_ids {
+        for g_user_id in &g_user_ids {
+            let mut sql = format!(r#"select count(*) from black_list where user={} and black={};"#, user_id, g_user_id);
+            let qres = conn.query(sql)?;
+            let mut count = 0;
+            for row in qres {
+                let a = row?.clone();
+                count = mysql::from_value(a.get("count(*)").unwrap());
+                break;
+            }
+            if count > 0 {
+                isBlack = true;
+                break;
+            }
+            sql = format!(r#"select count(*) from black_list where user={} and black={};"#, g_user_id, user_id);
+            let qres2 = conn.query(sql)?;
+            for row in qres2 {
+                let a = row?.clone();
+                count = mysql::from_value(a.get("count(*)").unwrap());
+                break;
+            }
+            if count > 0 {
+                isBlack = true;
+                break;
+            }
+        }
+        if isBlack {
+            break;
+        }
+    }
+    Ok(isBlack)
+}
+
 fn settlement_score(
     win: &Vec<Rc<RefCell<User>>>,
     lose: &Vec<Rc<RefCell<User>>>,
@@ -678,6 +715,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
 pub fn HandleQueueRequest(
     msgtx: Sender<MqttMsg>,
     sender: Sender<RoomEventData>,
+    pool: mysql::Pool,
 ) -> Result<Sender<QueueData>, Error> {
     let (tx, rx): (Sender<QueueData>, Receiver<QueueData>) = bounded(10000);
     let start = Instant::now();
@@ -690,6 +728,7 @@ pub fn HandleQueueRequest(
         let mut NGReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut RKReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut ATReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
+        let mut conn = pool.get_conn()?;
         let mut group_id = 0;
         let mut ngState = "open";
         let mut rkState = "open";
@@ -697,7 +736,6 @@ pub fn HandleQueueRequest(
         loop {
             select! {
                 recv(update) -> _ => {
-                    
                     let mut new_now = Instant::now();
                     // ng
                     if ngState == "open" {
@@ -719,6 +757,9 @@ pub fn HandleQueueRequest(
                                         id.push(r);
                                     }
                                     g = Default::default();
+                                    for user_id in &v.borrow().user_ids {
+                                        g.user_ids.push(user_id.clone());
+                                    }
                                     g.rid.push(v.borrow().rid);
                                     let mut ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     g.avg_ng = ng;
@@ -729,21 +770,28 @@ pub fn HandleQueueRequest(
                                 }
                                 if v.borrow().ready == 0 &&
                                     v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
-
                                     let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
                                     if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                        g.rid.push(v.borrow().rid);
                                         let mut ng ;
+                                        let isBlack = check_is_black(v.borrow().user_ids.clone(), g.user_ids.clone(), &mut conn)?;
+                                        if (isBlack) {
+                                            continue;
+                                        }
                                         if (g.user_len + v.borrow().user_len > 0){
                                             ng = (g.avg_ng * g.user_len + v.borrow().avg_ng * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                         } else {
                                             g = Default::default();
                                             continue;
                                         }
+                                        for user_id in &v.borrow().user_ids {
+                                            g.user_ids.push(user_id.clone());
+                                        }
+                                        g.rid.push(v.borrow().rid);
                                         g.avg_ng = ng;
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
                                         v.borrow_mut().gid = group_id + 1;
+                                        println!("g2 {:?}", g);
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
@@ -849,6 +897,9 @@ pub fn HandleQueueRequest(
                                         id.push(r);
                                     }
                                     g = Default::default();
+                                    for user_id in &v.borrow().user_ids {
+                                        g.user_ids.push(user_id.clone());
+                                    }
                                     g.rid.push(v.borrow().rid);
                                     let mut rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                     g.avg_rk = rk;
@@ -862,14 +913,21 @@ pub fn HandleQueueRequest(
 
                                     let Difference: i16 = i16::abs(v.borrow().avg_rk - g.avg_rk);
                                     if g.avg_rk == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
-                                        g.rid.push(v.borrow().rid);
                                         let mut rk ;
+                                        let isBlack = check_is_black(v.borrow().user_ids.clone(), g.user_ids.clone(), &mut conn)?;
+                                        if (isBlack) {
+                                            continue;
+                                        }
                                         if (g.user_len + v.borrow().user_len > 0){
                                             rk = (g.avg_rk * g.user_len + v.borrow().avg_rk * v.borrow().user_len) as i16 / (g.user_len + v.borrow().user_len) as i16;
                                         } else {
                                             g = Default::default();
                                             continue;
                                         }
+                                        for user_id in &v.borrow().user_ids {
+                                            g.user_ids.push(user_id.clone());
+                                        }
+                                        g.rid.push(v.borrow().rid);
                                         g.avg_rk = rk;
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
@@ -1218,7 +1276,7 @@ pub fn init(
             println!("in");
         }
         None => {
-            tx1 = HandleQueueRequest(msgtx.clone(), tx.clone())?;
+            tx1 = HandleQueueRequest(msgtx.clone(), tx.clone(), pool.clone())?;
             println!("2 in");
         }
     }
@@ -1375,10 +1433,15 @@ pub fn init(
                                 for t in &group.borrow().teams {
                                     for r in &t.borrow().rooms {
                                         if !rm_rid.contains(&r.borrow().rid) {
+                                            let mut user_ids: Vec<String> = Vec::new();
+                                            for user in &r.borrow().users {
+                                                user_ids.push(user.borrow().id.clone());
+                                            }
                                             let mut data = QueueRoomData {
                                                 rid: r.borrow().rid.clone(),
                                                 gid: 0,
                                                 user_len: r.borrow().users.len().clone() as i16,
+                                                user_ids: user_ids,
                                                 avg_ng: r.borrow().avg_ng.clone(),
                                                 avg_rk: r.borrow().avg_rk.clone(),
                                                 avg_at: r.borrow().avg_at.clone(),
@@ -1918,10 +1981,15 @@ pub fn init(
                                                         for r in &gr.borrow().rooms {
                                                             println!("r_rid: {}, u_rid: {}", r.borrow().rid, u.borrow().rid);
                                                             if r.borrow().rid != u.borrow().rid {
+                                                                let mut user_ids: Vec<String> = Vec::new();
+                                                                for user in &r.borrow().users {
+                                                                    user_ids.push(user.borrow().id.clone());
+                                                                }
                                                                 let mut data = QueueRoomData {
                                                                     rid: r.borrow().rid.clone(),
                                                                     gid: 0,
                                                                     user_len: r.borrow().users.len().clone() as i16,
+                                                                    user_ids: user_ids,
                                                                     avg_ng: r.borrow().avg_ng.clone(),
                                                                     avg_rk: r.borrow().avg_rk.clone(),
                                                                     avg_at: r.borrow().avg_at.clone(),
@@ -2016,10 +2084,15 @@ pub fn init(
                                             let r = TotalRoom.get(&rid);
                                             if let Some(y) = r {
                                                 y.borrow_mut().update_avg();
+                                                let mut user_ids: Vec<String> = Vec::new();
+                                                for user in &y.borrow().users {
+                                                    user_ids.push(user.borrow().id.clone());
+                                                }
                                                 let mut data = QueueRoomData {
                                                     rid: y.borrow().rid.clone(),
                                                     gid: 0,
                                                     user_len: y.borrow().users.len().clone() as i16,
+                                                    user_ids: user_ids,
                                                     avg_ng: y.borrow().avg_ng.clone(),
                                                     avg_rk: y.borrow().avg_rk.clone(),
                                                     avg_at: y.borrow().avg_at.clone(),
@@ -2040,10 +2113,13 @@ pub fn init(
                                             }
                                         }else{
                                             tx2.try_send(RoomEventData::Create(CreateRoomData{id: x.id.clone(), mode: x.mode.clone()}));
+                                            let mut user_ids: Vec<String> = Vec::new();
+                                            user_ids.push(x.id.clone());
                                             let mut data = QueueRoomData {
                                                 rid: rid,
                                                 gid: 0,
                                                 user_len: 1,
+                                                user_ids: user_ids,
                                                 avg_ng: ng,
                                                 avg_rk: rk,
                                                 avg_at: at,
@@ -2075,11 +2151,16 @@ pub fn init(
                                         }
                                         let r = TotalRoom.get(&rid);
                                         if let Some(y) = r {
+                                            let mut user_ids: Vec<String> = Vec::new();
+                                            for user in &y.borrow().users {
+                                                user_ids.push(user.borrow().id.clone());
+                                            }
                                             let mut ready = y.borrow().ready;
                                             let mut data = QueueRoomData {
                                                 rid: y.borrow().rid.clone(),
                                                 gid: 0,
                                                 user_len: y.borrow().users.len().clone() as i16,
+                                                user_ids: user_ids,
                                                 avg_ng: y.borrow().avg_ng.clone(),
                                                 avg_rk: y.borrow().avg_rk.clone(),
                                                 avg_at: y.borrow().avg_at.clone(),
