@@ -122,6 +122,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/get_game_historys", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
@@ -234,8 +235,10 @@ fn main() -> std::result::Result<(), Error> {
     let recheck_restriction = Regex::new(r"\w+/(\w+)/send/check_restriction")?;
     let recheckInGame = Regex::new(r"\w+/(\w+)/send/check_in_game")?;
     let releave_game = Regex::new(r"\w+/(\w+)/send/leave_game")?;
+    let regetGameHistorys = Regex::new(r"\w+/(\w+)/send/get_game_historys")?;
     let recontrol = Regex::new(r"\w+/send/control")?;
     let recheck_state = Regex::new(r"\w+/send/check_state")?;
+    
     
     //let mut QueueSender: Sender<QueueData>;
     let mut sender1: Sender<SqlData> = event_room::HandleSqlRequest(pool.clone())?;
@@ -441,11 +444,16 @@ fn main() -> std::result::Result<(), Error> {
                                     //info!("reconnect: userid: {} json: {:?}", userid, v);
                                     event_room::reconnect(userid, v, sender.clone())?;
                                 } else if recontrol.is_match(topic_name) {
-                                    info!("recontrol: json: {:?}", v);
+                                    // info!("recontrol: json: {:?}", v);
                                     event_room::control(v, sender.clone())?;
                                 } else if recheck_state.is_match(topic_name) {
-                                    info!("recheck_state: json: {:?}", v);
+                                    // info!("recheck_state: json: {:?}", v);
                                     event_room::checkState(v, sender.clone())?;
+                                } else if regetGameHistorys.is_match(topic_name) {
+                                    // info!("recheck_state: json: {:?}", v);
+                                    let cap = regetGameHistorys.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    event_member::GetGameHistorys(userid, v, pool.clone(), tx.clone())?;
                                 }
                             } else {
                                 warn!("Json Parser error");
