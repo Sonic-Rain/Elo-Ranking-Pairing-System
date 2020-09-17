@@ -53,6 +53,8 @@ struct GetGameHistorysData {
 
 #[derive(Serialize, Deserialize)]
 struct GameHistoryData {
+    gameId: String,
+    steamId: String,
     hero: String,
     level: u16,
     isWin: bool,
@@ -248,8 +250,9 @@ pub fn GetGameHistorys(
         items.push(mysql::from_value(a.get("equ_4").unwrap()));
         items.push(mysql::from_value(a.get("equ_5").unwrap()));
         items.push(mysql::from_value(a.get("equ_6").unwrap()));
-        println!("{:?}", items);
         let gameHistory = GameHistoryData {
+            gameId: mysql::from_value(a.get("game_id").unwrap()), 
+            steamId: mysql::from_value(a.get("steam_id").unwrap()), 
             hero: mysql::from_value(a.get("hero").unwrap()),
             mode: "ng".to_string(),
             level: mysql::from_value(a.get("level").unwrap()),
