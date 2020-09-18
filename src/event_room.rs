@@ -1773,6 +1773,24 @@ pub fn init(
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         if !isBackup || (isBackup && isServerLive == false) {
+                                            let r = TotalRoom.get(&u.borrow().rid);
+                                            let mut is_null = false;
+                                            if let Some(r) = r {
+                                                let m = r.borrow().master.clone();
+                                                r.borrow_mut().rm_user(&x.id);
+                                                if r.borrow().users.len() > 0 {
+                                                    r.borrow().publish_update(&msgtx, m)?;
+                                                }
+                                                else {
+                                                    is_null = true;
+                                                }
+                                            }
+                                            if is_null {
+                                                TotalRoom.remove(&u.borrow().rid);
+                                                QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
+                                            }
+                                            u.borrow_mut().rid = 0;
+                                            AbandonGames.insert(x.game.clone(), true);
                                             let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
                                             for player in &x.players {
                                                 let u2 = get_user(player, &TotalUsers);
