@@ -28,11 +28,11 @@ use crate::msg::*;
 use crate::room::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 5;
+const TEAM_SIZE: i16 = 2;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
-const READY_TIME: u16 = 30;
+const READY_TIME: u16 = 15;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -1302,7 +1302,7 @@ pub fn init(
         let mut InGameUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
         let mut AbandonGames: BTreeMap<u32, bool> = BTreeMap::new();
-        let mut room_id: u32 = 0;
+        let mut room_id: u32 = 1;
         let mut group_id: u32 = 0;
         let mut game_id: u32 = 0;
         let mut game_port: u16 = 7777;
@@ -1430,30 +1430,30 @@ pub fn init(
                                     }
 
                                 }
-                                for t in &group.borrow().teams {
-                                    for r in &t.borrow().rooms {
-                                        if !rm_rid.contains(&r.borrow().rid) {
-                                            let mut user_ids: Vec<String> = Vec::new();
-                                            for user in &r.borrow().users {
-                                                user_ids.push(user.borrow().id.clone());
-                                            }
-                                            let mut data = QueueRoomData {
-                                                rid: r.borrow().rid.clone(),
-                                                gid: 0,
-                                                user_len: r.borrow().users.len().clone() as i16,
-                                                user_ids: user_ids,
-                                                avg_ng: r.borrow().avg_ng.clone(),
-                                                avg_rk: r.borrow().avg_rk.clone(),
-                                                avg_at: r.borrow().avg_at.clone(),
-                                                ready: 0,
-                                                notify: false,
-                                                queue_cnt: 1,
-                                                mode: r.borrow().mode.clone(),
-                                            };
-                                            QueueSender.send(QueueData::UpdateRoom(data));
-                                        }
-                                    }
-                                }
+                                // for t in &group.borrow().teams {
+                                //     for r in &t.borrow().rooms {
+                                //         if !rm_rid.contains(&r.borrow().rid) {
+                                //             let mut user_ids: Vec<String> = Vec::new();
+                                //             for user in &r.borrow().users {
+                                //                 user_ids.push(user.borrow().id.clone());
+                                //             }
+                                //             let mut data = QueueRoomData {
+                                //                 rid: r.borrow().rid.clone(),
+                                //                 gid: 0,
+                                //                 user_len: r.borrow().users.len().clone() as i16,
+                                //                 user_ids: user_ids,
+                                //                 avg_ng: r.borrow().avg_ng.clone(),
+                                //                 avg_rk: r.borrow().avg_rk.clone(),
+                                //                 avg_at: r.borrow().avg_at.clone(),
+                                //                 ready: 0,
+                                //                 notify: false,
+                                //                 queue_cnt: 1,
+                                //                 mode: r.borrow().mode.clone(),
+                                //             };
+                                //             QueueSender.send(QueueData::UpdateRoom(data));
+                                //         }
+                                //     }
+                                // }
                                 rm_ids.push(*id);
                             },
                             PrestartStatus::Wait => {
@@ -1535,9 +1535,7 @@ pub fn init(
                                                     }
                                                 }
                                                 let _: () = redis_conn.del(format!("gid{}", v))?;
-                                                println!("goto gameover");
                                                 tx2.try_send(RoomEventData::GameOver(gameOverData));
-                                                ;
                                             },
                                             Err(e) => {
 
@@ -1576,14 +1574,14 @@ pub fn init(
                         }else if group.borrow().ready_cnt >= READY_TIME {
                             for team in &group.borrow().teams {
                                 for r in &team.borrow().rooms {
-                                    let res = r.borrow_mut().check_start_get();
-                                    if res == false {
-                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
-                                    } else {
-                                        let mqttmsg = MqttMsg{topic:format!("room/{}/send/start_queue", r.borrow().master.clone()),
-                                            msg: format!(r#"{{"room":"{}", "action": "start queue", "mode":"{}", "id":"{}"}}"#,r.borrow().master.clone(), r.borrow().mode.clone(), r.borrow().master.clone())};
-                                        msgtx.try_send(mqttmsg)?;
-                                    }
+                                    // let res = r.borrow_mut().check_start_get();
+                                    // if res == false {
+                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
+                                    // } else {
+                                    //     let mqttmsg = MqttMsg{topic:format!("room/{}/send/start_queue", r.borrow().master.clone()),
+                                    //         msg: format!(r#"{{"room":"{}", "action": "start queue", "mode":"{}", "id":"{}"}}"#,r.borrow().master.clone(), r.borrow().mode.clone(), r.borrow().master.clone())};
+                                    //     msgtx.try_send(mqttmsg)?;
+                                    // }
                                 }
                             }
                             rm_list.push(id.clone());
@@ -1773,23 +1771,6 @@ pub fn init(
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         if !isBackup || (isBackup && isServerLive == false) {
-                                            let r = TotalRoom.get(&u.borrow().rid);
-                                            let mut is_null = false;
-                                            if let Some(r) = r {
-                                                let m = r.borrow().master.clone();
-                                                r.borrow_mut().rm_user(&x.id);
-                                                if r.borrow().users.len() > 0 {
-                                                    r.borrow().publish_update(&msgtx, m)?;
-                                                }
-                                                else {
-                                                    is_null = true;
-                                                }
-                                            }
-                                            if is_null {
-                                                TotalRoom.remove(&u.borrow().rid);
-                                                QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
-                                            }
-                                            u.borrow_mut().rid = 0;
                                             AbandonGames.insert(x.game.clone(), true);
                                             let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
                                             for player in &x.players {
@@ -1965,11 +1946,14 @@ pub fn init(
                                             msg: format!(r#"{{"msg":"in game"}}"#)};
                                        },
                                        Err(e) => {
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()),
+                                            msg: format!(r#"{{"msg":"out of game"}}"#)};
                                        }
                                     }
                                 },
                                 RoomEventData::LeaveGame(x) => {
                                     let _: () = redis_conn.del(format!("g{}", x.id))?;
+                                    tx2.try_send(RoomEventData::CheckInGame(CheckInGameData{id: x.id}));
                                 },
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
@@ -2328,10 +2312,13 @@ pub fn init(
                                 },
                                 RoomEventData::Create(x) => {
                                     let mut success = false;
-                                    println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
-                                    if !TotalRoom.contains_key(&get_rid_by_id(&x.id, &TotalUsers)) {
+                                    // println!("rid: {}", &get_rid_by_id(&x.id, &TotalUsers));
+                                    while TotalRoom.contains_key(&room_id) {
+                                        room_id += 1
+                                    }
+                                    if !TotalRoom.contains_key(&room_id) {
+                                        println!("rid: {}", &room_id);
                                         // room_id = x.id.parse::<u32>().unwrap();
-                                        room_id += 1;
                                         let mut new_room = RoomData {
                                             rid: room_id,
                                             users: vec![],
@@ -2368,7 +2355,7 @@ pub fn init(
                                 },
                                 RoomEventData::Close(x) => {
                                     let mut success = false;
-                                    if let Some(y) =  TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers)) {
+                                    if let Some(y) = TotalRoom.remove(&get_rid_by_id(&x.id, &TotalUsers)) {
                                         success = true;
                                     }
                                     if success {
@@ -2384,6 +2371,9 @@ pub fn init(
                                     isBackup = false;
                                     for msg in LossSend.clone() {
                                         msgtx.try_send(msg.clone())?;
+                                    }
+                                    for (k, u) in &TotalUsers {
+                                        tx2.try_send(RoomEventData::Logout(UserLogoutData{id: u.borrow().id.clone()}));
                                     }
                                 },
                                 RoomEventData::Control(x) => {
@@ -2438,7 +2428,6 @@ pub fn init(
                         println!("init {:?}", msg);
                         continue;
                         panic!("Error found");
-
                     }
                 }
             }
