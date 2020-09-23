@@ -210,7 +210,7 @@ pub fn QueryBlackList(
     let mut list = Vec::new();
     for row in qres {
         let a = row?.clone();
-        blackid = mysql::from_value(a.get("id").unwrap());
+        blackid = mysql::from_value(a.get("black").unwrap());
         list.push(blackid);
     }
     msgtx.try_send(MqttMsg {
