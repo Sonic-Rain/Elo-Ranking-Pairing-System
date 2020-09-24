@@ -486,12 +486,6 @@ fn user_score(
         ),
     })?;
     println!("Update!");
-    // sender.send(SqlData::UpdateScore(SqlScoreData {
-    //     id: u.borrow().id.clone(),
-    //     ng: u.borrow().ng.clone(),
-    //     rk: u.borrow().rk.clone(),
-    //     at: u.borrow().at.clone(),
-    // }));
     println!("in");
     let sql = format!(
         "UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';",
@@ -502,9 +496,6 @@ fn user_score(
     );
     println!("sql: {}", sql);
     let qres = conn.query(sql.clone())?;
-    //let sql = format!("UPDATE user_ng as a JOIN user as b ON a.id=b.id SET score={} WHERE b.userid='{}';", u.borrow().ng, u.borrow().id);
-    //println!("sql: {}", sql);
-    //let qres = conn.query(sql.clone())?;
     Ok(())
 }
 
@@ -1327,6 +1318,7 @@ pub fn init(
                 at: mysql::from_value(a.get("at").unwrap()),
                 ..Default::default()
             };
+            println!("{:?}", user);
             userid = mysql::from_value(a.get("id").unwrap());
             //println!("userid: {}", userid);
             //ng = mysql::from_value(a.get("ng").unwrap());
@@ -1676,72 +1668,6 @@ pub fn init(
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
                                     settlement_score(&win, &lose, &msgtx, &sender, &mut conn, x.mode);
-                                    // // remove game
-                                    // let g = GameingGroups.remove(&x.game);
-                                    // match g {
-                                    //     Some(g) => {
-                                    //     for u in &g.borrow().user_names {
-                                    //         let u = get_user(&u, &TotalUsers);
-                                    //         match u {
-                                    //             Some(u) => {
-                                    //                 // remove room
-                                    //                 let r = TotalRoom.get(&u.borrow().rid);
-                                    //                 let mut is_null = false;
-                                    //                 if let Some(r) = r {
-                                    //                     r.borrow_mut().rm_user(&u.borrow().id);
-                                    //                     if r.borrow().users.len() == 0 {
-                                    //                         is_null = true;
-                                    //                         //info!("remove success {}", u.borrow().id);
-                                    //                     }
-                                    //                 }
-                                    //                 else {
-                                    //                     //info!("remove fail {}", u.borrow().id);
-                                    //                 }
-                                    //                 if is_null {
-                                    //                     TotalRoom.remove(&u.borrow().rid);
-                                    //                     //QueueRoom.remove(&u.borrow().rid);
-                                    //                 }
-                                    //                 // remove group
-                                    //                 //ReadyGroups.remove(&u.borrow().gid);
-                                    //                 // remove game
-                                    //                 PreStartGroups.remove(&u.borrow().game_id);
-                                    //                 GameingGroups.remove(&u.borrow().game_id);
-
-                                    //                 u.borrow_mut().rid = 0;
-                                    //                 u.borrow_mut().gid = 0;
-                                    //                 u.borrow_mut().game_id = 0;
-                                    //             },
-                                    //             None => {
-                                    //                 error!("remove fail ");
-                                    //             }
-                                    //         }
-                                    //     }
-                                    //     //g.borrow_mut().leave_room();
-                                    //     for u in &g.borrow().user_names {
-                                    //         let u = get_user(&u, &TotalUsers);
-                                    //         match u {
-                                    //             Some(u) => {
-                                    //                 //mqttmsg = MqttMsg{topic:format!("member/{}/res/status", u.borrow().id),
-                                    //                 //    msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)};
-                                    //                 if !isBackup || (isBackup && isServerLive == false) {
-                                    //                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/status", u.borrow().id),
-                                    //                         msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)})?;
-                                    //                     LossSend.push(MqttMsg{topic:format!("member/{}/res/status", u.borrow().id),
-                                    //                         msg: format!(r#"{{"msg":"game_id = {}"}}"#, u.borrow().game_id)});
-                                    //                 }
-                                    //             },
-                                    //             None => {
-
-                                    //             }
-                                    //         }
-                                    //     }
-                                    //     //info!("Remove game_id!");
-                                    //     }
-                                    //     ,
-                                    //     None => {
-                                    //         //info!("remove game fail {}", x.game);
-                                    //     }
-                                    // }
                                 },
                                 RoomEventData::GameInfo(x) => {
                                     //println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -2209,14 +2135,14 @@ pub fn init(
                                         if let Some(u2) = u2 {
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, u2.borrow().ng, u2.borrow().rk)};
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at)};
                                         }
-                                    }
+                                    } 
                                     else {
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} }}"#, x.u.ng, x.u.rk)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} "at":{}}}"#, 1000, 1000, 1000)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {

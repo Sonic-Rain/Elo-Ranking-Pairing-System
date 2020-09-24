@@ -105,6 +105,9 @@ pub fn login(
             id: id.clone(),
             name: name.clone(),
         }));
+        ng = 1000;
+        rk = 1000;
+        at = 1000;
         //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: 1000, rk: 1000, ..Default::default()}}));
     }
 
@@ -128,6 +131,7 @@ pub fn login(
             online: true,
             ng: ng,
             rk: rk,
+            at: at,
             ..Default::default()
         },
         dataid: id,
