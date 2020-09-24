@@ -28,7 +28,7 @@ use crate::msg::*;
 use crate::room::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 2;
+const TEAM_SIZE: i16 = 1;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
@@ -1916,15 +1916,15 @@ pub fn init(
                                 RoomEventData::Jump(x) => {
                                     if TotalUsers.contains_key(&x.id) {
                                         if !AbandonGames.contains_key(&x.game) {
-                                            let mut new_restriced = RestrictedData {
-                                                id: x.id.clone(),
-                                                time: 300,
-                                            };
-                                            let r = Rc::new(RefCell::new(new_restriced));
-                                            RestrictedUsers.insert(
-                                                x.id.clone(),
-                                                Rc::clone(&r),
-                                            );
+                                            // let mut new_restriced = RestrictedData {
+                                            //     id: x.id.clone(),
+                                            //     time: 300,
+                                            // };
+                                            // let r = Rc::new(RefCell::new(new_restriced));
+                                            // RestrictedUsers.insert(
+                                            //     x.id.clone(),
+                                            //     Rc::clone(&r),
+                                            // );
                                             AbandonGames.insert(x.game, true);
                                         }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.id.clone()),

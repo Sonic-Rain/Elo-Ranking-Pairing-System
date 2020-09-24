@@ -287,7 +287,7 @@ impl FightGroup {
     pub fn check_prestart(&self) -> PrestartStatus {
         let mut res = PrestartStatus::Ready;
         for c in &self.checks {
-            println!("check: '{:?}'", c);
+            // println!("check: '{:?}'", c);
             if c.check < 0 {
                 return PrestartStatus::Cancel;
             } else if c.check != 1 {
