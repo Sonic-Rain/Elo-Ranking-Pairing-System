@@ -1477,18 +1477,21 @@ pub fn init(
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
                     for (id, u) in &mut InGameUsers {
+                        println!("in game id : {}", id);
                         let inGame: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("g{}",id.clone()));
                         match inGame {
-                           Ok(v) => {
+                           Ok(game_id) => {
+                               println!("game_id : {}", game_id);
                                 let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",id.clone()));
                                 match isGameOver {
-                                    Ok(v2) => {
-                                        let gameInfo: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("gid{}",v));
+                                    Ok(res) => {
+                                        println!("res : {}", res);
+                                        let gameInfo: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("gid{}",game_id));
                                         match gameInfo {
-                                            Ok(v3) => {
-                                                println!("gid{} : {}",v ,v3);
-                                                println!("r : {}", v2);
-                                                let data: StartGameData = serde_json::from_str(&String::from(v3))?;
+                                            Ok(game_info) => {
+                                                println!("gid{} : {}", game_id, game_info);
+                                                println!("r : {}", res);
+                                                let data: StartGameData = serde_json::from_str(&String::from(game_info))?;
                                                 let mut gameOverData = GameOverData{
                                                     game: data.game,
                                                     mode: data.mode,
@@ -1496,37 +1499,41 @@ pub fn init(
                                                     lose: Vec::new()
                                                 };
                                                 let mut i = 0;
-                                                if v2 == "W" {
+                                                if res == "W" {
                                                    for player_id in data.players.clone() {
-                                                        let _: () = redis_conn.del(format!("g{}", player_id))?;
-                                                        let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
-                                                            msg: format!(r#"{{"msg":"game over"}}"#)};
-                                                        msgtx.try_send(mqttmsg);
-                                                        inGameRm_list.push(player_id.clone());
-                                                        if i < 5 {
-                                                            gameOverData.win.push(player_id);
-                                                        } else {
-                                                            gameOverData.lose.push(player_id);
+                                                        if player_id.len() > 0 {
+                                                            let _: () = redis_conn.del(format!("g{}", player_id))?;
+                                                            let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
+                                                                msg: format!(r#"{{"msg":"game over"}}"#)};
+                                                            msgtx.try_send(mqttmsg);
+                                                            inGameRm_list.push(player_id.clone());
+                                                            if i < 5 {
+                                                                gameOverData.win.push(player_id);
+                                                            } else {
+                                                                gameOverData.lose.push(player_id);
+                                                            }
+                                                            i += 1;
                                                         }
-                                                        i += 1;
                                                    }
                                                 }
-                                                if v2 == "L" {
+                                                if res == "L" {
                                                     for player_id in data.players {
-                                                         let _: () = redis_conn.del(format!("g{}", player_id))?;
-                                                         let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
-                                                            msg: format!(r#"{{"msg":"game over"}}"#)};
-                                                         msgtx.try_send(mqttmsg);
-                                                         inGameRm_list.push(player_id.clone());
-                                                         if i < 5 {
-                                                            gameOverData.lose.push(player_id);
-                                                         } else {
-                                                            gameOverData.win.push(player_id);
-                                                         }
-                                                         i += 1;
+                                                         if player_id.len() > 0 {
+                                                            let _: () = redis_conn.del(format!("g{}", player_id))?;
+                                                            let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
+                                                                msg: format!(r#"{{"msg":"game over"}}"#)};
+                                                            msgtx.try_send(mqttmsg);
+                                                            inGameRm_list.push(player_id.clone());
+                                                            if i < 5 {
+                                                                gameOverData.lose.push(player_id);
+                                                            } else {
+                                                                gameOverData.win.push(player_id);
+                                                            }
+                                                            i += 1;
+                                                        }
                                                     }
                                                 }
-                                                let _: () = redis_conn.del(format!("gid{}", v))?;
+                                                let _: () = redis_conn.del(format!("gid{}", game_id))?;
                                                 tx2.try_send(RoomEventData::GameOver(gameOverData));
                                             },
                                             Err(e) => {
@@ -1841,18 +1848,6 @@ pub fn init(
                                 },
                                 RoomEventData::Jump(x) => {
                                     if TotalUsers.contains_key(&x.id) {
-                                        if !AbandonGames.contains_key(&x.game) {
-                                            // let mut new_restriced = RestrictedData {
-                                            //     id: x.id.clone(),
-                                            //     time: 300,
-                                            // };
-                                            // let r = Rc::new(RefCell::new(new_restriced));
-                                            // RestrictedUsers.insert(
-                                            //     x.id.clone(),
-                                            //     Rc::clone(&r),
-                                            // );
-                                            AbandonGames.insert(x.game, true);
-                                        }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.id.clone()),
                                             msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
