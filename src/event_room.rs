@@ -2114,7 +2114,7 @@ pub fn init(
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{} "at":{}}}"#, 1000, 1000, 1000)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#, 1000, 1000, 1000)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {
