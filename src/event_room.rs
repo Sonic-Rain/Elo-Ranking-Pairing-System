@@ -1494,6 +1494,7 @@ pub fn init(
                                             win: Vec::new(),
                                             lose: Vec::new()
                                         };
+                                        let mut find_res = false;
                                         for player_id in data.players.clone() {
                                             if player_id.len() > 0 {
                                                 let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",player_id.clone()));
@@ -1509,6 +1510,7 @@ pub fn init(
                                                         let _: () = redis_conn.del(format!("g{}", player_id.clone()))?;
                                                         let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
                                                             msg: format!(r#"{{"msg":"game over"}}"#)};
+                                                        find_res = true;
                                                     },
                                                     Err(e) => {
                 
@@ -1516,8 +1518,10 @@ pub fn init(
                                                 }
                                             }
                                         }
-                                        let _: () = redis_conn.del(format!("gid{}", game_id))?;
-                                        tx2.try_send(RoomEventData::GameOver(gameOverData));
+                                        if (find_res) {
+                                            let _: () = redis_conn.del(format!("gid{}", game_id))?;
+                                            tx2.try_send(RoomEventData::GameOver(gameOverData));
+                                        }
                                     },
                                     Err(e) => {
 
