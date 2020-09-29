@@ -479,10 +479,11 @@ fn user_score(
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/login", u.borrow().id),
         msg: format!(
-            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#,
+            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#,
             u.borrow().ng,
             u.borrow().rk,
-            u.borrow().at
+            u.borrow().at,
+            u.borrow().hero,
         ),
     })?;
     println!("Update!");
@@ -2112,7 +2113,7 @@ pub fn init(
                                         if let Some(u2) = u2 {
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at)};
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().hero)};
                                         }
                                     } 
                                     else {
