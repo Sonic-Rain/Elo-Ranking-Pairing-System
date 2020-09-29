@@ -28,7 +28,7 @@ use crate::msg::*;
 use crate::room::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 1;
+const TEAM_SIZE: i16 = 2;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
@@ -488,13 +488,13 @@ fn user_score(
     println!("Update!");
     println!("in");
     let sql = format!(
-        "UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';",
+        "UPDATE user SET ng={}, rk={}, at={}, hero=(SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1) WHERE id='{}';",
         u.borrow().ng.clone(),
         u.borrow().rk.clone(),
         u.borrow().at.clone(),
+        u.borrow().id.clone(),
         u.borrow().id.clone()
     );
-    println!("sql: {}", sql);
     let qres = conn.query(sql.clone())?;
     Ok(())
 }
@@ -578,7 +578,7 @@ fn settlement_score(
         win_score = get_at(win);
         lose_score = get_at(lose);
     }
-    println!("win : {:?}, lose : {:?}", win_score, lose_score);
+    // println!("win : {:?}, lose : {:?}", win_score, lose_score);
     let elo = EloRank { k: 20.0 };
     let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
     println!("Game Over");
@@ -1301,7 +1301,7 @@ pub fn init(
         let mut rkState = "open";
         let mut atState = "open";
 
-        let sql = format!(r#"select id, ng, rk, at, name from user;"#);
+        let sql = format!(r#"select id, ng, rk, at, name, hero from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
@@ -1313,6 +1313,7 @@ pub fn init(
             let user = User {
                 id: mysql::from_value(a.get("id").unwrap()),
                 name: mysql::from_value(a.get("name").unwrap()),
+                hero: mysql::from_value(a.get("hero").unwrap()),
                 ng: mysql::from_value(a.get("ng").unwrap()),
                 rk: mysql::from_value(a.get("rk").unwrap()),
                 at: mysql::from_value(a.get("at").unwrap()),
@@ -2118,7 +2119,7 @@ pub fn init(
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#, 1000, 1000, 1000)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#, 1200, 1200, 1200)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {

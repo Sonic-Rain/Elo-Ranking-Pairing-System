@@ -97,7 +97,7 @@ pub fn login(
     //查無此人 建立表
     if count == 0 {
         let mut sql = format!(
-            "replace into user (id, name, status, hero) values ('{}', '{}', 'online', '');",
+            "replace into user (id, name, status, hero) values ('{}', '{}', 'online', 'A01');",
             id, data.id
         );
         conn.query(sql.clone())?;
@@ -105,9 +105,9 @@ pub fn login(
             id: id.clone(),
             name: name.clone(),
         }));
-        ng = 1000;
-        rk = 1000;
-        at = 1000;
+        ng = 1200;
+        rk = 1200;
+        at = 1200;
         //sender.send(RoomEventData::Login(UserLoginData {u: User { id: id.clone(), hero: name.clone(), online: true, ng: 1000, rk: 1000, ..Default::default()}}));
     }
 
