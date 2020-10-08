@@ -1795,7 +1795,7 @@ pub fn init(
                                                         let m = r.borrow().master.clone();
                                                         r.borrow().publish_update(&msgtx, m)?;
                                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
-                                                            msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)};
+                                                            msg: format!(r#"{{"room":"{}","mode":"{}","msg":"ok"}}"#, r.borrow().master, r.borrow().mode)};
                                                         sendok = true;
                                                         // let rid = x.room.parse::<u32>().unwrap();
                                                         let rid = u.borrow().rid;
@@ -1806,7 +1806,7 @@ pub fn init(
                                                     let m = r.borrow().master.clone();
                                                     r.borrow().publish_update(&msgtx, m)?;
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
-                                                        msg: format!(r#"{{"room":"{}","msg":"ok"}}"#, r.borrow().master)};
+                                                        msg: format!(r#"{{"room":"{}","mode":"{}","msg":"ok"}}"#, r.borrow().master, r.borrow().mode)};
                                                     sendok = true;
                                                     // let rid = x.room.parse::<u32>().unwrap();
                                                     let rid = u.borrow().rid;
@@ -2120,7 +2120,7 @@ pub fn init(
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}}}"#, 1200, 1200, 1200)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"A01"}}"#, 1200, 1200, 1200)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {
