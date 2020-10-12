@@ -1,6 +1,6 @@
-<mxfile host="6b9058c6-6e83-4713-91aa-fb949c347283" modified="2020-10-02T07:50:08.380Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.49.2 Chrome/83.0.4103.122 Electron/9.2.1 Safari/537.36" etag="SusOV4zrwCKic5Hakobl" version="13.1.3">
+<mxfile host="65bd71144e" modified="2020-10-12T09:40:44.836Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.49.0 Chrome/83.0.4103.122 Electron/9.2.1 Safari/537.36" etag="P6w67sI2A_2TSrN-salN" version="13.6.5">
     <diagram id="6hGFLwfOUW9BJ-s0fimq" name="Page-1">
-        <mxGraphModel dx="-67" dy="1645" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="53" dy="515" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -148,89 +148,341 @@
                 <mxCell id="39" value="{&quot;msg&quot;:&quot;fail&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
                     <mxGeometry x="1680" y="380" width="200" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="40" value="Client 1" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                <mxCell id="40" value="Client 1" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="2100" y="40" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="41" value="Server" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                <mxCell id="41" value="Server" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="2420" y="40" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="42" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="40">
+                <mxCell id="42" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" target="40" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
-                        <mxPoint x="2160" y="440" as="sourcePoint"/>
+                        <mxPoint x="2160" y="960" as="sourcePoint"/>
                         <mxPoint x="2480" y="180" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="43" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="41">
+                <mxCell id="43" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" target="41" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
-                        <mxPoint x="2480" y="450" as="sourcePoint"/>
+                        <mxPoint x="2480" y="960" as="sourcePoint"/>
                         <mxPoint x="2480" y="180" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="44" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                <mxCell id="44" value="" style="endArrow=classic;html=1;" parent="1" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
                         <mxPoint x="2160" y="160" as="sourcePoint"/>
                         <mxPoint x="2480" y="160" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="45" value="room/&amp;lt;Client ID&amp;gt;/send/cancel_queue" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                <mxCell id="45" value="room/&amp;lt;Client ID&amp;gt;/send/invite" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="2195" y="140" width="250" height="20" as="geometry"/>
                 </mxCell>
-                <mxCell id="46" value="{&quot;id&quot;:&quot;damody&quot;,&lt;br&gt;&quot;room&quot;:damody&quot;,&lt;br&gt;&quot;action&quot;:&quot;cancel queue&quot;&lt;br&gt;&quot;mode&quot;:&quot;ng&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
-                    <mxGeometry x="2220" y="170" width="200" height="120" as="geometry"/>
+                <mxCell id="46" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;invite&quot;:&quot;victor&quot;,&lt;br&gt;&quot;from&quot;:&quot;damody&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
+                    <mxGeometry x="2220" y="170" width="200" height="80" as="geometry"/>
                 </mxCell>
-                <mxCell id="47" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                <mxCell id="47" value="" style="endArrow=classic;html=1;" parent="1" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
                         <mxPoint x="2480" y="330" as="sourcePoint"/>
-                        <mxPoint x="2160" y="330" as="targetPoint"/>
+                        <mxPoint x="2720" y="330" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="48" value="room/&amp;lt;Client ID&amp;gt;/res/cancel_queue" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
-                    <mxGeometry x="2195" y="310" width="250" height="20" as="geometry"/>
+                <mxCell id="49" value="{&quot;room&quot;:&quot;damody&quot;, &lt;br&gt;&quot;from&quot;: &quot;damody&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
+                    <mxGeometry x="2510" y="350" width="200" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="49" value="{&quot;msg&quot;:&quot;ok&quot;, &quot;mode&quot;: &quot;ng&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
-                    <mxGeometry x="2220" y="340" width="200" height="30" as="geometry"/>
-                </mxCell>
-                <mxCell id="50" value="cancel queue" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                <mxCell id="50" value="invite" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="2260" y="20" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="51" value="{&quot;msg&quot;:&quot;fail&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
-                    <mxGeometry x="2220" y="380" width="200" height="30" as="geometry"/>
-                </mxCell>
-                <mxCell id="52" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                <mxCell id="52" value="" style="endArrow=classic;html=1;" parent="1" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
                         <mxPoint x="1940" y="460" as="sourcePoint"/>
                         <mxPoint x="1620" y="460" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="53" value="room/&amp;lt;Client ID&amp;gt;/res/ready" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                <mxCell id="53" value="room/&amp;lt;Client ID&amp;gt;/res/ready" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="1655" y="440" width="250" height="20" as="geometry"/>
                 </mxCell>
-                <mxCell id="54" value="{&quot;msg&quot;:&quot;ready&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                <mxCell id="54" value="{&quot;msg&quot;:&quot;ready&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
                     <mxGeometry x="1680" y="470" width="200" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="55" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                <mxCell id="55" value="" style="endArrow=classic;html=1;" parent="1" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
                         <mxPoint x="1620" y="540" as="sourcePoint"/>
                         <mxPoint x="1940" y="540" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="56" value="room/&amp;lt;Client ID&amp;gt;/send/start_get" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                <mxCell id="56" value="room/&amp;lt;Client ID&amp;gt;/send/start_get" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="1655" y="520" width="250" height="20" as="geometry"/>
                 </mxCell>
-                <mxCell id="57" value="{&quot;id&quot;:&quot;damody&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                <mxCell id="57" value="{&quot;id&quot;:&quot;damody&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
                     <mxGeometry x="1680" y="550" width="200" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="58" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                <mxCell id="58" value="" style="endArrow=classic;html=1;" parent="1" edge="1">
                     <mxGeometry width="50" height="50" relative="1" as="geometry">
                         <mxPoint x="1940" y="620" as="sourcePoint"/>
                         <mxPoint x="1620" y="620" as="targetPoint"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="59" value="room/&amp;lt;Client ID&amp;gt;/res/start_get" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                <mxCell id="59" value="room/&amp;lt;Client ID&amp;gt;/res/start_get" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
                     <mxGeometry x="1655" y="600" width="250" height="20" as="geometry"/>
                 </mxCell>
-                <mxCell id="60" value="&lt;div&gt;{&quot;msg&quot;:&quot;start&quot;, &quot;room&quot;:&quot;damody&quot;,&amp;nbsp;&lt;span&gt;&amp;nbsp;&quot;game&quot;:&quot;3&quot;, &quot;players&quot;:[&quot;damody&quot;,&quot;user1&quot;]}&lt;/span&gt;&lt;/div&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                <mxCell id="60" value="&lt;div&gt;{&quot;msg&quot;:&quot;start&quot;, &quot;room&quot;:&quot;damody&quot;,&amp;nbsp;&lt;span&gt;&amp;nbsp;&quot;game&quot;:&quot;3&quot;, &quot;players&quot;:[&quot;damody&quot;,&quot;user1&quot;]}&lt;/span&gt;&lt;/div&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" parent="1" vertex="1">
                     <mxGeometry x="1680" y="630" width="200" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="61" value="Client 1" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="1560" y="780" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="62" value="Server" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="1880" y="780" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="63" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="61">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1620" y="1160" as="sourcePoint"/>
+                        <mxPoint x="1940" y="920" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="64" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="62">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1940" y="1160" as="sourcePoint"/>
+                        <mxPoint x="1940" y="920" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="65" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1620" y="900" as="sourcePoint"/>
+                        <mxPoint x="1940" y="900" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="66" value="room/&amp;lt;Client ID&amp;gt;/send/cancel_queue" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="1655" y="880" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="67" value="{&quot;id&quot;:&quot;damody&quot;,&lt;br&gt;&quot;room&quot;:damody&quot;,&lt;br&gt;&quot;action&quot;:&quot;cancel queue&quot;&lt;br&gt;&quot;mode&quot;:&quot;ng&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="1680" y="910" width="200" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="68" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="1940" y="1070" as="sourcePoint"/>
+                        <mxPoint x="1620" y="1070" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="69" value="room/&amp;lt;Client ID&amp;gt;/res/cancel_queue" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="1655" y="1050" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="70" value="{&quot;msg&quot;:&quot;ok&quot;, &quot;mode&quot;: &quot;ng&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="1680" y="1080" width="200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="71" value="cancel queue" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="1720" y="760" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="72" value="{&quot;msg&quot;:&quot;fail&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="1680" y="1120" width="200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="73" value="Client 2" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="2660" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="74" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="73">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2720" y="960" as="sourcePoint"/>
+                        <mxPoint x="3040" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="75" value="room/&amp;lt;Client ID&amp;gt;/res/invite" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="2470" y="310" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="76" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2720" y="445" as="sourcePoint"/>
+                        <mxPoint x="2480" y="445" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="77" value="room/&amp;lt;Client ID&amp;gt;/send/join" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="2480" y="420" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="78" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;join&quot;:&quot;victor&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="2505" y="460" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="81" value="room/&amp;lt;Client ID&amp;gt;/send/invite" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="2470" y="565" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="82" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;mode&quot;:&quot;ng&quot;,&lt;br&gt;&quot;msg&quot;:&quot;ok&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="2505" y="600" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="83" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2480" y="590" as="sourcePoint"/>
+                        <mxPoint x="2720" y="590" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="84" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;msg&quot;:&quot;rejected&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="2505" y="690" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="85" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;msg&quot;:&quot;full&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="2505" y="740" width="200" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="86" value="room/&amp;lt;Client ID&amp;gt;/send/update" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="2185" y="830" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="87" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;team&quot;:[&quot;damody&quot;,&quot;victor&quot;]}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="2210" y="860" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="88" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2480" y="850" as="sourcePoint"/>
+                        <mxPoint x="2720" y="850" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="89" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2480" y="850" as="sourcePoint"/>
+                        <mxPoint x="2160" y="850" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="90" value="Client 1" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="2895" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="91" value="Server" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="3215" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="92" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="90">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2955" y="720" as="sourcePoint"/>
+                        <mxPoint x="3275" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="93" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="91">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3275" y="720" as="sourcePoint"/>
+                        <mxPoint x="3275" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="94" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="2955" y="160" as="sourcePoint"/>
+                        <mxPoint x="3275" y="160" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="95" value="room/&amp;lt;Client ID&amp;gt;/send/invite" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="2990" y="140" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="96" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;invite&quot;:&quot;victor&quot;,&lt;br&gt;&quot;from&quot;:&quot;damody&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3015" y="170" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="97" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3275" y="330" as="sourcePoint"/>
+                        <mxPoint x="3515" y="330" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="98" value="{&quot;room&quot;:&quot;damody&quot;, &lt;br&gt;&quot;from&quot;: &quot;damody&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3305" y="350" width="200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="99" value="reject" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="3055" y="20" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="100" value="Client 2" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="3455" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="101" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="100">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3515" y="720" as="sourcePoint"/>
+                        <mxPoint x="3835" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="102" value="room/&amp;lt;Client ID&amp;gt;/res/invite" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="3265" y="310" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="103" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3515" y="445" as="sourcePoint"/>
+                        <mxPoint x="3275" y="445" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="104" value="room/&amp;lt;Client ID&amp;gt;/send/reject" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="3275" y="420" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="105" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;id&quot;:&quot;victor&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3300" y="460" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="106" value="room/&amp;lt;Client ID&amp;gt;/send/reject" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="2990" y="565" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="107" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;id&quot;:&quot;victor&quot;,&lt;br&gt;&quot;msg&quot;:&quot;reject&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3015" y="610" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="108" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3275" y="590" as="sourcePoint"/>
+                        <mxPoint x="2960" y="590" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="115" value="Client 1" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="3670" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="116" value="Server" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="3990" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="117" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="115">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3730" y="600" as="sourcePoint"/>
+                        <mxPoint x="4050" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="118" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="116">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="4050" y="600" as="sourcePoint"/>
+                        <mxPoint x="4050" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="119" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="3730" y="160" as="sourcePoint"/>
+                        <mxPoint x="4050" y="160" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="120" value="room/&amp;lt;Client ID&amp;gt;/send/leave" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="3765" y="140" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="121" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;id&quot;:&quot;victor&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3790" y="170" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="122" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="4050" y="330" as="sourcePoint"/>
+                        <mxPoint x="3730" y="330" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="123" value="{&quot;id&quot;:&quot;victor&quot;, &lt;br&gt;&quot;msg&quot;: &quot;room leave&quot;}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3790" y="340" width="200" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="124" value="leave" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="3830" y="20" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="125" value="Client 2" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="4230" y="40" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="126" value="" style="endArrow=none;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="125">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="4290" y="600" as="sourcePoint"/>
+                        <mxPoint x="4610" y="180" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="127" value="room/&amp;lt;Client ID&amp;gt;/res/invite" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="3765" y="310" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="136" value="room/&amp;lt;Client ID&amp;gt;/send/update" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="3755" y="420" width="250" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="137" value="{&quot;room&quot;:&quot;damody&quot;,&lt;br&gt;&quot;team&quot;:[&quot;damody&quot;,&quot;victor&quot;]}" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;" vertex="1" parent="1">
+                    <mxGeometry x="3780" y="450" width="200" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="138" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="4050" y="440" as="sourcePoint"/>
+                        <mxPoint x="4290" y="440" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="139" value="" style="endArrow=classic;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint x="4050" y="440" as="sourcePoint"/>
+                        <mxPoint x="3730" y="440" as="targetPoint"/>
+                    </mxGeometry>
                 </mxCell>
             </root>
         </mxGraphModel>
