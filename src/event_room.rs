@@ -1755,6 +1755,8 @@ pub fn init(
                                     if let Some(u) = u {
                                         u.borrow_mut().hero = x.hero;
                                         let _ : () = redis_conn.set(format!("b{}", u.borrow().id.clone()), u.borrow().hero.clone())?;
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/ban_hero", u.borrow().id),
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
                                     }
                                 },
                                 RoomEventData::NGGameChooseHero(x) => {

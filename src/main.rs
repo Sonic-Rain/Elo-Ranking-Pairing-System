@@ -105,19 +105,19 @@ fn main() -> std::result::Result<(), Error> {
     
     // Server message
     mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
-    mqtt_client.subscribe("server/send/control", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("server/send/control", QoS::AtMostOnce)?;//doc server.drawio
+    mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;//doc server.drawio
     // Client message
-    mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/ng_choose_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;//doc login.drawio
+    mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;//doc login.drwio
+    mqtt_client.subscribe("member/+/send/ng_choose_hero", QoS::AtMostOnce)?;//doc choose_hero
     mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;//doc choose_hero
+    mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;//doc choose_hero
     mqtt_client.subscribe("member/+/send/jump", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;
