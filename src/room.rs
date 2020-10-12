@@ -13,9 +13,9 @@ pub struct User {
     pub ng: i16,
     pub rk: i16,
     pub at: i16,
-    pub rid: u32,
-    pub gid: u32,
-    pub game_id: u32,
+    pub rid: u64,
+    pub gid: u64,
+    pub game_id: u64,
     pub online: bool,
     pub start_prestart: bool,
     pub start_get: bool,
@@ -23,7 +23,7 @@ pub struct User {
 
 #[derive(Clone, Debug)]
 pub struct RoomData {
-    pub rid: u32,
+    pub rid: u64,
     pub users: Vec<Rc<RefCell<User>>>,
     pub master: String,
     pub last_master: String,
@@ -160,7 +160,7 @@ pub struct FightGroup {
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub checks: Vec<FightCheck>,
-    pub rids: Vec<u32>,
+    pub rids: Vec<u64>,
     pub game_status: u16,
     pub queue_cnt: i16,
 }
@@ -250,7 +250,7 @@ impl FightGroup {
         self.update_avg();
     }
 
-    pub fn rm_room_by_rid(&mut self, id: u32) {
+    pub fn rm_room_by_rid(&mut self, id: u64) {
         let mut i = 0;
         self.rids.retain(|&x| x != id);
         self.rooms.retain(|x| x.borrow().rid != id);
@@ -264,7 +264,7 @@ impl FightGroup {
         }
     }
 
-    pub fn set_group_id(&mut self, gid: u32) {
+    pub fn set_group_id(&mut self, gid: u64) {
         for room in &self.rooms {
             room.borrow_mut().ready = 1;
             for u in &room.borrow_mut().users {
@@ -304,7 +304,7 @@ pub struct FightGame {
     pub teams: Vec<Rc<RefCell<FightGroup>>>,
     pub room_names: Vec<String>,
     pub user_names: Vec<String>,
-    pub game_id: u32,
+    pub game_id: u64,
     pub user_count: u16,
     pub winteam: i16,
     pub game_status: u16,
@@ -363,7 +363,7 @@ impl FightGame {
         res
     }
 
-    pub fn set_game_id(&mut self, gid: u32) {
+    pub fn set_game_id(&mut self, gid: u64) {
         for t in &mut self.teams {
             for room in &mut t.borrow_mut().rooms {
                 room.borrow_mut().ready = 1;

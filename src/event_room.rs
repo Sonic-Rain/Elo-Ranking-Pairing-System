@@ -69,7 +69,7 @@ pub struct RejectRoomData {
 pub struct JumpData {
     pub id: String,
     pub msg: String,
-    pub game: u32,
+    pub game: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -135,7 +135,7 @@ pub struct CancelQueueData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PreGameData {
-    pub rid: Vec<Vec<u32>>,
+    pub rid: Vec<Vec<u64>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -159,7 +159,7 @@ pub struct LeaveData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct StartGameData {
-    pub game: u32,
+    pub game: u64,
     pub id: String,
     pub mode: String,
     pub players: Vec<String>,
@@ -167,7 +167,7 @@ pub struct StartGameData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct StartGameSendData {
-    pub game: u32,
+    pub game: u64,
     pub member: Vec<HeroCell>,
 }
 
@@ -183,7 +183,7 @@ pub struct HeroCell {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct GameOverData {
-    pub game: u32,
+    pub game: u64,
     pub mode: String,
     pub win: Vec<String>,
     pub lose: Vec<String>,
@@ -191,7 +191,7 @@ pub struct GameOverData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct GameCloseData {
-    pub game: u32,
+    pub game: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -211,7 +211,7 @@ pub struct DeadData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct GameInfoData {
-    pub game: u32,
+    pub game: u64,
     pub users: Vec<UserInfoData>,
 }
 
@@ -241,7 +241,7 @@ pub struct UserGift {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ToGameGroup {
-    pub rids: Vec<u32>,
+    pub rids: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -267,7 +267,7 @@ pub enum RoomEventData {
     ChooseNGHero(UserNGHeroData),
     BanHero(UserNGHeroData),
     LockedNGHero(UserNGHeroData),
-    NGGameChooseHero(BTreeMap<u32, Vec<u32>>),
+    NGGameChooseHero(BTreeMap<u64, Vec<u64>>),
     Join(JoinRoomData),
     Reject(RejectRoomData),
     Jump(JumpData),
@@ -308,7 +308,7 @@ pub struct SqlScoreData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SqlGameInfoData {
-    pub game: u32,
+    pub game: u64,
     pub id: String,
     pub hero: String,
     pub level: u16,
@@ -330,8 +330,8 @@ pub enum SqlData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct QueueRoomData {
-    pub rid: u32,
-    pub gid: u32,
+    pub rid: u64,
+    pub gid: u64,
     pub user_len: i16,
     pub user_ids: Vec<String>,
     pub avg_ng: i16,
@@ -345,8 +345,8 @@ pub struct QueueRoomData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ReadyGroupData {
-    pub gid: u32,
-    pub rid: Vec<u32>,
+    pub gid: u64,
+    pub rid: Vec<u64>,
     pub user_len: i16,
     pub user_ids: Vec<String>,
     pub avg_ng: i16,
@@ -358,14 +358,14 @@ pub struct ReadyGroupData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ReadyGameData {
-    pub gid: Vec<u32>,
-    pub group: Vec<Vec<u32>>,
+    pub gid: Vec<u64>,
+    pub group: Vec<Vec<u64>>,
     pub team_len: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct RemoveRoomData {
-    pub rid: u32,
+    pub rid: u64,
 }
 
 pub enum QueueData {
@@ -411,7 +411,7 @@ fn SendGameList(
     Ok(())
 }
 
-fn get_rid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u32 {
+fn get_rid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u64 {
     let u = users.get(id);
     if let Some(u) = u {
         return u.borrow().rid;
@@ -419,7 +419,7 @@ fn get_rid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u3
     return 0;
 }
 
-fn get_gid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u32 {
+fn get_gid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u64 {
     let u = users.get(id);
     if let Some(u) = u {
         return u.borrow().gid;
@@ -427,7 +427,7 @@ fn get_gid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u3
     return 0;
 }
 
-fn get_game_id_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u32 {
+fn get_game_id_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u64 {
     let u = users.get(id);
     if let Some(u) = u {
         return u.borrow().game_id;
@@ -714,14 +714,14 @@ pub fn HandleQueueRequest(
     let update = tick(Duration::from_millis(1000));
 
     thread::spawn(move || -> Result<(), Error> {
-        let mut NGQueueRoom: BTreeMap<u32, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
-        let mut RKQueueRoom: BTreeMap<u32, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
-        let mut ATQueueRoom: BTreeMap<u32, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
-        let mut NGReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
-        let mut RKReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
-        let mut ATReadyGroups: BTreeMap<u32, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
+        let mut NGQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut RKQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut ATQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut NGReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
+        let mut RKReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
+        let mut ATReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut conn = pool.get_conn()?;
-        let mut group_id = 0;
+        let mut group_id: u64 = 0;
         let mut ngState = "open";
         let mut rkState = "open";
         let mut atState = "open";
@@ -734,7 +734,7 @@ pub fn HandleQueueRequest(
                         if NGQueueRoom.len() >= MATCH_SIZE {
                             let mut g: ReadyGroupData = Default::default();
                             let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                            let mut id: Vec<u32> = vec![];
+                            let mut id: Vec<u64> = vec![];
                             let mut new_now = Instant::now();
                             tq = NGQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
                             //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
@@ -822,7 +822,7 @@ pub fn HandleQueueRequest(
                             let mut fg: ReadyGameData = Default::default();
                             let mut prestart = false;
                             let mut total_ng: i16 = 0;
-                            let mut rm_ids: Vec<u32> = vec![];
+                            let mut rm_ids: Vec<u64> = vec![];
                             println!("NGReadyGroup!! {}", NGReadyGroups.len());
                             let mut new_now2 = Instant::now();
                             for (id, rg) in &mut NGReadyGroups {
@@ -874,7 +874,7 @@ pub fn HandleQueueRequest(
                         if RKQueueRoom.len() >= MATCH_SIZE {
                             let mut g: ReadyGroupData = Default::default();
                             let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                            let mut id: Vec<u32> = vec![];
+                            let mut id: Vec<u64> = vec![];
                             let mut new_now = Instant::now();
                             tq = RKQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
                             //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
@@ -963,7 +963,7 @@ pub fn HandleQueueRequest(
                             let mut fg: ReadyGameData = Default::default();
                             let mut prestart = false;
                             let mut total_rk: i16 = 0;
-                            let mut rm_ids: Vec<u32> = vec![];
+                            let mut rm_ids: Vec<u64> = vec![];
                             println!("RKReadyGroup!! {}", RKReadyGroups.len());
                             let mut new_now2 = Instant::now();
                             for (id, rg) in &mut RKReadyGroups {
@@ -1015,7 +1015,7 @@ pub fn HandleQueueRequest(
                         if ATQueueRoom.len() >= MATCH_SIZE {
                             let mut g: ReadyGroupData = Default::default();
                             let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
-                            let mut id: Vec<u32> = vec![];
+                            let mut id: Vec<u64> = vec![];
                             let mut new_now = Instant::now();
                             tq = ATQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
                             //println!("Collect Time: {:?}",Instant::now().duration_since(new_now));
@@ -1093,7 +1093,7 @@ pub fn HandleQueueRequest(
                             let mut fg: ReadyGameData = Default::default();
                             let mut prestart = false;
                             let mut total_at: i16 = 0;
-                            let mut rm_ids: Vec<u32> = vec![];
+                            let mut rm_ids: Vec<u64> = vec![];
                             println!("ATReadyGroup!! {}", ATReadyGroups.len());
                             let mut new_now2 = Instant::now();
                             for (id, rg) in &mut ATReadyGroups {
@@ -1284,19 +1284,19 @@ pub fn init(
         let mut redis_conn = redis_client.get_connection()?;
         let mut isServerLive = true;
         let mut isBackup = isBackup.clone();
-        let mut TotalRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
-        //let mut QueueRoom: BTreeMap<u32, Rc<RefCell<RoomData>>> = BTreeMap::new();
-        let mut ReadyGroups: BTreeMap<u32, Rc<RefCell<FightGroup>>> = BTreeMap::new();
-        let mut PreStartGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
-        let mut GameingGroups: BTreeMap<u32, Rc<RefCell<FightGame>>> = BTreeMap::new();
+        let mut TotalRoom: BTreeMap<u64, Rc<RefCell<RoomData>>> = BTreeMap::new();
+        //let mut QueueRoom: BTreeMap<u64, Rc<RefCell<RoomData>>> = BTreeMap::new();
+        let mut ReadyGroups: BTreeMap<u64, Rc<RefCell<FightGroup>>> = BTreeMap::new();
+        let mut PreStartGroups: BTreeMap<u64, Rc<RefCell<FightGame>>> = BTreeMap::new();
+        let mut GameingGroups: BTreeMap<u64, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut RestrictedUsers: BTreeMap<String, Rc<RefCell<RestrictedData>>> = BTreeMap::new();
         let mut InGameUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
-        let mut AbandonGames: BTreeMap<u32, bool> = BTreeMap::new();
-        let mut room_id: u32 = 1;
-        let mut group_id: u32 = 0;
-        let mut game_id: u32 = 0;
+        let mut AbandonGames: BTreeMap<u64, bool> = BTreeMap::new();
+        let mut room_id: u64 = 1;
+        let mut group_id: u64 = 0;
+        let mut game_id: u64 = 0;
         let mut game_port: u16 = 7777;
         let mut ngState = "open";
         let mut rkState = "open";
@@ -1343,7 +1343,7 @@ pub fn init(
                 recv(update200ms) -> _ => {
                     //show(start.elapsed());
                     // update prestart groups
-                    let mut rm_ids: Vec<u32> = vec![];
+                    let mut rm_ids: Vec<u64> = vec![];
                     let mut start_cnt: u16 = 0;
                     for (id, group) in &mut PreStartGroups {
                         //if start_cnt >= 10 {
@@ -1404,7 +1404,7 @@ pub fn init(
                                 group.borrow_mut().update_names();
                                 group.borrow_mut().clear_queue();
                                 group.borrow_mut().game_status = 0;
-                                let mut rm_rid: Vec<u32> = vec![];
+                                let mut rm_rid: Vec<u64> = vec![];
                                 for t in &group.borrow().teams {
                                     for c in &t.borrow().checks {
                                         if c.check < 0 {
@@ -1543,7 +1543,7 @@ pub fn init(
                     }
                     //println!("rx len: {}, tx len: {}", rx.len(), tx2.len());
                     LossSend.clear();
-                    let mut rm_list: Vec<u32> = Vec::new();
+                    let mut rm_list: Vec<u64> = Vec::new();
                     for (id, group) in &mut PreStartGroups {
                         group.borrow_mut().ready_cnt += 5;
                         let res1 = group.borrow().check_start_get();
@@ -1799,7 +1799,7 @@ pub fn init(
                                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
                                                             msg: format!(r#"{{"room":"{}","mode":"{}","msg":"ok"}}"#, r.borrow().master, r.borrow().mode)};
                                                         sendok = true;
-                                                        // let rid = x.room.parse::<u32>().unwrap();
+                                                        // let rid = x.room.parse::<u64>().unwrap();
                                                         let rid = u.borrow().rid;
                                                         u.borrow_mut().rid = rid;
                                                     }
@@ -1810,7 +1810,7 @@ pub fn init(
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
                                                         msg: format!(r#"{{"room":"{}","mode":"{}","msg":"ok"}}"#, r.borrow().master, r.borrow().mode)};
                                                     sendok = true;
-                                                    // let rid = x.room.parse::<u32>().unwrap();
+                                                    // let rid = x.room.parse::<u64>().unwrap();
                                                     let rid = u.borrow().rid;
                                                     u.borrow_mut().rid = rid;
                                                 }
@@ -1845,7 +1845,7 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CheckInGame(x) => {
-                                    let inGame: std::result::Result<u32, redis::RedisError> = redis_conn.get(format!("g{}",x.id.clone()));
+                                    let inGame: std::result::Result<u64, redis::RedisError> = redis_conn.get(format!("g{}",x.id.clone()));
                                     match inGame {
                                        Ok(v) => {
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()),
@@ -2224,7 +2224,7 @@ pub fn init(
                                     }
                                     if !TotalRoom.contains_key(&room_id) {
                                         println!("rid: {}", &room_id);
-                                        // room_id = x.id.parse::<u32>().unwrap();
+                                        // room_id = x.id.parse::<u64>().unwrap();
                                         let mut new_room = RoomData {
                                             rid: room_id,
                                             users: vec![],
