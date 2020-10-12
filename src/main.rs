@@ -111,40 +111,34 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;//doc login.drawio
     mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;//doc login.drwio
     mqtt_client.subscribe("member/+/send/ng_choose_hero", QoS::AtMostOnce)?;//doc choose_hero
-    mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/status", QoS::AtMostOnce)?;//doc login.drwio
+    mqtt_client.subscribe("member/+/send/reconnect", QoS::AtMostOnce)?;//doc reconnect.drwio
+    mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
+    mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
+    mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
     mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;//doc choose_hero
     mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;//doc choose_hero
-    mqtt_client.subscribe("member/+/send/jump", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("member/+/send/get_game_historys", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/jump", QoS::AtMostOnce)?;//doc choose_hero
+    mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;//doc check_state
+    mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;//doc check_state
+    mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;//doc game
+    mqtt_client.subscribe("member/+/send/get_game_historys", QoS::AtMostOnce)?;//doc get_game_historys
 
-    mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/invite", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/join", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/reject", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/accept_join", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/kick", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/leave", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/ready", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/start_get", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("room/+/send/start", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/start_queue", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/cancel_queue", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/invite", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/join", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/reject", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/leave", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/ready", QoS::AtMostOnce)?;//doc room
+    mqtt_client.subscribe("room/+/send/start_get", QoS::AtMostOnce)?;//doc room
 
-    mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/choose", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/leave", QoS::AtMostOnce)?;
-    mqtt_client.subscribe("game/+/send/exit", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/game_close", QoS::AtMostOnce)?;//dpc game
+    mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;//doc game
+    mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;//doc game
+    mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;//doc game
     let mut isServerLive = true;
     
     

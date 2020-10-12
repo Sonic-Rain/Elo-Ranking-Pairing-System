@@ -1828,7 +1828,7 @@ pub fn init(
                                 RoomEventData::Reject(x) => {
                                     if TotalUsers.contains_key(&x.id) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()),
-                                            msg: format!(r#"{{"room":"{}","id":"{}","mgs":"reject"}}"#, x.room.clone(), x.id.clone())};
+                                            msg: format!(r#"{{"room":"{}","id":"{}","msg":"reject"}}"#, x.room.clone(), x.id.clone())};
                                     }
                                 },
                                 RoomEventData::Jump(x) => {
