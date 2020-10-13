@@ -144,7 +144,7 @@ fn main() -> std::result::Result<(), Error> {
     
     let (tx, rx):(Sender<MqttMsg>, Receiver<MqttMsg>) = bounded(10000);
     let pool = mysql::Pool::new(get_url().as_str())?;
-    let redis_client = redis::Client::open("redis://127.0.0.1:6379/")?;
+    let redis_client = redis::Client::open("redis://127.0.0.1:6379/1")?;
     thread::sleep_ms(100);
     
     for _ in 0..8 {

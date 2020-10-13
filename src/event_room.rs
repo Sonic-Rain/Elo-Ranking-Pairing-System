@@ -1281,7 +1281,8 @@ pub fn init(
     let tx2 = tx.clone();
     thread::spawn(move || -> Result<(), Error> {
         let mut conn = pool.get_conn()?;
-        let mut redis_conn = redis_client.get_connection()?;
+        let redis_conn: &mut redis::Connection = &mut redis_client.get_connection()?;
+        let _ : () = redis::cmd("FLUSHALL").query(redis_conn)?;
         let mut isServerLive = true;
         let mut isBackup = isBackup.clone();
         let mut TotalRoom: BTreeMap<u64, Rc<RefCell<RoomData>>> = BTreeMap::new();
