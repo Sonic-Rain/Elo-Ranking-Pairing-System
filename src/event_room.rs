@@ -28,8 +28,8 @@ use crate::msg::*;
 use crate::room::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 2;
-const MATCH_SIZE: usize = 2;
+const TEAM_SIZE: i16 = 1;
+const MATCH_SIZE: usize = 1;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
 const READY_TIME: u16 = 15;
@@ -487,13 +487,11 @@ fn user_score(
         ),
     })?;
     println!("Update!");
-    println!("in");
     let sql = format!(
-        "UPDATE user SET ng={}, rk={}, at={}, hero=(SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1) WHERE id='{}';",
+        "UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';",
         u.borrow().ng.clone(),
         u.borrow().rk.clone(),
         u.borrow().at.clone(),
-        u.borrow().id.clone(),
         u.borrow().id.clone()
     );
     let qres = conn.query(sql.clone())?;
@@ -1354,52 +1352,6 @@ pub fn init(
                         let res = group.borrow().check_prestart();
                         match res {
                             PrestartStatus::Ready => {
-                                // //here to select hero
-                                // if group.borrow().choose_time == 0 {
-                                //    for user in group.borrow().user_names.clone() {
-                                //         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user),
-                                //                 msg: format!(r#"{{"id":"{}","hero":""}}"#, user)})?;
-                                //     }
-                                // }
-                                // let mut choose_cnt = 0;
-                                // for user in group.borrow().user_names.clone() {
-                                //     let u = get_user(&user, &TotalUsers);
-                                //     if let Some(u) = u {
-                                //         if u.borrow().hero.chars().count() > 2 {
-                                //             choose_cnt += 1;
-                                //         }
-                                //     }
-                                // }
-                                // if choose_cnt >= 10 {
-                                //     start_cnt += 1;
-                                //     rm_ids.push(*id);
-                                //     game_port += 1;
-                                //     if game_port > 65500 {
-                                //         game_port = 7777;
-                                //     }
-                                //     group.borrow_mut().ready();
-                                //     group.borrow_mut().update_names();
-                                //     group.borrow_mut().game_port = game_port;
-
-                                //     GameingGroups.remove(&group.borrow().game_id);
-                                //     GameingGroups.insert(group.borrow().game_id.clone(), group.clone());
-                                //     // start game
-                                //     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_signal", group.borrow().game_id),
-                                //                 msg: format!(r#"{{"id":"{}","hero":""}}"#, group.borrow().game_id)})?;
-                                //     for user in group.borrow().user_names.clone() {
-                                //         let u = get_user(&user, &TotalUsers);
-                                //         if let Some(u) = u {
-                                //             let _ : () = redis_conn.set(format!("g{}", u.borrow().id), game_id)?;
-                                //         }
-                                //     }
-                                // }else if group.borrow().choose_time >= CHOOSE_HERO_TIME {
-                                //     rm_ids.push(*id);
-                                //     for user in group.borrow().user_names.clone() {
-                                //         msgtx.try_send(MqttMsg{topic:format!("member/{}/res/ng_choose_hero", user),
-                                //             msg: format!(r#"{{"msg":"timeout"}}"#)})?;
-                                //     }
-                                // }
-                                // group.borrow_mut().choose_time += 2;
                             },
                             PrestartStatus::Cancel => {
                                 group.borrow_mut().update_names();
@@ -1423,32 +1375,7 @@ pub fn init(
                                         LossSend.push(MqttMsg{topic:format!("room/{}/res/prestart", r),
                                             msg: format!(r#"{{"msg":"stop queue"}}"#)});
                                     }
-
                                 }
-                                // for t in &group.borrow().teams {
-                                //     for r in &t.borrow().rooms {
-                                //         if !rm_rid.contains(&r.borrow().rid) {
-                                //             let mut user_ids: Vec<String> = Vec::new();
-                                //             for user in &r.borrow().users {
-                                //                 user_ids.push(user.borrow().id.clone());
-                                //             }
-                                //             let mut data = QueueRoomData {
-                                //                 rid: r.borrow().rid.clone(),
-                                //                 gid: 0,
-                                //                 user_len: r.borrow().users.len().clone() as i16,
-                                //                 user_ids: user_ids,
-                                //                 avg_ng: r.borrow().avg_ng.clone(),
-                                //                 avg_rk: r.borrow().avg_rk.clone(),
-                                //                 avg_at: r.borrow().avg_at.clone(),
-                                //                 ready: 0,
-                                //                 notify: false,
-                                //                 queue_cnt: 1,
-                                //                 mode: r.borrow().mode.clone(),
-                                //             };
-                                //             QueueSender.send(QueueData::UpdateRoom(data));
-                                //         }
-                                //     }
-                                // }
                                 rm_ids.push(*id);
                             },
                             PrestartStatus::Wait => {
@@ -1498,11 +1425,13 @@ pub fn init(
                                             lose: Vec::new()
                                         };
                                         let mut find_res = false;
+                                        // println!("players : {:?}", data.players.clone());
                                         for player_id in data.players.clone() {
                                             if player_id.len() > 0 {
                                                 let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",player_id.clone()));
                                                 match isGameOver {
                                                     Ok(res) => {
+                                                        // println!("playerID : {}", player_id.clone());
                                                         // println!("res : {}", res);
                                                         if res == "W" {
                                                             gameOverData.win.push(player_id.clone());
@@ -1511,6 +1440,12 @@ pub fn init(
                                                         }
                                                         let _: () = redis_conn.del(format!("r{}", player_id.clone()))?;
                                                         let _: () = redis_conn.del(format!("g{}", player_id.clone()))?;
+                                                        let sql = format!(
+                                                            "UPDATE user SET hero=(SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1) WHERE id='{}';",
+                                                            player_id.clone(),
+                                                            player_id.clone()
+                                                        );
+                                                        let qres = conn.query(sql.clone())?;
                                                         let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
                                                             msg: format!(r#"{{"msg":"game over"}}"#)};
                                                         find_res = true;
@@ -2123,7 +2058,7 @@ pub fn init(
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"A01"}}"#, 1200, 1200, 1200)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":""}}"#, 1200, 1200, 1200)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {

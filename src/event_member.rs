@@ -97,7 +97,7 @@ pub fn login(
     //查無此人 建立表
     if count == 0 {
         let mut sql = format!(
-            "replace into user (id, name, status, hero) values ('{}', '{}', 'online', 'A01');",
+            "replace into user (id, name, status, hero) values ('{}', '{}', 'online', '');",
             id, data.id
         );
         conn.query(sql.clone())?;
