@@ -2049,6 +2049,13 @@ pub fn init(
                                     if TotalUsers.contains_key(&x.u.id) {
                                         let u2 = TotalUsers.get(&x.u.id);
                                         if let Some(u2) = u2 {
+                                            let sql = format!(r#"select hero from user where id="{}";"#, u2.borrow().id.clone());
+                                            let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                            for row in qres2 {
+                                                let a = row?.clone();
+                                                u2.borrow_mut().hero = mysql::from_value(a.get("hero").unwrap());
+                                                break;
+                                            }
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
                                                 msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().hero)};
