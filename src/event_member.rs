@@ -259,6 +259,7 @@ pub fn GetGameHistorys(
         r#"select * from Finished_detail as d inner join Finished_game as g WHERE d.steam_id={} AND g.game_id=d.game_id ORDER BY d.game_id DESC LIMIT 20;"#,
         id
     );
+    println!("{}",sql);
     let qres: mysql::QueryResult = conn.query(sql.clone())?;
     let mut gameHistorysData: Vec<GameHistoryData> = Vec::new();
     for row in qres {
@@ -277,11 +278,17 @@ pub fn GetGameHistorys(
         items.push(mysql::from_value(a.get("equ_4").unwrap()));
         items.push(mysql::from_value(a.get("equ_5").unwrap()));
         items.push(mysql::from_value(a.get("equ_6").unwrap()));
+        let mut mode = String::from("ng");
+        if let Some(n) = a.get("mode") {
+            if let Some(m) = mysql::from_value(n) {
+                mode = m;
+            }
+        }
         let gameHistory = GameHistoryData {
             gameId: mysql::from_value(a.get("game_id").unwrap()), 
             steamId: mysql::from_value(a.get("steam_id").unwrap()), 
             hero: mysql::from_value(a.get("hero").unwrap()),
-            mode: "ng".to_string(),
+            mode: mode,
             level: mysql::from_value(a.get("level").unwrap()),
             isWin: isWin,
             k: mysql::from_value(a.get("k").unwrap()),
