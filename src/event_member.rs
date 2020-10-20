@@ -88,10 +88,30 @@ pub fn login(
     for row in qres2 {
         count += 1;
         let a = row?.clone();
-        ng = mysql::from_value(a.get("ng").unwrap());
-        rk = mysql::from_value(a.get("rk").unwrap());
-        at = mysql::from_value(a.get("at").unwrap());
-        name = mysql::from_value(a.get("name").unwrap());
+        if let Some(n) = a.get("ng"){
+            ng = mysql::from_value(n);
+        } else {
+            ng = 1200;
+        }
+        if let Some(n) = a.get("rk"){
+            rk = mysql::from_value(n);
+        } else {
+            rk = 1200;
+        }
+        if let Some(n) = a.get("at"){
+            at = mysql::from_value(n);
+        } else {
+            at = 1200;
+        }
+        if let Some(n) = a.get("name"){
+            name = mysql::from_value(n);
+        } else {
+            name = "".to_string();
+        }
+        // ng = mysql::from_value(a.get("ng").unwrap());
+        // rk = mysql::from_value(a.get("rk").unwrap());
+        // at = mysql::from_value(a.get("at").unwrap());
+        // name = mysql::from_value(a.get("name").unwrap());
         break;
     }
     //查無此人 建立表
@@ -214,8 +234,11 @@ pub fn QueryBlackList(
     let mut list = Vec::new();
     for row in qres {
         let a = row?.clone();
-        blackid = mysql::from_value(a.get("black").unwrap());
-        list.push(blackid);
+        if let Some(n) = a.get("black") {
+            blackid = mysql::from_value(n);
+            list.push(blackid);
+        }
+        // blackid = mysql::from_value(a.get("black").unwrap());
     }
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/query_black_list", id),

@@ -139,6 +139,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/game_over", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;//doc game
+    mqtt_client.subscribe("game/+/send/set_password", QoS::AtMostOnce)?;//doc game
     let mut isServerLive = true;
     
     
@@ -220,6 +221,7 @@ fn main() -> std::result::Result<(), Error> {
     let reban_hero = Regex::new(r"\w+/(\w+)/send/ban_hero")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
+    let repassword = Regex::new(r"\w+/(\w+)/send/set_password")?;
     let regame_over = Regex::new(r"\w+/(\w+)/send/game_over")?;
     let regame_info = Regex::new(r"\w+/(\w+)/send/game_info")?;
     let regame_close = Regex::new(r"\w+/(\w+)/send/game_close")?;
@@ -412,6 +414,11 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("start_game: userid: {} json: {:?}", userid, v);
                                     event_room::start_game(userid, v, sender.clone())?;
+                                } else if repassword.is_match(topic_name) {
+                                    let cap = repassword.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    //info!("start_game: userid: {} json: {:?}", userid, v);
+                                    event_room::set_password(userid, v, sender.clone())?;
                                 } else if regame_over.is_match(topic_name) {
                                     let cap = regame_over.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();

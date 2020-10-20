@@ -28,8 +28,8 @@ use crate::msg::*;
 use crate::room::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 1;
-const MATCH_SIZE: usize = 1;
+const TEAM_SIZE: i16 = 5;
+const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 100;
 const CHOOSE_HERO_TIME: u16 = 300;
 const READY_TIME: u16 = 15;
@@ -256,6 +256,18 @@ pub struct CheckStateData {
     pub msg: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GameRoomData {
+    pub master: String,
+    pub isOpen: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SetPasswordData {
+    pub game: u64,
+    pub password: String,
+}
+
 #[derive(Debug)]
 pub enum RoomEventData {
     Reset(),
@@ -273,6 +285,7 @@ pub enum RoomEventData {
     Jump(JumpData),
     CheckRestriction(CheckRestrctionData),
     CheckInGame(CheckInGameData),
+    SetPassword(SetPasswordData),
     LeaveGame(LeaveGameData),
     StartQueue(StartQueueData),
     Ready(ReadyData),
@@ -1291,6 +1304,7 @@ pub fn init(
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut RestrictedUsers: BTreeMap<String, Rc<RefCell<RestrictedData>>> = BTreeMap::new();
         let mut InGameUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
+        let mut GameingRoom: BTreeMap<u64, Rc<RefCell<GameRoomData>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
         let mut AbandonGames: BTreeMap<u64, bool> = BTreeMap::new();
         let mut room_id: u64 = 1;
@@ -1625,6 +1639,11 @@ pub fn init(
                                         if !isBackup || (isBackup && isServerLive == false) {
                                             AbandonGames.insert(x.game.clone(), true);
                                             let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
+                                            let gameRoomData = GameRoomData{
+                                                master: x.id,
+                                                isOpen: false,
+                                            };
+                                            GameingRoom.insert(x.game.clone(), Rc::new(RefCell::new(gameRoomData)));
                                             for player in &x.players {
                                                 let u2 = get_user(player, &TotalUsers);
                                                 if let Some(u2) = u2 {
@@ -1784,13 +1803,22 @@ pub fn init(
                                     let inGame: std::result::Result<u64, redis::RedisError> = redis_conn.get(format!("g{}",x.id.clone()));
                                     match inGame {
                                        Ok(v) => {
-                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()),
-                                            msg: format!(r#"{{"msg":"in game"}}"#)};
+                                        if let Some(gameRoom) = GameingRoom.get(&v) {
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()),
+                                                msg: format!(r#"{{"game": {}, "master":"{}", "isOpen": {}, "msg":"in game"}}"#, v, gameRoom.borrow().master, gameRoom.borrow().isOpen)};
+                                        }
                                        },
                                        Err(e) => {
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", x.id.clone()),
                                             msg: format!(r#"{{"msg":"out of game"}}"#)};
                                        }
+                                    }
+                                },
+                                RoomEventData::SetPassword(x) => {
+                                    if let Some(gameRoom) = GameingRoom.get(&x.game) {
+                                        gameRoom.borrow_mut().isOpen = true;
+                                        mqttmsg = MqttMsg{topic:format!("game/{}/res/password", x.game.clone()),
+                                            msg: format!(r#"{{"password":"{}"}}"#, x.password.clone())};
                                     }
                                 },
                                 RoomEventData::LeaveGame(x) => {
@@ -2472,6 +2500,16 @@ pub fn start_game(
 ) -> std::result::Result<(), Error> {
     let data: StartGameData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::StartGame(data));
+    Ok(())
+}
+
+pub fn set_password(
+    id: String,
+    v: Value,
+    sender: Sender<RoomEventData>,
+) -> std::result::Result<(), Error> {
+    let data: SetPasswordData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::SetPassword(data));
     Ok(())
 }
 
