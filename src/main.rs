@@ -41,7 +41,7 @@ fn generate_client_id() -> String {
 }
 
 fn get_url() -> String {
-    "mysql://nobu_system:iwanttoplaynobu@127.0.0.1:3306/nobu".into()
+    "mysql://root:sonicrain2020@172.104.72.206:4000/nobu".into()
 }
 
 fn main() -> std::result::Result<(), Error> {
