@@ -89,7 +89,7 @@ fn main() -> std::result::Result<(), Error> {
             .help("backup"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or("103.29.70.64").to_owned();
+    let server_addr = matches.value_of("SERVER").unwrap_or("172.104.72.206").to_owned();
     let server_port = matches.value_of("PORT").unwrap_or("1883").to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")
