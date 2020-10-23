@@ -52,6 +52,18 @@ struct GetGameHistorysData {
 }
 
 #[derive(Serialize, Deserialize)]
+struct BindingData {
+    id: String,
+    steam_id: String,
+    token: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CheckBindingData {
+    steam_id: String
+}
+
+#[derive(Serialize, Deserialize)]
 struct GameHistoryData {
     gameId: String,
     steamId: String,
@@ -306,5 +318,72 @@ pub fn GetGameHistorys(
         topic: format!("member/{}/res/get_game_historys", id),
         msg: serde_json::to_string(&gameHistorysData).unwrap(),
     })?;
+    Ok(())
+}
+
+pub fn Binding(
+    id: String,
+    v: Value,
+    pool: mysql::Pool,
+    msgtx: Sender<MqttMsg>,
+) -> std::result::Result<(), Error> {
+    let data: BindingData = serde_json::from_value(v)?;
+    let mut count = 0;
+    let mut conn = pool.get_conn()?;
+    let mut sql = format!(
+        r#"select * from twitch where id="{}""#,
+        data.id
+    );
+    let qres: mysql::QueryResult = conn.query(sql.clone())?;
+    for row in qres {
+        count += 1;
+    }
+    if count > 0 {
+        msgtx.try_send(MqttMsg {
+            topic: format!("member/{}/res/binding", id),
+                msg: format!(r#"{{"msg":"fail"}}"#)}
+        )?;
+    } else {
+        sql = format!(
+            r#"insert into twitch (id, steam_id, token) values ('{}', '{}', '{}')"#,
+            data.id, data.steam_id, data.token
+        );
+        conn.query(sql.clone())?;
+        msgtx.try_send(MqttMsg {
+            topic: format!("member/{}/res/binding", id),
+                msg: format!(r#"{{"msg":"Ok"}}"#)}
+        )?;
+    }
+    Ok(())
+}
+
+pub fn CheckBinding(
+    id: String,
+    v: Value,
+    pool: mysql::Pool,
+    msgtx: Sender<MqttMsg>,
+) -> std::result::Result<(), Error> {
+    let data: CheckBindingData = serde_json::from_value(v)?;
+    let mut count = 0;
+    let mut conn = pool.get_conn()?;
+    let mut sql = format!(
+        r#"select * from twitch where steam_id="{}""#,
+        data.steam_id
+    );
+    let qres: mysql::QueryResult = conn.query(sql.clone())?;
+    for row in qres {
+        count += 1;
+    }
+    if count > 0 {
+        msgtx.try_send(MqttMsg {
+            topic: format!("member/{}/res/check_binding", id),
+                msg: format!(r#"{{"msg":"Ok"}}"#)}
+        )?;
+    } else {
+        msgtx.try_send(MqttMsg {
+            topic: format!("member/{}/res/check_binding", id),
+                msg: format!(r#"{{"msg":"fail"}}"#)}
+        )?;
+    }
     Ok(())
 }
