@@ -1531,6 +1531,13 @@ pub fn init(
                     for rm in rm_list{
                         PreStartGroups.remove(&rm);
                     }
+                    //check room
+                    for (id, r) in &TotalRoom {
+                        let m = r.borrow().master.clone();
+                        if r.borrow().users.len() > 0 {
+                            r.borrow().publish_update(&msgtx, m)?;
+                        }
+                    }
                 }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
