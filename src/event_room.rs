@@ -59,6 +59,14 @@ pub struct JoinRoomData {
     pub join: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct JoinRoomCell {
+    pub room: String,  
+    pub mode: String,
+    pub team: Vec<String>,
+    pub msg: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RejectRoomData {
     pub room: String,
@@ -1752,8 +1760,17 @@ pub fn init(
                                                         r.borrow_mut().add_user(Rc::clone(j));
                                                         let m = r.borrow().master.clone();
                                                         r.borrow().publish_update(&msgtx, m)?;
+                                                        let mut room = JoinRoomCell {
+                                                            room: r.borrow().master.clone(),
+                                                            mode: r.borrow().mode.clone(),
+                                                            team: vec![],
+                                                            msg: String::from("ok"),
+                                                        };
+                                                        for user in &r.borrow().users {
+                                                            room.team.push(user.borrow().id.clone());
+                                                        }
                                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
-                                                            msg: format!(r#"{{"room":"{}","mode":"{}","msg":"ok"}}"#, r.borrow().master, r.borrow().mode)};
+                                                            msg: serde_json::to_string(&room).unwrap()};
                                                         sendok = true;
                                                         // let rid = x.room.parse::<u64>().unwrap();
                                                         let rid = u.borrow().rid;
@@ -1763,8 +1780,17 @@ pub fn init(
                                                     r.borrow_mut().add_user(Rc::clone(j));
                                                     let m = r.borrow().master.clone();
                                                     r.borrow().publish_update(&msgtx, m)?;
+                                                    let mut room = JoinRoomCell {
+                                                        room: r.borrow().master.clone(),
+                                                        mode: r.borrow().mode.clone(),
+                                                        team: vec![],
+                                                        msg: String::from("ok"),
+                                                    };
+                                                    for user in &r.borrow().users {
+                                                        room.team.push(user.borrow().id.clone());
+                                                    }
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
-                                                        msg: format!(r#"{{"room":"{}","mode":"{}","msg":"ok"}}"#, r.borrow().master, r.borrow().mode)};
+                                                        msg: serde_json::to_string(&room).unwrap()};
                                                     sendok = true;
                                                     // let rid = x.room.parse::<u64>().unwrap();
                                                     let rid = u.borrow().rid;
