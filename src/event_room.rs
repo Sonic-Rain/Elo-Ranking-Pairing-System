@@ -935,12 +935,12 @@ pub fn HandleQueueRequest(
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
                                         v.borrow_mut().gid = group_id + 1;
+                                        println!("g2 {:?}", g);
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
                                     }
                                 }
-                                println!("{}", g.user_len);
                                 if g.user_len == TEAM_SIZE {
                                     println!("match team_size!");
                                     group_id += 1;
@@ -1066,6 +1066,7 @@ pub fn HandleQueueRequest(
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
                                         v.borrow_mut().gid = group_id + 1;
+                                        println!("g2 {:?}", g);
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
@@ -2122,9 +2123,9 @@ pub fn init(
                                                 //    msg: format!(r#"{{"msg":"ok"}}"#)};
                                                 if !isBackup || (isBackup && isServerLive == false) {
                                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id),
-                                                        msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                        msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())})?;
                                                     LossSend.push(MqttMsg{topic:format!("room/{}/res/leave", x.id),
-                                                        msg: format!(r#"{{"msg":"ok"}}"#)});
+                                                        msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())});
                                                 }
                                             }
                                             if gid != 0 {
@@ -2177,12 +2178,12 @@ pub fn init(
                                     */
                                     if success {
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok"}}"#)};
+                                            msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())};
                                         //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()),
                                         //    msg: format!(r#"{{"msg":"ok"}}"#)})?;
                                     } else {
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()),
-                                            msg: format!(r#"{{"msg":"fail"}}"#)};
+                                            msg: format!(r#"{{"id":"{}","msg":"fail"}}"#, x.id.clone())};
                                         //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/logout", x.id.clone()),
                                         //    msg: format!(r#"{{"msg":"fail"}}"#)})?;
                                     }
