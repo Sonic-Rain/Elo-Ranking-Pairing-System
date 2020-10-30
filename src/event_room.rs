@@ -1533,6 +1533,8 @@ pub fn init(
                     }
                     //check room
                     for (id, r) in &TotalRoom {
+                        println!("id {}", id);
+                        println!("r {}", r.borrow().master.clone());
                         let m = r.borrow().master.clone();
                         if r.borrow().users.len() > 0 {
                             r.borrow().publish_update(&msgtx, m)?;
@@ -2139,55 +2141,52 @@ pub fn init(
                                     }
                                     if let Some(u) = u {
                                         let mut is_null = false;
-                                        if u.borrow().game_id == 0 {
-                                            let gid = u.borrow().gid;
-                                            let rid = u.borrow().rid;
-                                            let r = TotalRoom.get(&u.borrow().rid);
-                                            if let Some(r) = r {
-                                                let m = r.borrow().master.clone();
-                                                r.borrow_mut().rm_user(&x.id);
-                                                if r.borrow().users.len() > 0 {
-                                                    r.borrow().publish_update(&msgtx, m)?;
-                                                }
-                                                else {
-                                                    is_null = true;
-                                                }
-                                                //mqttmsg = MqttMsg{topic:format!("room/{}/res/leave", x.id),
-                                                //    msg: format!(r#"{{"msg":"ok"}}"#)};
-                                                if !isBackup || (isBackup && isServerLive == false) {
-                                                    msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id),
-                                                        msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())})?;
-                                                    LossSend.push(MqttMsg{topic:format!("room/{}/res/leave", x.id),
-                                                        msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())});
-                                                }
+                                        let gid = u.borrow().gid;
+                                        let rid = u.borrow().rid;
+                                        println!("rid : {}", u.borrow().rid);
+                                        let r = TotalRoom.get(&u.borrow().rid);
+                                        if let Some(r) = r {
+                                            let m = r.borrow().master.clone();
+                                            r.borrow_mut().rm_user(&x.id);
+                                            if r.borrow().users.len() > 0 {
+                                                r.borrow().publish_update(&msgtx, m)?;
                                             }
-                                            if gid != 0 {
-                                                let g = ReadyGroups.get(&gid);
-                                                if let Some(gr) = g {
-                                                    gr.borrow_mut().user_cancel(&x.id);
-                                                    ReadyGroups.remove(&gid);
-                                                    let r = TotalRoom.get(&rid);
-                                                    //println!("Totalroom rid: {}", &u.borrow().rid);
-                                                    QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: rid}));
-                                                    if let Some(r) = r {
-                                                        //mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master),
-                                                        //    msg: format!(r#"{{"msg":"ok"}}"#)};
-                                                        if !isBackup || (isBackup && isServerLive == false) {
-                                                            msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master),
-                                                                msg: format!(r#"{{"msg":"ok"}}"#)})?;
-                                                            LossSend.push(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master),
-                                                                msg: format!(r#"{{"msg":"ok"}}"#)});
-                                                        }
-                                                    }
-                                                    //TotalRoom.remove(&rid);
-                                                }
+                                            else {
+                                                is_null = true;
                                             }
-                                            //println!("{:?}", TotalRoom);
-                                            //TotalRoom.remove(&u.borrow().rid);
-                                            success = true;
-                                        } else {
-                                            success = true;
+                                            //mqttmsg = MqttMsg{topic:format!("room/{}/res/leave", x.id),
+                                            //    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                            if !isBackup || (isBackup && isServerLive == false) {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/leave", x.id),
+                                                    msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())})?;
+                                                LossSend.push(MqttMsg{topic:format!("room/{}/res/leave", x.id),
+                                                    msg: format!(r#"{{"id":"{}","msg":"ok"}}"#, x.id.clone())});
+                                            }
                                         }
+                                        if gid != 0 {
+                                            let g = ReadyGroups.get(&gid);
+                                            if let Some(gr) = g {
+                                                gr.borrow_mut().user_cancel(&x.id);
+                                                ReadyGroups.remove(&gid);
+                                                let r = TotalRoom.get(&rid);
+                                                //println!("Totalroom rid: {}", &u.borrow().rid);
+                                                QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: rid}));
+                                                if let Some(r) = r {
+                                                    //mqttmsg = MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master),
+                                                    //    msg: format!(r#"{{"msg":"ok"}}"#)};
+                                                    if !isBackup || (isBackup && isServerLive == false) {
+                                                        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master),
+                                                            msg: format!(r#"{{"msg":"ok"}}"#)})?;
+                                                        LossSend.push(MqttMsg{topic:format!("room/{}/res/cancel_queue", r.borrow().master),
+                                                            msg: format!(r#"{{"msg":"ok"}}"#)});
+                                                    }
+                                                }
+                                                //TotalRoom.remove(&rid);
+                                            }
+                                        }
+                                        //println!("{:?}", TotalRoom);
+                                        //TotalRoom.remove(&u.borrow().rid);
+                                        success = true;
                                         if is_null {
                                             TotalRoom.remove(&u.borrow().rid);
                                             //println!("Totalroom rid: {}", &u.borrow().rid);
