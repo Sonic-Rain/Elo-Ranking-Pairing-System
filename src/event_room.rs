@@ -1657,6 +1657,7 @@ pub fn init(
                                         if !isBackup || (isBackup && isServerLive == false) {
                                             AbandonGames.insert(x.game.clone(), true);
                                             let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
+                                            let _ : () = redis_conn.expire(format!("gid{}", x.game.clone()), 420)?;
                                             let gameRoomData = GameRoomData{
                                                 master: x.id,
                                                 isOpen: false,
@@ -1667,6 +1668,7 @@ pub fn init(
                                                 if let Some(u2) = u2 {
                                                     InGameUsers.insert(u2.borrow().id.clone(), u2.clone());
                                                     let _ : () = redis_conn.set(format!("g{}", u2.borrow().id.clone()), x.game.clone())?;
+                                                    let _ : () = redis_conn.expire(format!("g{}", u2.borrow().id.clone()), 420)?;
                                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/check_in_game", u2.borrow().id.clone()),
                                                         msg: format!(r#"{{"msg":"in game"}}"#, )})?;
                                                 }

@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn test_elo() {
-        let elo = EloRank {k:20.0};
+        let elo = EloRank {k:40.0};
         let (w, l) = elo.compute_elo(1000, 1000);
         println!("win 1000, lose 1000 => {}, {}", w, l);
         
