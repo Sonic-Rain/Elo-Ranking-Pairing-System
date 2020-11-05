@@ -1,6 +1,9 @@
+extern crate chrono;
 extern crate redis;
 use redis::Commands;
 
+use chrono::prelude::*;
+use chrono::Duration as Cduration;
 use log::{error, info, trace, warn};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
@@ -10,7 +13,7 @@ use std::io::ErrorKind;
 use std::io::{self, Write};
 use std::panic;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use ::futures::Future;
 use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
@@ -61,7 +64,7 @@ pub struct JoinRoomData {
 
 #[derive(Serialize, Deserialize)]
 pub struct JoinRoomCell {
-    pub room: String,  
+    pub room: String,
     pub mode: String,
     pub team: Vec<String>,
     pub msg: String,
@@ -543,11 +546,18 @@ fn get_at(team: &Vec<Rc<RefCell<User>>>) -> Vec<i32> {
     res
 }
 
-fn check_is_black(user_ids: Vec<String>, g_user_ids: Vec<String>, conn: &mut mysql::PooledConn) -> Result<bool, Error>  {
+fn check_is_black(
+    user_ids: Vec<String>,
+    g_user_ids: Vec<String>,
+    conn: &mut mysql::PooledConn,
+) -> Result<bool, Error> {
     let mut isBlack = false;
     for user_id in user_ids {
         for g_user_id in &g_user_ids {
-            let mut sql = format!(r#"select count(*) from black_list where user={} and black={};"#, user_id, g_user_id);
+            let mut sql = format!(
+                r#"select count(*) from black_list where user={} and black={};"#,
+                user_id, g_user_id
+            );
             let qres = conn.query(sql)?;
             let mut count = 0;
             for row in qres {
@@ -559,7 +569,10 @@ fn check_is_black(user_ids: Vec<String>, g_user_ids: Vec<String>, conn: &mut mys
                 isBlack = true;
                 break;
             }
-            sql = format!(r#"select count(*) from black_list where user={} and black={};"#, g_user_id, user_id);
+            sql = format!(
+                r#"select count(*) from black_list where user={} and black={};"#,
+                g_user_id, user_id
+            );
             let qres2 = conn.query(sql)?;
             for row in qres2 {
                 let a = row?.clone();
@@ -1302,7 +1315,7 @@ pub fn init(
     thread::spawn(move || -> Result<(), Error> {
         let mut conn = pool.get_conn()?;
         let redis_conn: &mut redis::Connection = &mut redis_client.get_connection()?;
-        let _ : () = redis::cmd("FLUSHALL").query(redis_conn)?;
+        let _: () = redis::cmd("FLUSHALL").query(redis_conn)?;
         let mut isServerLive = true;
         let mut isBackup = isBackup.clone();
         let mut TotalRoom: BTreeMap<u64, Rc<RefCell<RoomData>>> = BTreeMap::new();
@@ -1321,8 +1334,8 @@ pub fn init(
         let mut game_id: u64 = 0;
         let mut game_port: u16 = 7777;
         let mut ngState = "open";
-        let mut rkState = "open";
-        let mut atState = "open";
+        let mut rkState = "close";
+        let mut atState = "close";
 
         let sql = format!(r#"select id, ng, rk, at, name, hero from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -1410,6 +1423,44 @@ pub fn init(
                     }
                 }
                 recv(update1000ms) -> _ => {
+                    let now = Local::now();
+                    let tomorrow_midnight = (now + Cduration::days(1)).date().and_hms(0, 0, 0);
+                    let rank_open_time = now.date().and_hms(10, 0, 0);
+                    let rank_close_time = now.date().and_hms(14, 0, 0);
+                    let mut isRankOpen = false;
+                    let mut time_result = rank_open_time.signed_duration_since(now).to_std();
+                    let mut duration = Duration::new(0, 0);
+                    match time_result {
+                        Ok(v) => {
+                            duration = v;
+                        },
+                        Err(e) => {
+                        }
+                    }
+                    if duration == Duration::new(0, 0) {
+                        isRankOpen = true;
+                    }
+                    // println!("Duration between {:?} and {:?}: {:?}", now, rank_open_time, duration);
+                    time_result = rank_close_time.signed_duration_since(now).to_std();
+                    duration = Duration::new(0, 0);
+                    match time_result {
+                        Ok(v) => {
+                            duration = v;
+                        },
+                        Err(e) => {
+                        }
+                    }
+                    if duration == Duration::new(0, 0) {
+                        isRankOpen = false;
+                    }
+                    if isRankOpen {
+                        rkState = "open";
+                    } else {
+                        rkState = "close";
+                    }
+                    msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
+                        msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
+                    // println!("Duration between {:?} and {:?}: {:?}", now, rank_close_time, duration);
                     if !isBackup || (isBackup && isServerLive == false) {
                         //msgtx.try_send(MqttMsg{topic:format!("server/0/res/heartbeat"),
                         //                    msg: format!(r#"{{"msg":"live"}}"#)})?;
@@ -1474,7 +1525,6 @@ pub fn init(
                                                         find_res = true;
                                                     },
                                                     Err(e) => {
-                
                                                     }
                                                 }
                                             }
@@ -2126,7 +2176,7 @@ pub fn init(
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
                                                 msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().hero)};
                                         }
-                                    } 
+                                    }
                                     else {
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
