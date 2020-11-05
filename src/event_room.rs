@@ -1334,8 +1334,11 @@ pub fn init(
         let mut game_id: u64 = 0;
         let mut game_port: u16 = 7777;
         let mut ngState = "open";
+        let mut bForceCloseNgState = false;
         let mut rkState = "close";
+        let mut bForceCloseRkState = false;
         let mut atState = "close";
+        let mut bForceCloseAtState = false;
 
         let sql = format!(r#"select id, ng, rk, at, name, hero from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -1453,7 +1456,7 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = false;
                     }
-                    if isRankOpen {
+                    if isRankOpen && !bForceCloseRkState {
                         rkState = "open";
                     } else {
                         rkState = "close";
@@ -2343,20 +2346,26 @@ pub fn init(
                                         QueueSender.send(QueueData::Control(x.clone()));
                                         if (x.mode == "rk") {
                                             if x.msg == "close" {
+                                                bForceCloseRkState = true;
                                                 rkState = "close";
                                             } else if x.msg == "open" {
+                                                bForceCloseRkState = false;
                                                 rkState = "open";
                                             }
                                         } else if (x.mode == "ng") {
                                             if x.msg == "close" {
+                                                bForceCloseNgState = true;
                                                 ngState = "close";
                                             } else if x.msg == "open" {
+                                                bForceCloseNgState = false;
                                                 ngState = "open";
                                             }
                                         } else if (x.mode == "at") {
                                             if x.msg == "close" {
+                                                bForceCloseAtState = true;
                                                 atState = "close";
                                             } else if x.msg == "open" {
+                                                bForceCloseAtState = false;
                                                 atState = "open";
                                             }
                                         }
