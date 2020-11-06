@@ -392,6 +392,11 @@ pub struct RemoveRoomData {
     pub rid: u64,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct JumpCountData {
+    pub count: u16,
+}
+
 pub enum QueueData {
     UpdateRoom(QueueRoomData),
     RemoveRoom(RemoveRoomData),
@@ -612,7 +617,7 @@ fn settlement_score(
         lose_score = get_at(lose);
     }
     // println!("win : {:?}, lose : {:?}", win_score, lose_score);
-    let elo = EloRank { k: 20.0 };
+    let elo = EloRank { k: 40.0 };
     let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
     println!("Game Over");
     for (i, u) in win.iter().enumerate() {
@@ -1325,6 +1330,7 @@ pub fn init(
         let mut GameingGroups: BTreeMap<u64, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut RestrictedUsers: BTreeMap<String, Rc<RefCell<RestrictedData>>> = BTreeMap::new();
+        let mut JumpUsers: BTreeMap<String, Rc<RefCell<JumpCountData>>> = BTreeMap::new();
         let mut InGameUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
         let mut GameingRoom: BTreeMap<u64, Rc<RefCell<GameRoomData>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
@@ -1508,8 +1514,8 @@ pub fn init(
                                                 let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",player_id.clone()));
                                                 match isGameOver {
                                                     Ok(res) => {
-                                                        // println!("playerID : {}", player_id.clone());
-                                                        // println!("res : {}", res);
+                                                        println!("playerID : {}", player_id.clone());
+                                                        println!("res : {}", res);
                                                         if res == "W" {
                                                             gameOverData.win.push(player_id.clone());
                                                         } else {
@@ -1710,7 +1716,7 @@ pub fn init(
                                         if !isBackup || (isBackup && isServerLive == false) {
                                             AbandonGames.insert(x.game.clone(), true);
                                             let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
-                                            let _ : () = redis_conn.expire(format!("gid{}", x.game.clone()), 420)?;
+                                            // let _ : () = redis_conn.expire(format!("gid{}", x.game.clone()), 420)?;
                                             let gameRoomData = GameRoomData{
                                                 master: x.id,
                                                 isOpen: false,
@@ -1721,7 +1727,7 @@ pub fn init(
                                                 if let Some(u2) = u2 {
                                                     InGameUsers.insert(u2.borrow().id.clone(), u2.clone());
                                                     let _ : () = redis_conn.set(format!("g{}", u2.borrow().id.clone()), x.game.clone())?;
-                                                    let _ : () = redis_conn.expire(format!("g{}", u2.borrow().id.clone()), 420)?;
+                                                    // let _ : () = redis_conn.expire(format!("g{}", u2.borrow().id.clone()), 420)?;
                                                     msgtx.try_send(MqttMsg{topic:format!("member/{}/res/check_in_game", u2.borrow().id.clone()),
                                                         msg: format!(r#"{{"msg":"in game"}}"#, )})?;
                                                 }
@@ -1879,6 +1885,37 @@ pub fn init(
                                 },
                                 RoomEventData::Jump(x) => {
                                     if TotalUsers.contains_key(&x.id) {
+                                        if !AbandonGames.contains_key(&x.game) {
+                                            if !JumpUsers.contains_key(&x.id){
+                                                let jumpCountData = JumpCountData{
+                                                    count: 1,
+                                                };
+                                                JumpUsers.insert(x.id.clone(), Rc::new(RefCell::new(jumpCountData)));
+                                                let mut new_restriced = RestrictedData {
+                                                    id: x.id.clone(),
+                                                    time: 60,
+                                                };
+                                                let r = Rc::new(RefCell::new(new_restriced));
+                                                RestrictedUsers.insert(
+                                                    x.id.clone(),
+                                                    Rc::clone(&r),
+                                                );
+                                            } else {
+                                                if let Some(j) = JumpUsers.get_mut(&x.id) {
+                                                    j.borrow_mut().count += 1;
+                                                    let mut new_restriced = RestrictedData {
+                                                        id: x.id.clone(),
+                                                        time: 60 * (j.borrow().count+1),
+                                                    };
+                                                    let r = Rc::new(RefCell::new(new_restriced));
+                                                    RestrictedUsers.insert(
+                                                        x.id.clone(),
+                                                        Rc::clone(&r),
+                                                    );
+                                                }
+                                            }
+                                            AbandonGames.insert(x.game, true);
+                                        }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.game.clone()),
                                             msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
