@@ -1471,6 +1471,7 @@ pub fn init(
                         }
                     }
                     if duration == Duration::new(0, 0) {
+                        JumpUsers = BTreeMap::new();
                         isRankOpen = false;
                     }
                     if isRankOpen && !bForceCloseRkState {
