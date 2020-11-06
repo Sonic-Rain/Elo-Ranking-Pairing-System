@@ -41,7 +41,8 @@ fn generate_client_id() -> String {
 }
 
 fn get_url() -> String {
-    "mysql://root:sonicrain2020@172.104.72.206:4000/nobu".into()
+    // "mysql://root:sonicrain2020@172.104.72.206:4000/nobu".into()
+    "mysql://elo:elo@localhost:3306/nobu".into()
 }
 
 fn main() -> std::result::Result<(), Error> {
@@ -89,7 +90,8 @@ fn main() -> std::result::Result<(), Error> {
             .help("backup"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or("172.104.72.206").to_owned();
+    // let server_addr = matches.value_of("SERVER").unwrap_or("172.104.72.206").to_owned();
+    let server_addr = matches.value_of("SERVER").unwrap_or("172.105.232.176").to_owned();
     let server_port = matches.value_of("PORT").unwrap_or("1883").to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")

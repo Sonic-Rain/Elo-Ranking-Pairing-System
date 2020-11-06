@@ -279,6 +279,11 @@ pub struct SetPasswordData {
     pub password: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BanUserData {
+    pub id: String,
+}
+
 #[derive(Debug)]
 pub enum RoomEventData {
     Reset(),
@@ -314,6 +319,7 @@ pub enum RoomEventData {
     MainServerDead(DeadData),
     Control(ControlData),
     CheckState(CheckStateData),
+    BanUser(BanUserData),
 }
 
 #[derive(Clone, Debug)]
@@ -395,6 +401,11 @@ pub struct RemoveRoomData {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct JumpCountData {
     pub count: u16,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct PreReadyData {
+    pub isReady: bool,
 }
 
 pub enum QueueData {
@@ -1575,6 +1586,11 @@ pub fn init(
                         }else if group.borrow().ready_cnt >= READY_TIME {
                             for team in &group.borrow().teams {
                                 for r in &team.borrow().rooms {
+                                    for user in &r.borrow().users {
+                                        if user.borrow().start_get == false {
+                                            tx2.try_send(RoomEventData::BanUser(BanUserData{id: user.borrow().id.clone()}));
+                                        }
+                                    }
                                     // let res = r.borrow_mut().check_start_get();
                                     // if res == false {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
@@ -1887,43 +1903,51 @@ pub fn init(
                                 RoomEventData::Jump(x) => {
                                     if TotalUsers.contains_key(&x.id) {
                                         if !AbandonGames.contains_key(&x.game) {
-                                            if !JumpUsers.contains_key(&x.id){
-                                                let jumpCountData = JumpCountData{
-                                                    count: 1,
-                                                };
-                                                JumpUsers.insert(x.id.clone(), Rc::new(RefCell::new(jumpCountData)));
-                                                let mut new_restriced = RestrictedData {
-                                                    id: x.id.clone(),
-                                                    time: 60,
-                                                };
-                                                let r = Rc::new(RefCell::new(new_restriced));
-                                                RestrictedUsers.insert(
-                                                    x.id.clone(),
-                                                    Rc::clone(&r),
-                                                );
-                                            } else {
-                                                if let Some(j) = JumpUsers.get_mut(&x.id) {
-                                                    j.borrow_mut().count += 1;
-                                                    let mut new_restriced = RestrictedData {
-                                                        id: x.id.clone(),
-                                                        time: 60 * (j.borrow().count+1),
-                                                    };
-                                                    let r = Rc::new(RefCell::new(new_restriced));
-                                                    RestrictedUsers.insert(
-                                                        x.id.clone(),
-                                                        Rc::clone(&r),
-                                                    );
-                                                }
-                                            }
+                                            tx2.try_send(RoomEventData::BanUser(BanUserData{id: x.id.clone()}));
                                             AbandonGames.insert(x.game, true);
                                         }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.game.clone()),
                                             msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
                                 },
+                                RoomEventData::BanUser(x) => {
+                                    if !JumpUsers.contains_key(&x.id){
+                                        let jumpCountData = JumpCountData{
+                                            count: 1,
+                                        };
+                                        JumpUsers.insert(x.id.clone(), Rc::new(RefCell::new(jumpCountData)));
+                                        let mut new_restriced = RestrictedData {
+                                            id: x.id.clone(),
+                                            time: 60,
+                                        };
+                                        let r = Rc::new(RefCell::new(new_restriced));
+                                        RestrictedUsers.insert(
+                                            x.id.clone(),
+                                            Rc::clone(&r),
+                                        );
+                                    } else {
+                                        if let Some(j) = JumpUsers.get_mut(&x.id) {
+                                            j.borrow_mut().count += 1;
+                                            let mut new_restriced = RestrictedData {
+                                                id: x.id.clone(),
+                                                time: 60 * (j.borrow().count+1),
+                                            };
+                                            let r = Rc::new(RefCell::new(new_restriced));
+                                            RestrictedUsers.insert(
+                                                x.id.clone(),
+                                                Rc::clone(&r),
+                                            );
+                                        }
+                                        
+                                    }
+                                    tx2.try_send(RoomEventData::CheckRestriction(CheckRestrctionData{id: x.id.clone()}));
+                                },
                                 RoomEventData::CheckRestriction(x) => {
                                     let r = RestrictedUsers.get(&x.id);
                                     if let Some(r) = r {
+                                        if let Some(u) = TotalUsers.get(&x.id) {
+                                            tx2.try_send(RoomEventData::Leave(LeaveData{room: u.borrow().rid.to_string(), id: x.id.clone()}));
+                                        }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_restriction", x.id.clone()),
                                             msg: format!(r#"{{"time":"{}"}}"#, r.borrow().time)};
                                     }
@@ -1978,6 +2002,7 @@ pub fn init(
                                                         //     msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
                                                     } else {
                                                         println!("accept false!");
+                                                        tx2.try_send(RoomEventData::BanUser(BanUserData{id: x.id.clone()}));
                                                         gr.borrow_mut().user_cancel(&x.id);
                                                         for r in &gr.borrow().rooms {
                                                             println!("r_rid: {}, u_rid: {}", r.borrow().rid, u.borrow().rid);
@@ -2044,6 +2069,11 @@ pub fn init(
                                     }
 
                                     fg.update_names();
+                                    for user_name in &fg.user_names {
+                                        let preReadyData = PreReadyData {
+                                            isReady: false
+                                        };
+                                    }
                                     for r in &fg.room_names {
                                         //thread::sleep_ms(100);
                                         if !isBackup || (isBackup && isServerLive == false) {
@@ -2170,7 +2200,7 @@ pub fn init(
                                                 queue_cnt: 1,
                                                 mode: y.borrow().mode.clone(),
                                             };
-                                                QueueSender.send(QueueData::UpdateRoom(data));
+                                            QueueSender.send(QueueData::UpdateRoom(data));
                                         }
                                     }
                                 },

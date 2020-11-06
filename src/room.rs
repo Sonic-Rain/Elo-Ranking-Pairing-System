@@ -85,7 +85,7 @@ impl RoomData {
     pub fn check_start_get(&mut self) -> bool{
         let mut res = false;
         for user in &self.users {
-            //println!("User: {}, Prestart_get: {}", user.borrow().id, user.borrow().prestart_get);
+            // println!("User: {}, Prestart_get: {}", user.borrow().id, user.borrow().start_get);
             if user.borrow().start_get == true {
                 res = true;
             }
