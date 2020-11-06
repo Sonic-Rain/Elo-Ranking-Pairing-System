@@ -401,6 +401,7 @@ pub struct RemoveRoomData {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct JumpCountData {
     pub count: u16,
+    pub time: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -1471,7 +1472,6 @@ pub fn init(
                         }
                     }
                     if duration == Duration::new(0, 0) {
-                        JumpUsers = BTreeMap::new();
                         isRankOpen = false;
                     }
                     if isRankOpen && !bForceCloseRkState {
@@ -1495,6 +1495,16 @@ pub fn init(
                     }
                     for rm in rm_list {
                         RestrictedUsers.remove(&rm);
+                    }
+                    let mut rest_list: Vec<String> = Vec::new();
+                    for (id, jumpCountData) in &mut JumpUsers {
+                        jumpCountData.borrow_mut().time -= 1;
+                        if jumpCountData.borrow().time <= 0 {
+                            rest_list.push(id.clone());
+                        }
+                    }
+                    for rest in rest_list {
+                        JumpUsers.remove(&rest);
                     }
                 }
 
@@ -1912,9 +1922,11 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::BanUser(x) => {
+                                    let reset_time = 86400;
                                     if !JumpUsers.contains_key(&x.id){
                                         let jumpCountData = JumpCountData{
                                             count: 1,
+                                            time: reset_time,
                                         };
                                         JumpUsers.insert(x.id.clone(), Rc::new(RefCell::new(jumpCountData)));
                                         let mut new_restriced = RestrictedData {
@@ -1929,6 +1941,7 @@ pub fn init(
                                     } else {
                                         if let Some(j) = JumpUsers.get_mut(&x.id) {
                                             j.borrow_mut().count += 1;
+                                            j.borrow_mut().time = reset_time;
                                             let mut new_restriced = RestrictedData {
                                                 id: x.id.clone(),
                                                 time: 60 * (j.borrow().count+1),
