@@ -1540,6 +1540,7 @@ pub fn init(
                                         }
                                         if (find_res) {
                                             let _: () = redis_conn.del(format!("gid{}", game_id))?;
+                                            AbandonGames.insert(game_id.clone().parse::<u64>().unwrap(), true);
                                             tx2.try_send(RoomEventData::GameOver(gameOverData));
                                         }
                                     },
@@ -1714,7 +1715,7 @@ pub fn init(
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         if !isBackup || (isBackup && isServerLive == false) {
-                                            AbandonGames.insert(x.game.clone(), true);
+                                            // AbandonGames.insert(x.game.clone(), true);
                                             let _ : () = redis_conn.set(format!("gid{}", x.game.clone()), serde_json::to_string(&x)?)?;
                                             // let _ : () = redis_conn.expire(format!("gid{}", x.game.clone()), 420)?;
                                             let gameRoomData = GameRoomData{
