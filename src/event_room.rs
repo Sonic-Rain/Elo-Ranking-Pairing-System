@@ -1447,7 +1447,7 @@ pub fn init(
                     let now = Local::now();
                     let tomorrow_midnight = (now + Cduration::days(1)).date().and_hms(0, 0, 0);
                     let rank_open_time = now.date().and_hms(10, 0, 0);
-                    let rank_close_time = now.date().and_hms(14, 0, 0);
+                    let rank_close_time = now.date().and_hms(16, 0, 0);
                     let mut isRankOpen = false;
                     let mut time_result = rank_open_time.signed_duration_since(now).to_std();
                     let mut duration = Duration::new(0, 0);
