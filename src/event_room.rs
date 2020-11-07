@@ -33,7 +33,7 @@ use std::process::Command;
 
 const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
-const SCORE_INTERVAL: i16 = 100;
+const SCORE_INTERVAL: i16 = 2;
 const CHOOSE_HERO_TIME: u16 = 300;
 const READY_TIME: u16 = 15;
 
@@ -793,7 +793,7 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut NGQueueRoom {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng && v.borrow().ready == 0 {
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -933,7 +933,7 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut RKQueueRoom {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk && v.borrow().ready == 0 {
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -977,6 +977,9 @@ pub fn HandleQueueRequest(
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
+                                        if v.borrow().queue_cnt > 50 {
+                                            v.borrow_mut().queue_cnt = 50;
+                                        }
                                     }
                                 }
                                 if g.user_len == TEAM_SIZE {
@@ -1037,6 +1040,9 @@ pub fn HandleQueueRequest(
                                     }
                                     else {
                                         rg.borrow_mut().queue_cnt += 1;
+                                        if rg.borrow().queue_cnt > 50 {
+                                            rg.borrow_mut().queue_cnt = 50;
+                                        }
                                     }
                                 }
                                 if fg.team_len == MATCH_SIZE {
@@ -1074,7 +1080,7 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut ATQueueRoom {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_at {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_at && v.borrow().ready == 0{
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -1108,6 +1114,9 @@ pub fn HandleQueueRequest(
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
+                                        if v.borrow().queue_cnt > 50 {
+                                            v.borrow_mut().queue_cnt = 50;
+                                        }
                                     }
                                 }
                                 if g.user_len == TEAM_SIZE {
@@ -1168,6 +1177,9 @@ pub fn HandleQueueRequest(
                                     }
                                     else {
                                         rg.borrow_mut().queue_cnt += 1;
+                                        if rg.borrow().queue_cnt > 50 {
+                                            rg.borrow_mut().queue_cnt = 50;
+                                        }
                                     }
                                 }
                                 if fg.team_len == MATCH_SIZE {
@@ -1474,6 +1486,7 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = false;
                     }
+                    isRankOpen = true;
                     if isRankOpen && !bForceCloseRkState {
                         rkState = "open";
                     } else {
@@ -1620,8 +1633,8 @@ pub fn init(
                     }
                     //check room
                     for (id, r) in &TotalRoom {
-                        println!("id {}", id);
-                        println!("r {}", r.borrow().master.clone());
+                        // println!("id {}", id);
+                        // println!("r {}", r.borrow().master.clone());
                         let m = r.borrow().master.clone();
                         if r.borrow().users.len() > 0 {
                             r.borrow().publish_update(&msgtx, m)?;
