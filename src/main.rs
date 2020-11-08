@@ -144,6 +144,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("game/+/send/set_password", QoS::AtMostOnce)?;//doc game
+    mqtt_client.subscribe("game/+/send/banned_heros", QoS::AtMostOnce)?;//doc game
     let mut isServerLive = true;
     
     

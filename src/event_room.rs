@@ -1486,7 +1486,7 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = false;
                     }
-                    isRankOpen = true;
+                    // isRankOpen = true;
                     if isRankOpen && !bForceCloseRkState {
                         rkState = "open";
                     } else {
@@ -1863,6 +1863,23 @@ pub fn init(
                                     let j = TotalUsers.get(&x.join);
                                     let mut sendok = false;
                                     if let Some(u) = u {
+                                        let r = TotalRoom.get(&u.borrow().rid);
+                                        let mut is_null = false;
+                                        if let Some(r) = r {
+                                            let m = r.borrow().master.clone();
+                                            r.borrow_mut().rm_user(&u.borrow().id);
+                                            if r.borrow().users.len() > 0 {
+                                                r.borrow().publish_update(&msgtx, m)?;
+                                            }
+                                            else {
+                                                is_null = true;
+                                            }
+                                        }
+                                        if is_null {
+                                            TotalRoom.remove(&u.borrow().rid);
+                                            QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
+                                        }
+                                        u.borrow_mut().rid = 0;
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
@@ -2393,6 +2410,25 @@ pub fn init(
                                         };
                                         let mut u = TotalUsers.get(&x.id);
                                         if let Some(u) = u {
+                                            if u.borrow().rid != 0 {
+                                                let r = TotalRoom.get(&u.borrow().rid);
+                                                let mut is_null = false;
+                                                if let Some(r) = r {
+                                                    let m = r.borrow().master.clone();
+                                                    r.borrow_mut().rm_user(&x.id);
+                                                    if r.borrow().users.len() > 0 {
+                                                        r.borrow().publish_update(&msgtx, m)?;
+                                                    }
+                                                    else {
+                                                        is_null = true;
+                                                    }
+                                                }
+                                                if is_null {
+                                                    TotalRoom.remove(&u.borrow().rid);
+                                                    QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
+                                                }
+                                                u.borrow_mut().rid = 0;
+                                            }
                                             new_room.add_user(Rc::clone(&u));
                                             let rid = new_room.rid;
                                             let r = Rc::new(RefCell::new(new_room));
