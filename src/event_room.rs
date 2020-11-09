@@ -1732,6 +1732,31 @@ pub fn init(
                             r.borrow().publish_update(&msgtx, m)?;
                         }
                     }
+                    //get online and game count 
+                    let sql = format!(r#"select count(*) from user where status = 'online';"#);
+                    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                    let mut online_cnt = 0;
+                    let mut ng_cnt = 0;
+                    let mut rk_cnt = 0;
+                    let mut at_cnt = 0;
+                    for row in qres2 {
+                        let a = row?.clone();
+                        online_cnt = mysql::from_value(a.get("count(*)").unwrap());
+                        break;
+                    }
+                    for (game_id, fg) in &mut GameingGroups {
+                        if fg.borrow().mode == "ng" {
+                            ng_cnt += 1;
+                        }
+                        if fg.borrow().mode == "rk" {
+                            rk_cnt += 1;
+                        }
+                        if fg.borrow().mode == "at" {
+                            at_cnt += 1;
+                        }
+                    }
+                    msgtx.try_send(MqttMsg{topic:format!("server/res/online_count"),
+                        msg: format!(r#"{{"count":{}, "ngCount":{}, "rkCount":{}, "atCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt)})?;
                 }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
