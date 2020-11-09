@@ -118,9 +118,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
     mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
     mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
-    mqtt_client.subscribe("member/+/send/ng_locked_hero", QoS::AtMostOnce)?;//doc choose_hero
     mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;//doc choose_hero
-    mqtt_client.subscribe("member/+/send/jump", QoS::AtMostOnce)?;//doc choose_hero
     mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;//doc check_state
     mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;//doc check_state
     mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;//doc game
@@ -144,7 +142,9 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/game_info", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("game/+/send/start_game", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("game/+/send/set_password", QoS::AtMostOnce)?;//doc game
-    mqtt_client.subscribe("game/+/send/banned_heros", QoS::AtMostOnce)?;//doc game
+    mqtt_client.subscribe("game/+/send/loading", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/locked_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/jump", QoS::AtMostOnce)?;
     let mut isServerLive = true;
     
     
@@ -209,7 +209,7 @@ fn main() -> std::result::Result<(), Error> {
     let readd_black_list = Regex::new(r"\w+/(\w+)/send/add_black_list")?;
     let rerm_black_list = Regex::new(r"\w+/(\w+)/send/rm_black_list")?;
     let requery_black_list = Regex::new(r"\w+/(\w+)/send/query_black_list")?;
-    let reng_loocked_hero = Regex::new(r"\w+/(\w+)/send/ng_locked_hero")?;
+    let relocked_hero = Regex::new(r"\w+/(\w+)/send/locked_hero")?;
     let relogin = Regex::new(r"\w+/(\w+)/send/login")?;
     let relogout = Regex::new(r"\w+/(\w+)/send/logout")?;
     let recreate = Regex::new(r"\w+/(\w+)/send/create")?;
@@ -241,6 +241,7 @@ fn main() -> std::result::Result<(), Error> {
     let recheckBinding = Regex::new(r"\w+/(\w+)/send/check_binding")?;
     let recontrol = Regex::new(r"\w+/send/control")?;
     let recheck_state = Regex::new(r"\w+/send/check_state")?;
+    let reloading = Regex::new(r"\w+/(\w+)/send/loading")?;
     
     
     //let mut QueueSender: Sender<QueueData>;
@@ -324,11 +325,11 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     info!("ban hero: userid: {} json: {:?}", userid, v);
                                     event_room::ban_hero(userid, v, sender.clone())?;
-                                } else if reng_loocked_hero.is_match(topic_name) {
-                                    let cap = reng_loocked_hero.captures(topic_name).unwrap();
+                                } else if relocked_hero.is_match(topic_name) {
+                                    let cap = relocked_hero.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     info!("choose lock hero: userid: {} json: {:?}", userid, v);
-                                    event_room::lock_ng_hero(userid, v, sender.clone())?;
+                                    event_room::lock_hero(userid, v, sender.clone())?;
                                 } else if rejoin.is_match(topic_name) {
                                     let cap = rejoin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
@@ -406,11 +407,16 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     //info!("prestart_get: userid: {} json: {:?}", userid, v);
                                     event_room::start_get(userid, v, sender.clone())?;
-                                }  else if reready.is_match(topic_name) {
+                                } else if reready.is_match(topic_name) {
                                     let cap = reready.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     //info!("prestart: userid: {} json: {:?}", userid, v);
                                     event_room::ready(userid, v, sender.clone())?;
+                                } else if reloading.is_match(topic_name) {
+                                    let cap = reloading.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    // info!("loading: userid: {} json: {:?}", userid, v);
+                                    event_room::loading(userid, v, sender.clone())?;
                                 } else if releave.is_match(topic_name) {
                                     let cap = releave.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();

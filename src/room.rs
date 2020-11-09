@@ -1,9 +1,9 @@
-use serde_derive::{Serialize, Deserialize};
+use crate::msg::*;
+use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
+use failure::Error;
+use serde_derive::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::msg::*;
-use crossbeam_channel::{bounded, tick, Sender, Receiver, select};
-use failure::Error;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct User {
@@ -19,6 +19,7 @@ pub struct User {
     pub online: bool,
     pub start_prestart: bool,
     pub start_get: bool,
+    pub isLocked: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -46,9 +47,9 @@ impl RoomData {
             sum_at += user.borrow().at;
         }
         if self.users.len() > 0 {
-            self.avg_ng = sum_ng/self.users.len() as i16;
-            self.avg_rk = sum_rk/self.users.len() as i16;
-            self.avg_at = sum_at/self.users.len() as i16;
+            self.avg_ng = sum_ng / self.users.len() as i16;
+            self.avg_rk = sum_rk / self.users.len() as i16;
+            self.avg_at = sum_at / self.users.len() as i16;
         }
     }
 
@@ -82,14 +83,13 @@ impl RoomData {
         }
     }
 
-    pub fn check_start_get(&mut self) -> bool{
+    pub fn check_start_get(&mut self) -> bool {
         let mut res = false;
         for user in &self.users {
             // println!("User: {}, Prestart_get: {}", user.borrow().id, user.borrow().start_get);
             if user.borrow().start_get == true {
                 res = true;
-            }
-            else {
+            } else {
                 res = false;
                 break;
             }
@@ -105,14 +105,16 @@ impl RoomData {
         self.ready = 0;
     }
 
-    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>, r: String) -> Result<(), Error>{
+    pub fn publish_update(&self, msgtx: &Sender<MqttMsg>, r: String) -> Result<(), Error> {
         #[derive(Serialize, Deserialize)]
         pub struct teamCell {
-            pub room: String,  
+            pub room: String,
             pub team: Vec<String>,
         }
-        let mut t = teamCell {room: self.master.clone(), team: vec![]};
-        
+        let mut t = teamCell {
+            room: self.master.clone(),
+            team: vec![],
+        };
         for user in &self.users {
             let mut isInTeam = false;
             for u in &t.team {
@@ -125,14 +127,17 @@ impl RoomData {
                 t.team.push(user.borrow().id.clone());
             }
         }
-        msgtx.try_send(MqttMsg{topic:format!("room/{}/res/update", r), msg: serde_json::to_string(&t).unwrap()})?;
+        msgtx.try_send(MqttMsg {
+            topic: format!("room/{}/res/update", r),
+            msg: serde_json::to_string(&t).unwrap(),
+        })?;
         Ok(())
     }
 
     pub fn rm_user(&mut self, id: &String) {
         let mut i = 0;
         while i != self.users.len() {
-            let id2 =  self.users[i].borrow().id.clone();
+            let id2 = self.users[i].borrow().id.clone();
             if id2 == *id {
                 self.users.remove(i);
             } else {
@@ -183,7 +188,11 @@ impl FightGroup {
         let mut res: Vec<(String, String, String)> = vec![];
         for r in &self.rooms {
             for u in &r.borrow().users {
-                res.push((u.borrow().id.clone(), u.borrow().name.clone(), u.borrow().hero.clone()));
+                res.push((
+                    u.borrow().id.clone(),
+                    u.borrow().name.clone(),
+                    u.borrow().hero.clone(),
+                ));
             }
         }
         res
@@ -229,8 +238,8 @@ impl FightGroup {
             self.user_count += room.borrow().users.len() as i16;
         }
         if self.user_count > 0 {
-            self.avg_ng = (sum_ng/self.user_count as i32) as i16;
-            self.avg_rk = (sum_rk/self.user_count as i32) as i16;
+            self.avg_ng = (sum_ng / self.user_count as i32) as i16;
+            self.avg_rk = (sum_rk / self.user_count as i32) as i16;
         }
     }
 
@@ -272,14 +281,16 @@ impl FightGroup {
             }
         }
     }
-    
     pub fn prestart(&mut self) {
         self.checks.clear();
         for room in &self.rooms {
             room.borrow_mut().ready = 1;
             room.borrow_mut().user_prestart();
             for u in &room.borrow().users {
-                self.checks.push(FightCheck{id: u.borrow().id.clone(), check: 0});
+                self.checks.push(FightCheck {
+                    id: u.borrow().id.clone(),
+                    check: 0,
+                });
             }
         }
     }
@@ -291,33 +302,79 @@ impl FightGroup {
             if c.check < 0 {
                 return PrestartStatus::Cancel;
             } else if c.check != 1 {
-                res= PrestartStatus::Wait;
+                res = PrestartStatus::Wait;
             }
         }
         res
     }
 }
 
+#[derive(PartialEq)]
+pub enum FightGameStatus {
+    Ready,
+    Loading,
+    Ban,
+    Pick,
+    ReadyToStart,
+    Gaming,
+    Finished,
+}
+
+#[derive(PartialEq)]
+pub enum RkPickStatus {
+    Round0,
+    Round1,
+    Round2,
+    Round3,
+    Round4,
+    Round5,
+    Round6,
+    Round7,
+}
+
+#[derive(PartialEq)]
+pub enum NgPickStatus {
+    Ready,
+    Loading,
+    Ban,
+    Pick,
+    Start,
+}
+
+#[derive(PartialEq)]
+pub enum ATPickStatus {
+    Ready,
+    Loading,
+    Ban,
+    Pick,
+    Start,
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct FightGame {
     pub teams: Vec<Rc<RefCell<FightGroup>>>,
     pub room_names: Vec<String>,
     pub user_names: Vec<String>,
+    pub pick_position: Vec<usize>,
     pub game_id: u64,
     pub user_count: u16,
     pub winteam: i16,
     pub game_status: u16,
     pub game_port: u16,
     pub ready_cnt: u16,
-    pub choose_time: u16,
+    pub loading_cnt: u16,
+    pub ban_time: i16,
+    pub choose_time: i16,
+    pub mode: String,
+    pub pick_status: u16,
+    pub lock_cnt: u16,
 }
 
 #[derive(PartialEq)]
 pub enum PrestartStatus {
     Wait,
     Ready,
-    Cancel
+    Cancel,
 }
 
 impl FightGame {
@@ -391,5 +448,82 @@ impl FightGame {
         for g in &mut self.teams {
             g.borrow_mut().ready();
         }
+    }
+    pub fn check_status(&mut self) -> FightGameStatus {
+        let mut res = FightGameStatus::Ready;
+        if self.game_status == 0 {
+            res = FightGameStatus::Ready;
+        } else if self.game_status == 1 {
+            res = FightGameStatus::Loading;
+        } else if self.game_status == 2 {
+            res = FightGameStatus::Ban;
+        } else if self.game_status == 3 {
+            res = FightGameStatus::Pick;
+        } else if self.game_status == 4 {
+            res = FightGameStatus::ReadyToStart;
+        } else if self.game_status == 5 {
+            res = FightGameStatus::Gaming;
+        } else if self.game_status == 6 {
+            res = FightGameStatus::Finished;
+        }
+        res
+    }
+
+    pub fn check_rk_pick_status(&mut self) -> RkPickStatus {
+        let mut res = RkPickStatus::Round0;
+        if self.pick_status == 0 {
+            res = RkPickStatus::Round0;
+        } else if self.pick_status == 1 {
+            res = RkPickStatus::Round1;
+        } else if self.pick_status == 2 {
+            res = RkPickStatus::Round2;
+        } else if self.pick_status == 3 {
+            res = RkPickStatus::Round3;
+        } else if self.pick_status == 4 {
+            res = RkPickStatus::Round4;
+        } else if self.pick_status == 5 {
+            res = RkPickStatus::Round5;
+        } else if self.pick_status == 6 {
+            res = RkPickStatus::Round6;
+        } else if self.pick_status == 7 {
+            res = RkPickStatus::Round7;
+        }
+        res
+    }
+
+    pub fn next_status(&mut self) {
+        self.game_status += 1;
+    }
+
+    pub fn set_mode(&mut self, mode: String) {
+        self.mode = mode;
+    }
+
+    pub fn next_pick_status(&mut self) {
+        println!("next");
+        println!("{}", self.pick_status);
+        self.lock_cnt = 0;
+        self.pick_status += 1;
+        if self.mode == "ng" {
+            self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        }
+        if self.mode == "rk" {
+            if self.check_rk_pick_status() == RkPickStatus::Round1 {
+                self.pick_position = vec![0];
+            } else if self.check_rk_pick_status() == RkPickStatus::Round2 {
+                self.pick_position = vec![5, 6];
+            } else if self.check_rk_pick_status() == RkPickStatus::Round3 {
+                self.pick_position = vec![1, 2];
+            } else if self.check_rk_pick_status() == RkPickStatus::Round4 {
+                self.pick_position = vec![7, 8];
+            } else if self.check_rk_pick_status() == RkPickStatus::Round5 {
+                self.pick_position = vec![3, 4];
+            } else if self.check_rk_pick_status() == RkPickStatus::Round6 {
+                self.pick_position = vec![9];
+            } else if self.check_rk_pick_status() == RkPickStatus::Round7 {
+                self.pick_position = vec![];
+            }
+        }
+        if self.mode == "at" {}
     }
 }

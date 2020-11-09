@@ -34,7 +34,9 @@ use std::process::Command;
 const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 2;
-const CHOOSE_HERO_TIME: u16 = 300;
+const CHOOSE_HERO_TIME: i16 = 30;
+const NG_CHOOSE_HERO_TIME: i16 = 90;
+const BAN_HERO_TIME: i16 = 25;
 const READY_TIME: u16 = 15;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -102,6 +104,7 @@ pub struct CheckInGameData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LeaveGameData {
     pub id: String,
+    pub game: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -147,6 +150,7 @@ pub struct CancelQueueData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PreGameData {
     pub rid: Vec<Vec<u64>>,
+    pub mode: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -284,6 +288,12 @@ pub struct BanUserData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LoadingData {
+    pub game: u64,
+    pub id: String,
+}
+
 #[derive(Debug)]
 pub enum RoomEventData {
     Reset(),
@@ -320,6 +330,7 @@ pub enum RoomEventData {
     Control(ControlData),
     CheckState(CheckStateData),
     BanUser(BanUserData),
+    Loading(LoadingData),
 }
 
 #[derive(Clone, Debug)]
@@ -899,7 +910,7 @@ pub fn HandleQueueRequest(
                                     }
                                 }
                                 if fg.team_len == MATCH_SIZE {
-                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone(), mode: "ng".to_string()}));
                                     for id in fg.gid {
                                         rm_ids.push(id);
                                     }
@@ -1046,7 +1057,7 @@ pub fn HandleQueueRequest(
                                     }
                                 }
                                 if fg.team_len == MATCH_SIZE {
-                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone(), mode: "rk".to_string()}));
                                     for id in fg.gid {
                                         rm_ids.push(id);
                                     }
@@ -1183,7 +1194,7 @@ pub fn HandleQueueRequest(
                                     }
                                 }
                                 if fg.team_len == MATCH_SIZE {
-                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone()}));
+                                    sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone(), mode: "at".to_string()}));
                                     for id in fg.gid {
                                         rm_ids.push(id);
                                     }
@@ -1486,7 +1497,7 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = false;
                     }
-                    // isRankOpen = true;
+                    isRankOpen = true;
                     if isRankOpen && !bForceCloseRkState {
                         rkState = "open";
                     } else {
@@ -1518,6 +1529,85 @@ pub fn init(
                     }
                     for rest in rest_list {
                         JumpUsers.remove(&rest);
+                    }
+                    for (game_id, fg) in &mut GameingGroups {
+                        if fg.borrow_mut().check_status() == FightGameStatus::Ban {
+                            if fg.borrow().mode == "ng" {
+                                fg.borrow_mut().next_status();
+                                fg.borrow_mut().next_pick_status();
+                            } else {
+                                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                    msg: format!(r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#, fg.borrow().ban_time, vec![0,1,2,3,4,5,6,7,8,9])})?;
+                                fg.borrow_mut().ban_time -= 1;
+                                if fg.borrow().ban_time < 0 {
+                                    fg.borrow_mut().next_status();
+                                    fg.borrow_mut().next_pick_status();
+                                }
+                                if fg.borrow().lock_cnt == 10 {
+                                    fg.borrow_mut().lock_cnt = 0;
+                                    fg.borrow_mut().next_status();
+                                    fg.borrow_mut().next_pick_status();
+                                }
+                            }
+                        }
+                        if fg.borrow_mut().check_status() == FightGameStatus::Pick {
+                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                msg: format!(r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#, fg.borrow().choose_time, &fg.borrow().pick_position)})?;
+                            fg.borrow_mut().choose_time -= 1;
+                            if fg.borrow().choose_time < 0 {
+                                let mut isJump = false;
+                                for index in &fg.borrow().pick_position {
+                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                        if u.borrow().isLocked == false {
+                                            let jumpData = JumpData{
+                                                id: u.borrow().id.clone(),
+                                                game: *game_id,
+                                                msg: "jump".to_string(),
+                                            };
+                                            tx2.try_send(RoomEventData::Jump(jumpData));
+                                            isJump = true;
+                                        }
+                                    }
+                                }
+                                if !isJump {
+                                    if fg.borrow().mode == "ng" {
+                                        fg.borrow_mut().next_status();
+                                    } else if fg.borrow().mode == "rk"{
+                                        if fg.borrow_mut().check_rk_pick_status() == RkPickStatus::Round6{
+                                            fg.borrow_mut().next_status();
+                                        } else {
+                                            fg.borrow_mut().next_pick_status();
+                                            fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                        }
+                                    }
+                                }
+                            }
+                            let mut len = 0;
+                            for _c in &fg.borrow().pick_position {
+                                len += 1;
+                            }
+                            if fg.borrow().lock_cnt == len {
+                                if fg.borrow().mode == "ng" {
+                                    fg.borrow_mut().next_status();
+                                } else if fg.borrow().mode == "rk" {
+                                    if fg.borrow_mut().check_rk_pick_status() == RkPickStatus::Round6 {
+                                        fg.borrow_mut().next_status();
+                                    }else {
+                                        fg.borrow_mut().next_pick_status();
+                                        fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                    }
+                                } 
+                            }
+                        }
+                        if fg.borrow_mut().check_status() == FightGameStatus::ReadyToStart {
+                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                msg: format!(r#"{{"status":"readyToStart", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;
+                            fg.borrow_mut().next_status();
+                        }
+                        if fg.borrow_mut().check_status() == FightGameStatus::Finished {
+                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                msg: format!(r#"{{"status":"finished", "game": {}}}"#,game_id)})?;
+                        }
                     }
                 }
 
@@ -1606,6 +1696,13 @@ pub fn init(
                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}",
                                 "game":"{}", "players":{:?}}}"#, r, game_id, &group.borrow().user_names)});
                             }
+                            group.borrow_mut().next_status();
+                            group.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                            if group.borrow().mode == "ng" {
+                                group.borrow_mut().choose_time = NG_CHOOSE_HERO_TIME;
+                            }
+                            group.borrow_mut().ban_time = BAN_HERO_TIME;
+                            GameingGroups.insert(game_id, group.clone());
                             rm_list.push(id.clone());
                         }else if group.borrow().ready_cnt >= READY_TIME {
                             for team in &group.borrow().teams {
@@ -1615,14 +1712,7 @@ pub fn init(
                                             tx2.try_send(RoomEventData::BanUser(BanUserData{id: user.borrow().id.clone()}));
                                         }
                                     }
-                                    // let res = r.borrow_mut().check_start_get();
-                                    // if res == false {
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
-                                    // } else {
-                                    //     let mqttmsg = MqttMsg{topic:format!("room/{}/send/start_queue", r.borrow().master.clone()),
-                                    //         msg: format!(r#"{{"room":"{}", "action": "start queue", "mode":"{}", "id":"{}"}}"#,r.borrow().master.clone(), r.borrow().mode.clone(), r.borrow().master.clone())};
-                                    //     msgtx.try_send(mqttmsg)?;
-                                    // }
                                 }
                             }
                             rm_list.push(id.clone());
@@ -1726,6 +1816,9 @@ pub fn init(
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
                                     settlement_score(&win, &lose, &msgtx, &sender, &mut conn, x.mode);
+                                    if let Some(fg) = GameingGroups.get(&x.game) {
+                                        fg.borrow_mut().next_status();
+                                    }
                                 },
                                 RoomEventData::GameInfo(x) => {
                                     //println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -1820,9 +1913,12 @@ pub fn init(
                                 RoomEventData::LockedNGHero(x) => {
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
-                                        u.borrow_mut().hero = x.hero;
-                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_locked_hero", u.borrow().id),
-                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero)};
+                                        u.borrow_mut().isLocked = true;
+                                        mqttmsg = MqttMsg{topic:format!("game/{}/res/locked_hero", u.borrow().game_id),
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, x.hero)};
+                                        if let Some(fg) = GameingGroups.get(&u.borrow().game_id) {
+                                            fg.borrow_mut().lock_cnt += 1;
+                                        }
                                     }
                                 },
                                 RoomEventData::BanHero(x) => {
@@ -1863,23 +1959,23 @@ pub fn init(
                                     let j = TotalUsers.get(&x.join);
                                     let mut sendok = false;
                                     if let Some(u) = u {
-                                        let r = TotalRoom.get(&u.borrow().rid);
-                                        let mut is_null = false;
-                                        if let Some(r) = r {
-                                            let m = r.borrow().master.clone();
-                                            r.borrow_mut().rm_user(&u.borrow().id);
-                                            if r.borrow().users.len() > 0 {
-                                                r.borrow().publish_update(&msgtx, m)?;
-                                            }
-                                            else {
-                                                is_null = true;
-                                            }
-                                        }
-                                        if is_null {
-                                            TotalRoom.remove(&u.borrow().rid);
-                                            QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
-                                        }
-                                        u.borrow_mut().rid = 0;
+                                        // let r = TotalRoom.get(&u.borrow().rid);
+                                        // let mut is_null = false;
+                                        // if let Some(r) = r {
+                                        //     let m = r.borrow().master.clone();
+                                        //     r.borrow_mut().rm_user(&u.borrow().id);
+                                        //     if r.borrow().users.len() > 0 {
+                                        //         r.borrow().publish_update(&msgtx, m)?;
+                                        //     }
+                                        //     else {
+                                        //         is_null = true;
+                                        //     }
+                                        // }
+                                        // if is_null {
+                                        //     TotalRoom.remove(&u.borrow().rid);
+                                        //     QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
+                                        // }
+                                        // u.borrow_mut().rid = 0;
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
@@ -1947,7 +2043,22 @@ pub fn init(
                                             tx2.try_send(RoomEventData::BanUser(BanUserData{id: x.id.clone()}));
                                             AbandonGames.insert(x.game, true);
                                         }
-                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/jump", x.game.clone()),
+                                        let mut rm_list: Vec<u64> = Vec::new();
+                                        if let Some(fg) = GameingGroups.get(&x.game) {
+                                            for t in &fg.borrow().teams {
+                                                for r in &t.borrow().rooms {
+                                                    for user in &r.borrow().users {
+                                                        user.borrow_mut().isLocked = false;
+                                                        user.borrow_mut().gid = 0;
+                                                    }
+                                                }
+                                            }
+                                            rm_list.push(fg.borrow().game_id);
+                                        }
+                                        for rm in rm_list {
+                                            GameingGroups.remove(&rm);
+                                        }
+                                        mqttmsg = MqttMsg{topic:format!("game/{}/res/jump", x.game.clone()),
                                             msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
                                 },
@@ -1986,6 +2097,15 @@ pub fn init(
                                     // }
                                     // tx2.try_send(RoomEventData::CheckRestriction(CheckRestrctionData{id: x.id.clone()}));
                                 },
+                                RoomEventData::Loading(x) => {
+                                    if let Some(fg) = GameingGroups.get(&x.game) {
+                                        fg.borrow_mut().loading_cnt += 1;
+                                        println!("{}", fg.borrow().loading_cnt);
+                                        if fg.borrow().loading_cnt >= 10 {
+                                            fg.borrow_mut().next_status();
+                                        }
+                                    }
+                                },
                                 RoomEventData::CheckRestriction(x) => {
                                     let r = RestrictedUsers.get(&x.id);
                                     if let Some(r) = r {
@@ -2012,15 +2132,23 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::SetPassword(x) => {
-                                    if let Some(gameRoom) = GameingRoom.get(&x.game) {
-                                        gameRoom.borrow_mut().isOpen = true;
+                                    println!("{:?}", x);
+                                    if let Some(gameRoom) = GameingGroups.get(&x.game) {
                                         mqttmsg = MqttMsg{topic:format!("game/{}/res/password", x.game.clone()),
                                             msg: format!(r#"{{"password":"{}"}}"#, x.password.clone())};
                                     }
                                 },
                                 RoomEventData::LeaveGame(x) => {
                                     let _: () = redis_conn.del(format!("g{}", x.id))?;
-                                    tx2.try_send(RoomEventData::CheckInGame(CheckInGameData{id: x.id}));
+                                    if let Some(u) = TotalUsers.get(&x.id) {
+                                        let jumpData = JumpData{
+                                            id: u.borrow().id.clone(),
+                                            game: x.game,
+                                            msg: "jump".to_string(),
+                                        };
+                                        tx2.try_send(RoomEventData::Jump(jumpData));
+                                    }
+                                    // tx2.try_send(RoomEventData::CheckInGame(CheckInGameData{id: x.id}));
                                 },
                                 RoomEventData::Reset() => {
                                     TotalRoom.clear();
@@ -2127,6 +2255,7 @@ pub fn init(
 
                                     game_id += 1;
                                     fg.set_game_id(game_id);
+                                    fg.set_mode(x.mode);
                                     PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
 
                                 },
@@ -2310,7 +2439,6 @@ pub fn init(
                                         let mut is_null = false;
                                         let gid = u.borrow().gid;
                                         let rid = u.borrow().rid;
-                                        println!("rid : {}", u.borrow().rid);
                                         let r = TotalRoom.get(&u.borrow().rid);
                                         if let Some(r) = r {
                                             let m = r.borrow().master.clone();
@@ -2349,6 +2477,21 @@ pub fn init(
                                                     }
                                                 }
                                                 //TotalRoom.remove(&rid);
+                                            }
+                                            let mut rm_list: Vec<u64> = Vec::new();
+                                            if let Some(fg) = GameingGroups.get(&gid) {
+                                                for t in &fg.borrow().teams {
+                                                    for r in &t.borrow().rooms {
+                                                        for user in &r.borrow().users {
+                                                            user.borrow_mut().isLocked = false;
+                                                            user.borrow_mut().gid = 0;
+                                                        }
+                                                    }
+                                                }
+                                                rm_list.push(fg.borrow().game_id);
+                                            }
+                                            for rm in rm_list {
+                                                GameingGroups.remove(&rm);
                                             }
                                         }
                                         //println!("{:?}", TotalRoom);
@@ -2688,7 +2831,7 @@ pub fn ban_hero(
     Ok(())
 }
 
-pub fn lock_ng_hero(
+pub fn lock_hero(
     id: String,
     v: Value,
     sender: Sender<RoomEventData>,
@@ -2802,5 +2945,11 @@ pub fn control(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(
 pub fn checkState(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     let data: CheckStateData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::CheckState(data));
+    Ok(())
+}
+
+pub fn loading(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: LoadingData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::Loading(data));
     Ok(())
 }
