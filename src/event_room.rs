@@ -38,6 +38,8 @@ const CHOOSE_HERO_TIME: i16 = 30;
 const NG_CHOOSE_HERO_TIME: i16 = 90;
 const BAN_HERO_TIME: i16 = 25;
 const READY_TIME: u16 = 15;
+const RANK_RANGE: i16 = 100;
+const NG_RANGE: i16 = 200;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -804,7 +806,7 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut NGQueueRoom {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng && v.borrow().ready == 0 {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + NG_RANGE + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng && v.borrow().ready == 0 {
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -823,7 +825,7 @@ pub fn HandleQueueRequest(
                                 if v.borrow().ready == 0 &&
                                     v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
                                     let Difference: i16 = i16::abs(v.borrow().avg_ng - g.avg_ng);
-                                    if g.avg_ng == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                    if g.avg_ng == 0 || Difference <= NG_RANGE + SCORE_INTERVAL * v.borrow().queue_cnt {
                                         let mut ng ;
                                         let isBlack = check_is_black(v.borrow().user_ids.clone(), g.user_ids.clone(), &mut conn)?;
                                         if (isBlack) {
@@ -899,7 +901,7 @@ pub fn HandleQueueRequest(
                                     if fg.team_len > 0 {
                                         difference = i16::abs(rg.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
                                     }
-                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                    if difference <= NG_RANGE + SCORE_INTERVAL * rg.borrow().queue_cnt {
                                         total_ng += rg.borrow().avg_ng as i16;
                                         fg.group.push(rg.borrow().rid.clone());
                                         fg.team_len += 1;
@@ -944,7 +946,7 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut RKQueueRoom {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_rk && v.borrow().ready == 0 {
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + RANK_RANGE) < v.borrow().avg_rk && v.borrow().ready == 0 {
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -964,7 +966,7 @@ pub fn HandleQueueRequest(
                                     v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
                                     let Difference: i16 = i16::abs(v.borrow().avg_rk - g.avg_rk);
-                                    if g.avg_rk == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                    if g.avg_rk == 0 || Difference <= RANK_RANGE {
                                         let mut rk ;
                                         let isBlack = check_is_black(v.borrow().user_ids.clone(), g.user_ids.clone(), &mut conn)?;
                                         if (isBlack) {
@@ -1043,7 +1045,7 @@ pub fn HandleQueueRequest(
                                     if fg.team_len > 0 {
                                         difference = i16::abs(rg.borrow().avg_rk as i16 - total_rk/fg.team_len as i16);
                                     }
-                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                    if difference <= RANK_RANGE {
                                         total_rk += rg.borrow().avg_rk as i16;
                                         fg.group.push(rg.borrow().rid.clone());
                                         fg.team_len += 1;
@@ -1091,7 +1093,7 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut ATQueueRoom {
-                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_at && v.borrow().ready == 0{
+                                if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + RANK_RANGE) < v.borrow().avg_at && v.borrow().ready == 0{
                                     for r in g.rid {
                                         id.push(r);
                                     }
@@ -1108,7 +1110,7 @@ pub fn HandleQueueRequest(
                                     v.borrow().user_len as i16 + g.user_len <= TEAM_SIZE {
 
                                     let Difference: i16 = i16::abs(v.borrow().avg_at - g.avg_at);
-                                    if g.avg_at == 0 || Difference <= SCORE_INTERVAL * v.borrow().queue_cnt {
+                                    if g.avg_at == 0 || Difference <= RANK_RANGE {
                                         g.rid.push(v.borrow().rid);
                                         let mut at ;
                                         if (g.user_len + v.borrow().user_len > 0){
@@ -1180,7 +1182,7 @@ pub fn HandleQueueRequest(
                                     if fg.team_len > 0 {
                                         difference = i16::abs(rg.borrow().avg_at as i16 - total_at/fg.team_len as i16);
                                     }
-                                    if difference <= SCORE_INTERVAL * rg.borrow().queue_cnt {
+                                    if difference <= RANK_RANGE {
                                         total_at += rg.borrow().avg_at as i16;
                                         fg.group.push(rg.borrow().rid.clone());
                                         fg.team_len += 1;
