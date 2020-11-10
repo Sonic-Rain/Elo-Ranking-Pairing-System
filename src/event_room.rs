@@ -422,6 +422,34 @@ pub struct PreReadyData {
     pub isReady: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct GamingData {
+    pub game: u64,
+    pub mode: String,
+    pub steam_id1: String,
+    pub steam_id2: String,
+    pub steam_id3: String,
+    pub steam_id4: String,
+    pub steam_id5: String,
+    pub steam_id6: String,
+    pub steam_id7: String,
+    pub steam_id8: String,
+    pub steam_id9: String,
+    pub steam_id10: String,
+    pub hero1: String,
+    pub hero2: String,
+    pub hero3: String,
+    pub hero4: String,
+    pub hero5: String,
+    pub hero6: String,
+    pub hero7: String,
+    pub hero8: String,
+    pub hero9: String,
+    pub hero10: String,
+    pub status: String,
+    pub win_team: i16,
+}
+
 pub enum QueueData {
     UpdateRoom(QueueRoomData),
     RemoveRoom(RemoveRoomData),
@@ -1409,6 +1437,10 @@ pub fn init(
             //name = mysql::from_value(a.get("name").unwrap());
             TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
         }
+        let sql2 = format!(
+            "DELETE FROM Gaming;"
+        );
+        conn.query(sql.clone())?;
         /*
         let get_game_id = format!("select MAX(game_id) from game_info;");
         let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
@@ -1532,6 +1564,7 @@ pub fn init(
                     for rest in rest_list {
                         JumpUsers.remove(&rest);
                     }
+                    let mut fg_rm_list: Vec<u64> = Vec::new();
                     for (game_id, fg) in &mut GameingGroups {
                         if fg.borrow_mut().check_status() == FightGameStatus::Ban {
                             if fg.borrow().mode == "ng" {
@@ -1598,24 +1631,114 @@ pub fn init(
                                         fg.borrow_mut().next_pick_status();
                                         fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
                                     }
-                                } 
+                                }
                             }
                         }
                         if fg.borrow_mut().check_status() == FightGameStatus::ReadyToStart {
+                            let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
+                            for user_id in &fg.borrow().user_names {
+                                values = format!("{} ,'{}'", values, user_id);
+                            }
+                            for user_id in &fg.borrow().user_names {
+                                if let Some(u) = TotalUsers.get(user_id) {
+                                    values = format!("{} ,'{}'", values, u.borrow().hero);
+                                }
+                            }
+                            let sql = format!(
+                                "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
+                                values
+                            );
+                            let qres = conn.query(sql.clone())?;
                             msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                 msg: format!(r#"{{"status":"readyToStart", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;
                             fg.borrow_mut().next_status();
                         }
                         if fg.borrow_mut().check_status() == FightGameStatus::Finished {
+                            let sql = format!(
+                                "DELETE FROM Gaming where game={};",
+                                fg.borrow().game_id
+                            );
+                            let qres = conn.query(sql.clone())?;
                             msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                 msg: format!(r#"{{"status":"finished", "game": {}}}"#,game_id)})?;
+                            fg_rm_list.push(*game_id);
                         }
+                    }
+                    for rm in fg_rm_list {
+                        GameingGroups.remove(&rm);
                     }
                 }
 
                 recv(update5000ms) -> _ => {
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
+                    for (game_id, fg) in &mut GameingGroups {
+                        let sql = format!("select * from Gaming where game={}", game_id);
+                        let qres = conn.query(sql.clone())?;
+                        for row in qres {
+                            let ea = row?.clone();
+                            let gamingData = GamingData{
+                                game: mysql::from_value(ea.get("game").unwrap()),
+                                mode: mysql::from_value(ea.get("mode").unwrap()),
+                                steam_id1: mysql::from_value(ea.get("steam_id1").unwrap()),
+                                steam_id2: mysql::from_value(ea.get("steam_id2").unwrap()),
+                                steam_id3: mysql::from_value(ea.get("steam_id3").unwrap()),
+                                steam_id4: mysql::from_value(ea.get("steam_id4").unwrap()),
+                                steam_id5: mysql::from_value(ea.get("steam_id5").unwrap()),
+                                steam_id6: mysql::from_value(ea.get("steam_id6").unwrap()),
+                                steam_id7: mysql::from_value(ea.get("steam_id7").unwrap()),
+                                steam_id8: mysql::from_value(ea.get("steam_id8").unwrap()),
+                                steam_id9: mysql::from_value(ea.get("steam_id9").unwrap()),
+                                steam_id10: mysql::from_value(ea.get("steam_id10").unwrap()),
+                                hero1: mysql::from_value(ea.get("hero1").unwrap()),
+                                hero2: mysql::from_value(ea.get("hero2").unwrap()),
+                                hero3: mysql::from_value(ea.get("hero3").unwrap()),
+                                hero4: mysql::from_value(ea.get("hero4").unwrap()),
+                                hero5: mysql::from_value(ea.get("hero5").unwrap()),
+                                hero6: mysql::from_value(ea.get("hero6").unwrap()),
+                                hero7: mysql::from_value(ea.get("hero7").unwrap()),
+                                hero8: mysql::from_value(ea.get("hero8").unwrap()),
+                                hero9: mysql::from_value(ea.get("hero9").unwrap()),
+                                hero10: mysql::from_value(ea.get("hero10").unwrap()),
+                                status: mysql::from_value(ea.get("status").unwrap()),
+                                win_team: mysql::from_value(ea.get("win_team").unwrap()),
+                            };
+                            if gamingData.status == "finished" {
+                                AbandonGames.insert(*game_id, true);
+                                let mut gameOverData = GameOverData{
+                                    game: gamingData.game,
+                                    mode: gamingData.mode,
+                                    win: Vec::new(),
+                                    lose: Vec::new()
+                                };
+                                if gamingData.win_team == 1 {
+                                    gameOverData.win.push(gamingData.steam_id1.clone());
+                                    gameOverData.win.push(gamingData.steam_id2.clone());
+                                    gameOverData.win.push(gamingData.steam_id3.clone());
+                                    gameOverData.win.push(gamingData.steam_id4.clone());
+                                    gameOverData.win.push(gamingData.steam_id5.clone());
+                                    gameOverData.lose.push(gamingData.steam_id6.clone());
+                                    gameOverData.lose.push(gamingData.steam_id7.clone());
+                                    gameOverData.lose.push(gamingData.steam_id8.clone());
+                                    gameOverData.lose.push(gamingData.steam_id9.clone());
+                                    gameOverData.lose.push(gamingData.steam_id10.clone());
+                                }
+                                if gamingData.win_team == 2 {
+                                    gameOverData.lose.push(gamingData.steam_id1.clone());
+                                    gameOverData.lose.push(gamingData.steam_id2.clone());
+                                    gameOverData.lose.push(gamingData.steam_id3.clone());
+                                    gameOverData.lose.push(gamingData.steam_id4.clone());
+                                    gameOverData.lose.push(gamingData.steam_id5.clone());
+                                    gameOverData.win.push(gamingData.steam_id6.clone());
+                                    gameOverData.win.push(gamingData.steam_id7.clone());
+                                    gameOverData.win.push(gamingData.steam_id8.clone());
+                                    gameOverData.win.push(gamingData.steam_id9.clone());
+                                    gameOverData.win.push(gamingData.steam_id10.clone());
+                                }
+                                tx2.try_send(RoomEventData::GameOver(gameOverData));
+                            }
+                        }
+                    }
                     for (id, u) in &mut InGameUsers {
                         // println!("in game id : {}", id);
                         let inGame: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("g{}",id.clone()));
@@ -1732,7 +1855,7 @@ pub fn init(
                             r.borrow().publish_update(&msgtx, m)?;
                         }
                     }
-                    //get online and game count 
+                    //get online and game count
                     let sql = format!(r#"select count(*) from user where status = 'online';"#);
                     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
                     let mut online_cnt = 0;
@@ -1941,8 +2064,9 @@ pub fn init(
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().isLocked = true;
+                                        u.borrow_mut().hero = x.hero.clone();
                                         mqttmsg = MqttMsg{topic:format!("game/{}/res/locked_hero", u.borrow().game_id),
-                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, x.hero)};
+                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, x.hero.clone())};
                                         if let Some(fg) = GameingGroups.get(&u.borrow().game_id) {
                                             fg.borrow_mut().lock_cnt += 1;
                                         }
@@ -2083,6 +2207,11 @@ pub fn init(
                                             rm_list.push(fg.borrow().game_id);
                                         }
                                         for rm in rm_list {
+                                            let sql = format!(
+                                                "DELETE FROM Gaming where game={};",
+                                                rm
+                                            );
+                                            let qres = conn.query(sql.clone())?;
                                             GameingGroups.remove(&rm);
                                         }
                                         mqttmsg = MqttMsg{topic:format!("game/{}/res/jump", x.game.clone()),
@@ -2120,7 +2249,6 @@ pub fn init(
                                     //             Rc::clone(&r),
                                     //         );
                                     //     }
-                                        
                                     // }
                                     // tx2.try_send(RoomEventData::CheckRestriction(CheckRestrctionData{id: x.id.clone()}));
                                 },
@@ -2975,7 +3103,11 @@ pub fn checkState(v: Value, sender: Sender<RoomEventData>) -> std::result::Resul
     Ok(())
 }
 
-pub fn loading(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+pub fn loading(
+    id: String,
+    v: Value,
+    sender: Sender<RoomEventData>,
+) -> std::result::Result<(), Error> {
     let data: LoadingData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::Loading(data));
     Ok(())
