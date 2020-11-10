@@ -1440,7 +1440,7 @@ pub fn init(
         let sql2 = format!(
             "DELETE FROM Gaming;"
         );
-        conn.query(sql.clone())?;
+        conn.query(sql2.clone())?;
         /*
         let get_game_id = format!("select MAX(game_id) from game_info;");
         let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
@@ -1531,7 +1531,6 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = false;
                     }
-                    isRankOpen = true;
                     if isRankOpen && !bForceCloseRkState {
                         rkState = "open";
                     } else {
@@ -2219,38 +2218,38 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::BanUser(x) => {
-                                    // let reset_time = 86400;
-                                    // if !JumpUsers.contains_key(&x.id){
-                                    //     let jumpCountData = JumpCountData{
-                                    //         count: 1,
-                                    //         time: reset_time,
-                                    //     };
-                                    //     JumpUsers.insert(x.id.clone(), Rc::new(RefCell::new(jumpCountData)));
-                                    //     let mut new_restriced = RestrictedData {
-                                    //         id: x.id.clone(),
-                                    //         time: 60,
-                                    //     };
-                                    //     let r = Rc::new(RefCell::new(new_restriced));
-                                    //     RestrictedUsers.insert(
-                                    //         x.id.clone(),
-                                    //         Rc::clone(&r),
-                                    //     );
-                                    // } else {
-                                    //     if let Some(j) = JumpUsers.get_mut(&x.id) {
-                                    //         j.borrow_mut().count += 1;
-                                    //         j.borrow_mut().time = reset_time;
-                                    //         let mut new_restriced = RestrictedData {
-                                    //             id: x.id.clone(),
-                                    //             time: 60 * (j.borrow().count+1),
-                                    //         };
-                                    //         let r = Rc::new(RefCell::new(new_restriced));
-                                    //         RestrictedUsers.insert(
-                                    //             x.id.clone(),
-                                    //             Rc::clone(&r),
-                                    //         );
-                                    //     }
-                                    // }
-                                    // tx2.try_send(RoomEventData::CheckRestriction(CheckRestrctionData{id: x.id.clone()}));
+                                    let reset_time = 86400;
+                                    if !JumpUsers.contains_key(&x.id){
+                                        let jumpCountData = JumpCountData{
+                                            count: 1,
+                                            time: reset_time,
+                                        };
+                                        JumpUsers.insert(x.id.clone(), Rc::new(RefCell::new(jumpCountData)));
+                                        let mut new_restriced = RestrictedData {
+                                            id: x.id.clone(),
+                                            time: 60,
+                                        };
+                                        let r = Rc::new(RefCell::new(new_restriced));
+                                        RestrictedUsers.insert(
+                                            x.id.clone(),
+                                            Rc::clone(&r),
+                                        );
+                                    } else {
+                                        if let Some(j) = JumpUsers.get_mut(&x.id) {
+                                            j.borrow_mut().count += 1;
+                                            j.borrow_mut().time = reset_time;
+                                            let mut new_restriced = RestrictedData {
+                                                id: x.id.clone(),
+                                                time: 60,
+                                            };
+                                            let r = Rc::new(RefCell::new(new_restriced));
+                                            RestrictedUsers.insert(
+                                                x.id.clone(),
+                                                Rc::clone(&r),
+                                            );
+                                        }
+                                    }
+                                    tx2.try_send(RoomEventData::CheckRestriction(CheckRestrctionData{id: x.id.clone()}));
                                 },
                                 RoomEventData::Loading(x) => {
                                     if let Some(fg) = GameingGroups.get(&x.game) {
