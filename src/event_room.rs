@@ -35,7 +35,7 @@ const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 2;
 const CHOOSE_HERO_TIME: i16 = 30;
-const NG_CHOOSE_HERO_TIME: i16 = 90;
+const NG_CHOOSE_HERO_TIME: i16 = 15;
 const BAN_HERO_TIME: i16 = 25;
 const READY_TIME: u16 = 15;
 const RANK_RANGE: i16 = 100;
@@ -2199,12 +2199,10 @@ pub fn init(
                                         }
                                         let mut rm_list: Vec<u64> = Vec::new();
                                         if let Some(fg) = GameingGroups.get(&x.game) {
-                                            for t in &fg.borrow().teams {
-                                                for r in &t.borrow().rooms {
-                                                    for user in &r.borrow().users {
-                                                        user.borrow_mut().isLocked = false;
-                                                        user.borrow_mut().gid = 0;
-                                                    }
+                                            for uid in &fg.borrow().user_names {
+                                                if let Some(u) = TotalUsers.get(uid) {
+                                                    u.borrow_mut().isLocked = false;
+                                                    u.borrow_mut().gid = 0;
                                                 }
                                             }
                                             rm_list.push(fg.borrow().game_id);
