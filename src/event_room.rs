@@ -1596,7 +1596,7 @@ pub fn init(
                                 let mut isJump = false;
                                 for index in &fg.borrow().pick_position {
                                     if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
-                                        if u.borrow().isLocked == false {
+                                        if u.borrow().hero == "" {
                                             let jumpData = JumpData{
                                                 id: u.borrow().id.clone(),
                                                 game: *game_id,
@@ -1644,6 +1644,7 @@ pub fn init(
                             }
                             for user_id in &fg.borrow().user_names {
                                 if let Some(u) = TotalUsers.get(user_id) {
+                                    println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
                                     values = format!("{} ,'{}'", values, u.borrow().hero);
                                 }
                             }
@@ -2059,6 +2060,7 @@ pub fn init(
                                 RoomEventData::ChooseNGHero(x) => {
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
+                                        println!("hero : {}", x.hero.clone());
                                         u.borrow_mut().hero = x.hero.clone();
                                         // conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
                                         // key : steamid, value : hero
