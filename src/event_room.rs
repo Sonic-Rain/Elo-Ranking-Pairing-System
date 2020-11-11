@@ -1662,6 +1662,13 @@ pub fn init(
                                 fg.borrow().game_id
                             );
                             let qres = conn.query(sql.clone())?;
+                            for uid in &fg.borrow().user_names {
+                                if let Some(u) = TotalUsers.get(uid) {
+                                    u.borrow_mut().isLocked = false;
+                                    u.borrow_mut().hero = "".to_string();
+                                    u.borrow_mut().gid = 0;
+                                }
+                            }
                             msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                 msg: format!(r#"{{"status":"finished", "game": {}}}"#,game_id)})?;
                             fg_rm_list.push(*game_id);
@@ -1675,6 +1682,8 @@ pub fn init(
                 recv(update5000ms) -> _ => {
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
+                    // 改這
+
                     for (game_id, fg) in &mut GameingGroups {
                         let sql = format!("select * from Gaming where game={}", game_id);
                         let qres = conn.query(sql.clone())?;
