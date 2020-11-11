@@ -1441,6 +1441,10 @@ pub fn init(
             "DELETE FROM Gaming;"
         );
         conn.query(sql2.clone())?;
+        let sql3 = format!(
+            "update user set status='offline';"
+        );
+        conn.query(sql3.clone())?;
         /*
         let get_game_id = format!("select MAX(game_id) from game_info;");
         let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
