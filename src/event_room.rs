@@ -1683,73 +1683,68 @@ pub fn init(
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
                     // 改這
-
-                    for (game_id, fg) in &mut GameingGroups {
-                        let sql = format!("select * from Gaming where game={}", game_id);
-                        let qres = conn.query(sql.clone())?;
-                        for row in qres {
-                            let ea = row?.clone();
-                            let gamingData = GamingData{
-                                game: mysql::from_value(ea.get("game").unwrap()),
-                                mode: mysql::from_value(ea.get("mode").unwrap()),
-                                steam_id1: mysql::from_value(ea.get("steam_id1").unwrap()),
-                                steam_id2: mysql::from_value(ea.get("steam_id2").unwrap()),
-                                steam_id3: mysql::from_value(ea.get("steam_id3").unwrap()),
-                                steam_id4: mysql::from_value(ea.get("steam_id4").unwrap()),
-                                steam_id5: mysql::from_value(ea.get("steam_id5").unwrap()),
-                                steam_id6: mysql::from_value(ea.get("steam_id6").unwrap()),
-                                steam_id7: mysql::from_value(ea.get("steam_id7").unwrap()),
-                                steam_id8: mysql::from_value(ea.get("steam_id8").unwrap()),
-                                steam_id9: mysql::from_value(ea.get("steam_id9").unwrap()),
-                                steam_id10: mysql::from_value(ea.get("steam_id10").unwrap()),
-                                hero1: mysql::from_value(ea.get("hero1").unwrap()),
-                                hero2: mysql::from_value(ea.get("hero2").unwrap()),
-                                hero3: mysql::from_value(ea.get("hero3").unwrap()),
-                                hero4: mysql::from_value(ea.get("hero4").unwrap()),
-                                hero5: mysql::from_value(ea.get("hero5").unwrap()),
-                                hero6: mysql::from_value(ea.get("hero6").unwrap()),
-                                hero7: mysql::from_value(ea.get("hero7").unwrap()),
-                                hero8: mysql::from_value(ea.get("hero8").unwrap()),
-                                hero9: mysql::from_value(ea.get("hero9").unwrap()),
-                                hero10: mysql::from_value(ea.get("hero10").unwrap()),
-                                status: mysql::from_value(ea.get("status").unwrap()),
-                                win_team: mysql::from_value(ea.get("win_team").unwrap()),
-                            };
-                            if gamingData.status == "finished" {
-                                AbandonGames.insert(*game_id, true);
-                                let mut gameOverData = GameOverData{
-                                    game: gamingData.game,
-                                    mode: gamingData.mode,
-                                    win: Vec::new(),
-                                    lose: Vec::new()
-                                };
-                                if gamingData.win_team == 1 {
-                                    gameOverData.win.push(gamingData.steam_id1.clone());
-                                    gameOverData.win.push(gamingData.steam_id2.clone());
-                                    gameOverData.win.push(gamingData.steam_id3.clone());
-                                    gameOverData.win.push(gamingData.steam_id4.clone());
-                                    gameOverData.win.push(gamingData.steam_id5.clone());
-                                    gameOverData.lose.push(gamingData.steam_id6.clone());
-                                    gameOverData.lose.push(gamingData.steam_id7.clone());
-                                    gameOverData.lose.push(gamingData.steam_id8.clone());
-                                    gameOverData.lose.push(gamingData.steam_id9.clone());
-                                    gameOverData.lose.push(gamingData.steam_id10.clone());
-                                }
-                                if gamingData.win_team == 2 {
-                                    gameOverData.lose.push(gamingData.steam_id1.clone());
-                                    gameOverData.lose.push(gamingData.steam_id2.clone());
-                                    gameOverData.lose.push(gamingData.steam_id3.clone());
-                                    gameOverData.lose.push(gamingData.steam_id4.clone());
-                                    gameOverData.lose.push(gamingData.steam_id5.clone());
-                                    gameOverData.win.push(gamingData.steam_id6.clone());
-                                    gameOverData.win.push(gamingData.steam_id7.clone());
-                                    gameOverData.win.push(gamingData.steam_id8.clone());
-                                    gameOverData.win.push(gamingData.steam_id9.clone());
-                                    gameOverData.win.push(gamingData.steam_id10.clone());
-                                }
-                                tx2.try_send(RoomEventData::GameOver(gameOverData));
-                            }
+                    let sql = format!("select * from Gaming where status='finished';",);
+                    let qres = conn.query(sql.clone())?;
+                    for row in qres {
+                        let ea = row?.clone();
+                        let gamingData = GamingData{
+                            game: mysql::from_value(ea.get("game").unwrap()),
+                            mode: mysql::from_value(ea.get("mode").unwrap()),
+                            steam_id1: mysql::from_value(ea.get("steam_id1").unwrap()),
+                            steam_id2: mysql::from_value(ea.get("steam_id2").unwrap()),
+                            steam_id3: mysql::from_value(ea.get("steam_id3").unwrap()),
+                            steam_id4: mysql::from_value(ea.get("steam_id4").unwrap()),
+                            steam_id5: mysql::from_value(ea.get("steam_id5").unwrap()),
+                            steam_id6: mysql::from_value(ea.get("steam_id6").unwrap()),
+                            steam_id7: mysql::from_value(ea.get("steam_id7").unwrap()),
+                            steam_id8: mysql::from_value(ea.get("steam_id8").unwrap()),
+                            steam_id9: mysql::from_value(ea.get("steam_id9").unwrap()),
+                            steam_id10: mysql::from_value(ea.get("steam_id10").unwrap()),
+                            hero1: mysql::from_value(ea.get("hero1").unwrap()),
+                            hero2: mysql::from_value(ea.get("hero2").unwrap()),
+                            hero3: mysql::from_value(ea.get("hero3").unwrap()),
+                            hero4: mysql::from_value(ea.get("hero4").unwrap()),
+                            hero5: mysql::from_value(ea.get("hero5").unwrap()),
+                            hero6: mysql::from_value(ea.get("hero6").unwrap()),
+                            hero7: mysql::from_value(ea.get("hero7").unwrap()),
+                            hero8: mysql::from_value(ea.get("hero8").unwrap()),
+                            hero9: mysql::from_value(ea.get("hero9").unwrap()),
+                            hero10: mysql::from_value(ea.get("hero10").unwrap()),
+                            status: mysql::from_value(ea.get("status").unwrap()),
+                            win_team: mysql::from_value(ea.get("win_team").unwrap()),
+                        };
+                        AbandonGames.insert(gamingData.game, true);
+                        let mut gameOverData = GameOverData{
+                            game: gamingData.game,
+                            mode: gamingData.mode,
+                            win: Vec::new(),
+                            lose: Vec::new()
+                        };
+                        if gamingData.win_team == 1 {
+                            gameOverData.win.push(gamingData.steam_id1.clone());
+                            gameOverData.win.push(gamingData.steam_id2.clone());
+                            gameOverData.win.push(gamingData.steam_id3.clone());
+                            gameOverData.win.push(gamingData.steam_id4.clone());
+                            gameOverData.win.push(gamingData.steam_id5.clone());
+                            gameOverData.lose.push(gamingData.steam_id6.clone());
+                            gameOverData.lose.push(gamingData.steam_id7.clone());
+                            gameOverData.lose.push(gamingData.steam_id8.clone());
+                            gameOverData.lose.push(gamingData.steam_id9.clone());
+                            gameOverData.lose.push(gamingData.steam_id10.clone());
                         }
+                        if gamingData.win_team == 2 {
+                            gameOverData.lose.push(gamingData.steam_id1.clone());
+                            gameOverData.lose.push(gamingData.steam_id2.clone());
+                            gameOverData.lose.push(gamingData.steam_id3.clone());
+                            gameOverData.lose.push(gamingData.steam_id4.clone());
+                            gameOverData.lose.push(gamingData.steam_id5.clone());
+                            gameOverData.win.push(gamingData.steam_id6.clone());
+                            gameOverData.win.push(gamingData.steam_id7.clone());
+                            gameOverData.win.push(gamingData.steam_id8.clone());
+                            gameOverData.win.push(gamingData.steam_id9.clone());
+                            gameOverData.win.push(gamingData.steam_id10.clone());
+                        }
+                        tx2.try_send(RoomEventData::GameOver(gameOverData));
                     }
                     for (id, u) in &mut InGameUsers {
                         // println!("in game id : {}", id);
