@@ -35,7 +35,7 @@ const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
 const SCORE_INTERVAL: i16 = 2;
 const CHOOSE_HERO_TIME: i16 = 30;
-const NG_CHOOSE_HERO_TIME: i16 = 15;
+const NG_CHOOSE_HERO_TIME: i16 = 90;
 const BAN_HERO_TIME: i16 = 25;
 const READY_TIME: u16 = 15;
 const RANK_RANGE: i16 = 100;
@@ -2202,6 +2202,7 @@ pub fn init(
                                             for uid in &fg.borrow().user_names {
                                                 if let Some(u) = TotalUsers.get(uid) {
                                                     u.borrow_mut().isLocked = false;
+                                                    u.borrow_mut().hero = "".to_string();
                                                     u.borrow_mut().gid = 0;
                                                 }
                                             }
@@ -2567,14 +2568,15 @@ pub fn init(
                                         if let Some(u2) = u2 {
                                             let sql = format!(r#"select hero from user where id="{}";"#, u2.borrow().id.clone());
                                             let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                            let mut hero = "".to_string();
                                             for row in qres2 {
                                                 let a = row?.clone();
-                                                u2.borrow_mut().hero = mysql::from_value(a.get("hero").unwrap());
+                                                hero = mysql::from_value(a.get("hero").unwrap());
                                                 break;
                                             }
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().hero)};
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, hero)};
                                         }
                                     }
                                     else {
