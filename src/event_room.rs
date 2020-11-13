@@ -1684,6 +1684,7 @@ pub fn init(
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
                     // 改這
+                    let mut del_list: Vec<u64> = Vec::new();
                     let sql = format!("select * from Gaming where status='finished';",);
                     let qres = conn.query(sql.clone())?;
                     for row in qres {
@@ -1745,7 +1746,16 @@ pub fn init(
                             gameOverData.win.push(gamingData.steam_id9.clone());
                             gameOverData.win.push(gamingData.steam_id10.clone());
                         }
+                        del_list.push(gameOverData.game);
                         tx2.try_send(RoomEventData::GameOver(gameOverData));
+                    }
+                    for game in del_list {
+                        let sql2 = format!(
+                            "DELETE FROM Gaming where game={};",
+                            game
+                        );
+                        let qres2 = conn.query(sql2.clone())?;
+                        GameingGroups.remove(&game);
                     }
                     for (id, u) in &mut InGameUsers {
                         // println!("in game id : {}", id);
