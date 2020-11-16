@@ -342,7 +342,7 @@ pub enum NgPickStatus {
 }
 
 #[derive(PartialEq)]
-pub enum ATPickStatus {
+pub enum ATGameStatus {
     Ready,
     Loading,
     Ban,
@@ -449,6 +449,81 @@ impl FightGame {
             g.borrow_mut().ready();
         }
     }
+
+    pub fn check_at_status(&mut self) -> ATGameStatus {
+        let mut res = ATGameStatus::Ready;
+        if self.game_status == 0 {
+            res = ATGameStatus::Ready;
+        }
+        if self.game_status == 1 {
+            res = ATGameStatus::Loading;
+        }
+        if self.game_status == 2 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 3 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 4 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 5 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 6 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 7 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 8 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 9 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 10 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 11 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 12 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 13 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 14 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 15 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 16 {
+            res = ATGameStatus::Ban;
+        }
+        if self.game_status == 17 {
+            res = ATGameStatus::Ban;
+        }        
+        if self.game_status == 18 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 19 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 20 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 21 {
+            res = ATGameStatus::Pick;
+        }
+        if self.game_status == 22 {
+            res = ATGameStatus::Start;
+        }
+        res
+    }
+
     pub fn check_status(&mut self) -> FightGameStatus {
         let mut res = FightGameStatus::Ready;
         if self.game_status == 0 {
@@ -493,6 +568,66 @@ impl FightGame {
 
     pub fn next_status(&mut self) {
         self.game_status += 1;
+        if self.game_status == 2 {
+            self.pick_position = vec![0];
+        }
+        if self.game_status == 3 {
+            self.pick_position = vec![5];
+        }
+        if self.game_status == 4 {
+            self.pick_position = vec![1];
+        }
+        if self.game_status == 5 {
+            self.pick_position = vec![6];
+        }
+        if self.game_status == 6 {
+            self.pick_position = vec![2];
+        }
+        if self.game_status == 7 {
+            self.pick_position = vec![7];
+        }
+        if self.game_status == 8 {
+            self.pick_position = vec![0];
+        }
+        if self.game_status == 9 {
+            self.pick_position = vec![5];
+        }
+        if self.game_status == 10 {
+            self.pick_position = vec![6];
+        }
+        if self.game_status == 11 {
+            self.pick_position = vec![1];
+        }
+        if self.game_status == 12 {
+            self.pick_position = vec![2];
+        }
+        if self.game_status == 13 {
+            self.pick_position = vec![7];
+        }
+        if self.game_status == 14 {
+            self.pick_position = vec![8];
+        }
+        if self.game_status == 15 {
+            self.pick_position = vec![3];
+        }
+        if self.game_status == 16 {
+            self.pick_position = vec![9];
+        }
+        if self.game_status == 17 {
+            self.pick_position = vec![4];
+        }        
+        if self.game_status == 18 {
+            self.pick_position = vec![8];
+        }
+        if self.game_status == 19 {
+            self.pick_position = vec![3];
+        }
+        if self.game_status == 20 {
+            self.pick_position = vec![4];
+        }
+        if self.game_status == 21 {
+            self.pick_position = vec![9];
+        }
     }
 
     pub fn set_mode(&mut self, mode: String) {
@@ -500,8 +635,6 @@ impl FightGame {
     }
 
     pub fn next_pick_status(&mut self) {
-        println!("next");
-        println!("{}", self.pick_status);
         self.lock_cnt = 0;
         self.pick_status += 1;
         if self.mode == "ng" {
@@ -524,6 +657,5 @@ impl FightGame {
                 self.pick_position = vec![];
             }
         }
-        if self.mode == "at" {}
     }
 }

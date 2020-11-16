@@ -118,7 +118,6 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/add_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
     mqtt_client.subscribe("member/+/send/rm_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
     mqtt_client.subscribe("member/+/send/query_black_list", QoS::AtMostOnce)?;//doc black_list.drawio
-    mqtt_client.subscribe("member/+/send/ban_hero", QoS::AtMostOnce)?;//doc choose_hero
     mqtt_client.subscribe("member/+/send/check_restriction", QoS::AtMostOnce)?;//doc check_state
     mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;//doc check_state
     mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;//doc game
@@ -145,6 +144,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/loading", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/locked_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/jump", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/ban_hero", QoS::AtMostOnce)?;
     let mut isServerLive = true;
     
     
