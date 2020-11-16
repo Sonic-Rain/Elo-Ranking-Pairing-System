@@ -1658,21 +1658,21 @@ pub fn init(
                             fg.borrow_mut().next_status();
                         }
                         if fg.borrow_mut().check_status() == FightGameStatus::Finished {
-                            let sql = format!(
-                                "DELETE FROM Gaming where game={};",
-                                fg.borrow().game_id
-                            );
-                            let qres = conn.query(sql.clone())?;
-                            for uid in &fg.borrow().user_names {
-                                if let Some(u) = TotalUsers.get(uid) {
-                                    u.borrow_mut().isLocked = false;
-                                    u.borrow_mut().hero = "".to_string();
-                                    u.borrow_mut().gid = 0;
-                                }
-                            }
-                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                                msg: format!(r#"{{"status":"finished", "game": {}}}"#,game_id)})?;
-                            fg_rm_list.push(*game_id);
+                            // let sql = format!(
+                            //     "DELETE FROM Gaming where game={};",
+                            //     fg.borrow().game_id
+                            // );
+                            // let qres = conn.query(sql.clone())?;
+                            // for uid in &fg.borrow().user_names {
+                            //     if let Some(u) = TotalUsers.get(uid) {
+                            //         u.borrow_mut().isLocked = false;
+                            //         u.borrow_mut().hero = "".to_string();
+                            //         u.borrow_mut().gid = 0;
+                            //     }
+                            // }
+                            // msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                            //     msg: format!(r#"{{"status":"finished", "game": {}}}"#,game_id)})?;
+                            // fg_rm_list.push(*game_id);
                         }
                     }
                     for rm in fg_rm_list {
@@ -1987,6 +1987,8 @@ pub fn init(
                                     if let Some(fg) = GameingGroups.get(&x.game) {
                                         fg.borrow_mut().next_status();
                                     }
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", x.game),
+                                        msg: format!(r#"{{"status":"finished", "game": {}}}"#,x.game)})?;
                                 },
                                 RoomEventData::GameInfo(x) => {
                                     //println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
