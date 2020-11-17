@@ -1248,9 +1248,9 @@ pub fn HandleQueueRequest(
                         }
                     }
                     // AT
-                    // info!("ng queue members: {}", ng_queue_members);
-                    // info!("rk queue members: {}", rk_queue_members);
-                    // info!("at queue members: {}", at_queue_members);
+                    info!("ng queue members: {}", ng_queue_members);
+                    info!("rk queue members: {}", rk_queue_members);
+                    info!("at queue members: {}", at_queue_members);
                 }
 
                 recv(rx) -> d => {
@@ -1417,7 +1417,7 @@ pub fn init(
         let mut bForceCloseNgState = false;
         let mut rkState = "close";
         let mut bForceCloseRkState = false;
-        let mut atState = "open";
+        let mut atState = "close";
         let mut bForceCloseAtState = false;
 
         let sql = format!(r#"select id, ng, rk, at, name, hero from user;"#);
@@ -1446,7 +1446,7 @@ pub fn init(
             //name = mysql::from_value(a.get("name").unwrap());
             TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
         }
-        let sql2 = format!("DELETE FROM Gaming;");
+        let sql2 = format!("DELETE FROM Gaming where status='wait';");
         conn.query(sql2.clone())?;
         let sql3 = format!("update user set status='offline';");
         conn.query(sql3.clone())?;
@@ -1541,9 +1541,13 @@ pub fn init(
                         isRankOpen = false;
                     }
                     if isRankOpen && !bForceCloseRkState {
+                        ngState = "close";
                         rkState = "open";
+                        atState = "open";
                     } else {
+                        ngState = "open";
                         rkState = "close";
+                        atState = "close";
                     }
                     msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
                         msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
@@ -2304,7 +2308,7 @@ pub fn init(
                                         }
                                         for rm in rm_list {
                                             let sql = format!(
-                                                "DELETE FROM Gaming where game={};",
+                                                "DELETE FROM Gaming where game={} and status='wait';",
                                                 rm
                                             );
                                             let qres = conn.query(sql.clone())?;
@@ -2838,7 +2842,7 @@ pub fn init(
                                     }
                                     if success {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/create", x.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok"}}"#)};
+                                            msg: format!(r#"{{"msg":"ok", "room":"{}"}}"#, room_id)};
                                     } else {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/create", x.id.clone()),
                                             msg: format!(r#"{{"msg":"fail"}}"#)};
