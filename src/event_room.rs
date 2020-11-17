@@ -1540,7 +1540,7 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = false;
                     }
-                    if isRankOpen && !bForceCloseRkState {
+                    if isRankOpen {
                         ngState = "close";
                         rkState = "open";
                         atState = "open";
@@ -1548,6 +1548,15 @@ pub fn init(
                         ngState = "open";
                         rkState = "close";
                         atState = "close";
+                    }
+                    if bForceCloseAtState {
+                        atState = "close";
+                    }
+                    if bForceCloseNgState {
+                        ngState = "close";
+                    }
+                    if bForceCloseRkState {
+                        rkState = "close";
                     }
                     msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
                         msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
