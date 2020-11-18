@@ -296,6 +296,14 @@ pub struct LoadingData {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UpdateQueueData {
+    pub ng: usize,
+    pub rk: usize,
+    pub at: usize,
+}
+
+
 #[derive(Debug)]
 pub enum RoomEventData {
     Reset(),
@@ -333,6 +341,7 @@ pub enum RoomEventData {
     CheckState(CheckStateData),
     BanUser(BanUserData),
     Loading(LoadingData),
+    UpdateQueue(UpdateQueueData),
 }
 
 #[derive(Clone, Debug)]
@@ -802,6 +811,7 @@ pub fn HandleQueueRequest(
     let (tx, rx): (Sender<QueueData>, Receiver<QueueData>) = bounded(10000);
     let start = Instant::now();
     let update = tick(Duration::from_millis(1000));
+    let update5000ms = tick(Duration::from_millis(5000));
 
     thread::spawn(move || -> Result<(), Error> {
         let mut NGQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
@@ -819,9 +829,6 @@ pub fn HandleQueueRequest(
             select! {
                 recv(update) -> _ => {
                     let mut new_now = Instant::now();
-                    let mut ng_queue_members = 0;
-                    let mut rk_queue_members = 0;
-                    let mut at_queue_members = 0;
                     // ng
                     if ngState == "open" {
                         if NGQueueRoom.len() >= MATCH_SIZE {
@@ -837,7 +844,6 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut NGQueueRoom {
-                                ng_queue_members += v.borrow().user_len;
                                 if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_ng + NG_RANGE + v.borrow().queue_cnt*SCORE_INTERVAL) < v.borrow().avg_ng && v.borrow().ready == 0 {
                                     for r in g.rid {
                                         id.push(r);
@@ -985,7 +991,6 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut RKQueueRoom {
-                                rk_queue_members += v.borrow().user_len;
                                 if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_rk + RANK_RANGE) < v.borrow().avg_rk && v.borrow().ready == 0 {
                                     for r in g.rid {
                                         id.push(r);
@@ -1140,7 +1145,6 @@ pub fn HandleQueueRequest(
                             //println!("Sort Time: {:?}",Instant::now().duration_since(new_now));
                             let mut new_now1 = Instant::now();
                             for (k, v) in &mut ATQueueRoom {
-                                at_queue_members += v.borrow().user_len;
                                 if g.user_len > 0 && g.user_len < TEAM_SIZE && (g.avg_at + RANK_RANGE) < v.borrow().avg_at && v.borrow().ready == 0{
                                     for r in g.rid {
                                         id.push(r);
@@ -1268,12 +1272,14 @@ pub fn HandleQueueRequest(
                             }
                         }
                     }
-                    // AT
-                    info!("ng queue members: {}", ng_queue_members);
-                    info!("rk queue members: {}", rk_queue_members);
-                    info!("at queue members: {}", at_queue_members);
+                    // AT                   
                 }
-
+                recv(update5000ms) -> _ => {
+                    info!("ng queue members: {}", NGQueueRoom.len());
+                    info!("rk queue members: {}", RKQueueRoom.len());
+                    info!("at queue members: {}", ATQueueRoom.len());
+                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng: NGQueueRoom.len(), rk: RKQueueRoom.len(), at: ATQueueRoom.len()}));
+                }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
                         if let Ok(d) = d {
@@ -1562,11 +1568,9 @@ pub fn init(
                         isRankOpen = false;
                     }
                     if isRankOpen {
-                        ngState = "close";
                         rkState = "open";
                         atState = "open";
                     } else {
-                        ngState = "open";
                         rkState = "close";
                         atState = "close";
                     }
@@ -2936,6 +2940,10 @@ pub fn init(
                                 RoomEventData::CheckState(x) => {
                                     mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
                                             msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                },
+                                RoomEventData::UpdateQueue(x) => {
+                                    mqttmsg = MqttMsg{topic:format!("server/res/queue_member"),
+                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, x.ng, x.rk, x.at)};
                                 },
                             }
                         }
