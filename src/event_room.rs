@@ -960,6 +960,13 @@ pub fn HandleQueueRequest(
                                 }
                             }
                         }
+                    } else {
+                        for (k, v) in &mut NGQueueRoom {
+                            for uid in &v.borrow().user_ids {
+                                sender.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: uid.to_string(), room: "".to_string(), mode: "ng".to_string()}));
+                                sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
+                            }
+                        }
                     }
                     // ng
                     // rank
@@ -1108,6 +1115,13 @@ pub fn HandleQueueRequest(
                                 }
                             }
                         }
+                    } else {
+                        for (k, v) in &mut RKQueueRoom {
+                            for uid in &v.borrow().user_ids {
+                                sender.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: uid.to_string(), room: "".to_string(), mode: "rk".to_string()}));
+                                sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
+                            }
+                        }
                     }
                     // rank
                     // AT
@@ -1244,6 +1258,13 @@ pub fn HandleQueueRequest(
                                         ATQueueRoom.remove(&rid);
                                     }
                                 }
+                            }
+                        }
+                    } else {
+                        for (k, v) in &mut ATQueueRoom {
+                            for uid in &v.borrow().user_ids {
+                                sender.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: uid.to_string(), room: "".to_string(), mode: "at".to_string()}));
+                                sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
                             }
                         }
                     }
