@@ -37,6 +37,7 @@ const SCORE_INTERVAL: i16 = 2;
 const CHOOSE_HERO_TIME: i16 = 30;
 const NG_CHOOSE_HERO_TIME: i16 = 90;
 const BAN_HERO_TIME: i16 = 25;
+const READY_TO_START_TIME: i16 = 10;
 const READY_TIME: u16 = 15;
 const RANK_RANGE: i16 = 100;
 const NG_RANGE: i16 = 200;
@@ -1583,6 +1584,10 @@ pub fn init(
                     if bForceCloseRkState {
                         rkState = "close";
                     }
+                    // test
+                    rkState = "open";
+                    atState = "open";
+                    // test
                     msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
                         msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
                     // println!("Duration between {:?} and {:?}: {:?}", now, rank_close_time, duration);
@@ -1616,12 +1621,12 @@ pub fn init(
                             let mut status = "ban";
                             let mut time = BAN_HERO_TIME;
                             let mut picker = vec![0];
-                            if fg.borrow_mut().check_at_status() == ATGameStatus::Ban {
+                            if fg.borrow_mut().check_at_status() == FightGameStatus::Ban {
                                 status = "ban";
                                 time = fg.borrow().ban_time.clone();
                                 fg.borrow_mut().ban_time -= 1;
                             }
-                            if fg.borrow_mut().check_at_status() == ATGameStatus::Pick {
+                            if fg.borrow_mut().check_at_status() == FightGameStatus::Pick {
                                 status = "pick";
                                 time = fg.borrow().choose_time.clone();
                                 fg.borrow_mut().choose_time -= 1;
@@ -1630,27 +1635,40 @@ pub fn init(
                                 msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                     msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
                             }
-                            if fg.borrow_mut().check_at_status() == ATGameStatus::Start {
-                                let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
-                                for user_id in &fg.borrow().user_names {
-                                    values = format!("{} ,'{}'", values, user_id);
-                                }
-                                for user_id in &fg.borrow().user_names {
-                                    if let Some(u) = TotalUsers.get(user_id) {
-                                        values = format!("{} ,'{}'", values, u.borrow().hero);
+                            if fg.borrow_mut().check_at_status() == FightGameStatus::ReadyToStart {
+                                if fg.borrow().ready_to_start_time == READY_TO_START_TIME {
+                                    let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
+                                    for user_id in &fg.borrow().user_names {
+                                        values = format!("{} ,'{}'", values, user_id);
                                     }
+                                    for user_id in &fg.borrow().user_names {
+                                        if let Some(u) = TotalUsers.get(user_id) {
+                                            println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
+                                            values = format!("{} ,'{}'", values, u.borrow().hero);
+                                        }
+                                    }
+                                    let sql = format!(
+                                        "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
+                                        values
+                                    );
+                                    let qres = conn.query(sql.clone())?;
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                        msg: format!(r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,&fg.borrow().ready_to_start_time, &fg.borrow().user_names)})?;
                                 }
-                                let sql = format!(
-                                    "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
-                                    values
-                                );
-                                let qres = conn.query(sql.clone())?;
-                                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                                    msg: format!(r#"{{"status":"readyToStart", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;
-                                fg.borrow_mut().next_status();
+                                if fg.borrow().ready_to_start_time < 0 {
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                        msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;    
+                                    fg.borrow_mut().next_status();
+                                }
+                                fg.borrow_mut().ready_to_start_time -= 1;
+                            }
+                            if fg.borrow_mut().check_at_status() == FightGameStatus::Gaming {
+                            }
+                            if fg.borrow_mut().check_at_status() == FightGameStatus::Finished {
                             }
                             if fg.borrow().ban_time < 0 {
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
+                                fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                 fg.borrow_mut().next_status();
                             }
                             if fg.borrow().choose_time < 0 {
@@ -1670,6 +1688,7 @@ pub fn init(
                                 }
                                 if !isJump {
                                     fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                    fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                     fg.borrow_mut().next_status();
                                 }
                             }
@@ -1677,6 +1696,7 @@ pub fn init(
                                 fg.borrow_mut().lock_cnt = 0;
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
                                 fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                 fg.borrow_mut().next_status();
                             }
                         } else {
@@ -1723,6 +1743,7 @@ pub fn init(
                                         }
                                     }
                                     if !isJump {
+                                        fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                         if fg.borrow().mode == "ng" {
                                             fg.borrow_mut().next_status();
                                         } else if fg.borrow().mode == "rk"{
@@ -1740,6 +1761,7 @@ pub fn init(
                                     len += 1;
                                 }
                                 if fg.borrow().lock_cnt == len {
+                                    fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                     if fg.borrow().mode == "ng" {
                                         fg.borrow_mut().next_status();
                                     } else if fg.borrow().mode == "rk" {
@@ -1753,24 +1775,33 @@ pub fn init(
                                 }
                             }
                             if fg.borrow_mut().check_status() == FightGameStatus::ReadyToStart {
-                                let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
-                                for user_id in &fg.borrow().user_names {
-                                    values = format!("{} ,'{}'", values, user_id);
-                                }
-                                for user_id in &fg.borrow().user_names {
-                                    if let Some(u) = TotalUsers.get(user_id) {
-                                        println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
-                                        values = format!("{} ,'{}'", values, u.borrow().hero);
+                                if fg.borrow().ready_to_start_time == READY_TO_START_TIME {
+                                    let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
+                                    for user_id in &fg.borrow().user_names {
+                                        values = format!("{} ,'{}'", values, user_id);
                                     }
+                                    for user_id in &fg.borrow().user_names {
+                                        if let Some(u) = TotalUsers.get(user_id) {
+                                            println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
+                                            values = format!("{} ,'{}'", values, u.borrow().hero);
+                                        }
+                                    }
+                                    let sql = format!(
+                                        "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
+                                        values
+                                    );
+                                    let qres = conn.query(sql.clone())?;
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                        msg: format!(r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,&fg.borrow().ready_to_start_time, &fg.borrow().user_names)})?;
                                 }
-                                let sql = format!(
-                                    "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
-                                    values
-                                );
-                                let qres = conn.query(sql.clone())?;
-                                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                                    msg: format!(r#"{{"status":"readyToStart", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;
-                                fg.borrow_mut().next_status();
+                                if fg.borrow().ready_to_start_time < 0 {
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                        msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;    
+                                    fg.borrow_mut().next_status();
+                                }
+                                fg.borrow_mut().ready_to_start_time -= 1;
+                            }
+                            if fg.borrow_mut().check_status() == FightGameStatus::Gaming {
                             }
                             if fg.borrow_mut().check_status() == FightGameStatus::Finished {
                             }

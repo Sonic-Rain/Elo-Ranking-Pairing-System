@@ -332,24 +332,6 @@ pub enum RkPickStatus {
     Round7,
 }
 
-#[derive(PartialEq)]
-pub enum NgPickStatus {
-    Ready,
-    Loading,
-    Ban,
-    Pick,
-    Start,
-}
-
-#[derive(PartialEq)]
-pub enum ATGameStatus {
-    Ready,
-    Loading,
-    Ban,
-    Pick,
-    Start,
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct FightGame {
     pub teams: Vec<Rc<RefCell<FightGroup>>>,
@@ -365,6 +347,7 @@ pub struct FightGame {
     pub loading_cnt: u16,
     pub ban_time: i16,
     pub choose_time: i16,
+    pub ready_to_start_time: i16,
     pub mode: String,
     pub pick_status: u16,
     pub lock_cnt: u16,
@@ -450,76 +433,82 @@ impl FightGame {
         }
     }
 
-    pub fn check_at_status(&mut self) -> ATGameStatus {
-        let mut res = ATGameStatus::Ready;
+    pub fn check_at_status(&mut self) -> FightGameStatus {
+        let mut res = FightGameStatus::Ready;
         if self.game_status == 0 {
-            res = ATGameStatus::Ready;
+            res = FightGameStatus::Ready;
         }
         if self.game_status == 1 {
-            res = ATGameStatus::Loading;
+            res = FightGameStatus::Loading;
         }
         if self.game_status == 2 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 3 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 4 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 5 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 6 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 7 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 8 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 9 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 10 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 11 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 12 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 13 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 14 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 15 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 16 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }
         if self.game_status == 17 {
-            res = ATGameStatus::Ban;
+            res = FightGameStatus::Ban;
         }        
         if self.game_status == 18 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 19 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 20 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 21 {
-            res = ATGameStatus::Pick;
+            res = FightGameStatus::Pick;
         }
         if self.game_status == 22 {
-            res = ATGameStatus::Start;
+            res = FightGameStatus::ReadyToStart;
+        }
+        if self.game_status == 23 {
+            res = FightGameStatus::Gaming;
+        }
+        if self.game_status == 24 {
+            res = FightGameStatus::Finished;
         }
         res
     }
