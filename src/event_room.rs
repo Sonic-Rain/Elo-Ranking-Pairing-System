@@ -299,9 +299,9 @@ pub struct LoadingData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateQueueData {
-    pub ng: usize,
-    pub rk: usize,
-    pub at: usize,
+    pub ng: i16,
+    pub rk: i16,
+    pub at: i16,
 }
 
 
@@ -1276,10 +1276,22 @@ pub fn HandleQueueRequest(
                     // AT                   
                 }
                 recv(update5000ms) -> _ => {
-                    info!("ng queue members: {}", NGQueueRoom.len());
-                    info!("rk queue members: {}", RKQueueRoom.len());
-                    info!("at queue members: {}", ATQueueRoom.len());
-                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng: NGQueueRoom.len(), rk: RKQueueRoom.len(), at: ATQueueRoom.len()}));
+                    let mut ng_cnt = 0;
+                    let mut rk_cnt = 0;
+                    let mut at_cnt = 0;
+                    for (k, v) in &mut NGQueueRoom {
+                        ng_cnt += v.borrow().user_len;
+                    }
+                    for (k, v) in &RKQueueRoom {
+                        rk_cnt += v.borrow().user_len;
+                    }
+                    for (k, v) in &ATQueueRoom {
+                        at_cnt += v.borrow().user_len;
+                    }
+                    info!("ng queue members: {}", ng_cnt);
+                    info!("rk queue members: {}", rk_cnt);
+                    info!("at queue members: {}", at_cnt);
+                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng: ng_cnt, rk: rk_cnt, at: at_cnt}));
                 }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
