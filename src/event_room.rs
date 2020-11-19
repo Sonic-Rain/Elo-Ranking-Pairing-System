@@ -2309,7 +2309,7 @@ pub fn init(
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
                                                 if r.borrow().mode == "rk"{
-                                                    if r.borrow().ready == 0 && r.borrow().users.len() < 2 as usize {
+                                                    if r.borrow().ready == 0 && r.borrow().users.len() < 4 as usize {
                                                         r.borrow_mut().add_user(Rc::clone(j));
                                                         let m = r.borrow().master.clone();
                                                         r.borrow().publish_update(&msgtx, m)?;
