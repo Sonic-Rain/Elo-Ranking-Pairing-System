@@ -2522,7 +2522,7 @@ pub fn init(
                                 RoomEventData::Loading(x) => {
                                     if let Some(fg) = GameingGroups.get(&x.game) {
                                         fg.borrow_mut().loading_cnt += 1;
-                                        println!("{}", fg.borrow().loading_cnt);
+                                        // println!("{}", fg.borrow().loading_cnt);
                                         if fg.borrow().loading_cnt >= 10 {
                                             fg.borrow_mut().next_status();
                                         }
