@@ -513,49 +513,7 @@ impl FightGame {
         res
     }
 
-    pub fn check_status(&mut self) -> FightGameStatus {
-        let mut res = FightGameStatus::Ready;
-        if self.game_status == 0 {
-            res = FightGameStatus::Ready;
-        } else if self.game_status == 1 {
-            res = FightGameStatus::Loading;
-        } else if self.game_status == 2 {
-            res = FightGameStatus::Ban;
-        } else if self.game_status == 3 {
-            res = FightGameStatus::Pick;
-        } else if self.game_status == 4 {
-            res = FightGameStatus::ReadyToStart;
-        } else if self.game_status == 5 {
-            res = FightGameStatus::Gaming;
-        } else if self.game_status == 6 {
-            res = FightGameStatus::Finished;
-        }
-        res
-    }
-
-    pub fn check_rk_pick_status(&mut self) -> RkPickStatus {
-        let mut res = RkPickStatus::Round0;
-        if self.pick_status == 0 {
-            res = RkPickStatus::Round0;
-        } else if self.pick_status == 1 {
-            res = RkPickStatus::Round1;
-        } else if self.pick_status == 2 {
-            res = RkPickStatus::Round2;
-        } else if self.pick_status == 3 {
-            res = RkPickStatus::Round3;
-        } else if self.pick_status == 4 {
-            res = RkPickStatus::Round4;
-        } else if self.pick_status == 5 {
-            res = RkPickStatus::Round5;
-        } else if self.pick_status == 6 {
-            res = RkPickStatus::Round6;
-        } else if self.pick_status == 7 {
-            res = RkPickStatus::Round7;
-        }
-        res
-    }
-
-    pub fn next_status(&mut self) {
+    pub fn next_at_status(&mut self) {
         self.game_status += 1;
         if self.game_status == 2 {
             self.pick_position = vec![0];
@@ -617,6 +575,52 @@ impl FightGame {
         if self.game_status == 21 {
             self.pick_position = vec![9];
         }
+    }
+
+    pub fn check_status(&mut self) -> FightGameStatus {
+        let mut res = FightGameStatus::Ready;
+        if self.game_status == 0 {
+            res = FightGameStatus::Ready;
+        } else if self.game_status == 1 {
+            res = FightGameStatus::Loading;
+        } else if self.game_status == 2 {
+            res = FightGameStatus::Ban;
+        } else if self.game_status == 3 {
+            res = FightGameStatus::Pick;
+        } else if self.game_status == 4 {
+            res = FightGameStatus::ReadyToStart;
+        } else if self.game_status == 5 {
+            res = FightGameStatus::Gaming;
+        } else if self.game_status == 6 {
+            res = FightGameStatus::Finished;
+        }
+        res
+    }
+
+    pub fn check_rk_pick_status(&mut self) -> RkPickStatus {
+        let mut res = RkPickStatus::Round0;
+        if self.pick_status == 0 {
+            res = RkPickStatus::Round0;
+        } else if self.pick_status == 1 {
+            res = RkPickStatus::Round1;
+        } else if self.pick_status == 2 {
+            res = RkPickStatus::Round2;
+        } else if self.pick_status == 3 {
+            res = RkPickStatus::Round3;
+        } else if self.pick_status == 4 {
+            res = RkPickStatus::Round4;
+        } else if self.pick_status == 5 {
+            res = RkPickStatus::Round5;
+        } else if self.pick_status == 6 {
+            res = RkPickStatus::Round6;
+        } else if self.pick_status == 7 {
+            res = RkPickStatus::Round7;
+        }
+        res
+    }
+
+    pub fn next_status(&mut self) {
+        self.game_status += 1;
     }
 
     pub fn set_mode(&mut self, mode: String) {

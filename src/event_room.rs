@@ -1288,9 +1288,9 @@ pub fn HandleQueueRequest(
                     for (k, v) in &ATQueueRoom {
                         at_cnt += v.borrow().user_len;
                     }
-                    info!("ng queue members: {}", ng_cnt);
-                    info!("rk queue members: {}", rk_cnt);
-                    info!("at queue members: {}", at_cnt);
+                    // info!("ng queue members: {}", ng_cnt);
+                    // info!("rk queue members: {}", rk_cnt);
+                    // info!("at queue members: {}", at_cnt);
                     sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng: ng_cnt, rk: rk_cnt, at: at_cnt}));
                 }
                 recv(rx) -> d => {
@@ -1596,10 +1596,10 @@ pub fn init(
                     if bForceCloseRkState {
                         rkState = "close";
                     }
-                    // test
+                    // // test
                     rkState = "open";
                     atState = "open";
-                    // test
+                    // // test
                     msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
                         msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
                     // println!("Duration between {:?} and {:?}: {:?}", now, rank_close_time, duration);
@@ -1644,33 +1644,55 @@ pub fn init(
                                 fg.borrow_mut().choose_time -= 1;
                             }
                             if time == CHOOSE_HERO_TIME || time == BAN_HERO_TIME {
+                                for index in &fg.borrow().pick_position {
+                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                        u.borrow_mut().isLocked = false;
+                                        u.borrow_mut().hero = "".to_string()
+                                    }
+                                }
                                 msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                     msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::ReadyToStart {
                                 if fg.borrow().ready_to_start_time == READY_TO_START_TIME {
-                                    let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
-                                    for user_id in &fg.borrow().user_names {
-                                        values = format!("{} ,'{}'", values, user_id);
-                                    }
-                                    for user_id in &fg.borrow().user_names {
-                                        if let Some(u) = TotalUsers.get(user_id) {
-                                            println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
-                                            values = format!("{} ,'{}'", values, u.borrow().hero);
+                                    let mut isJump = false;
+                                    for index in &fg.borrow().pick_position {
+                                        if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                            if u.borrow().hero == "" {
+                                                let jumpData = JumpData{
+                                                    id: u.borrow().id.clone(),
+                                                    game: *game_id,
+                                                    msg: "jump".to_string(),
+                                                };
+                                                tx2.try_send(RoomEventData::Jump(jumpData));
+                                                isJump = true;
+                                            }
                                         }
                                     }
-                                    let sql = format!(
-                                        "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
-                                        values
-                                    );
-                                    let qres = conn.query(sql.clone())?;
-                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                                        msg: format!(r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,&fg.borrow().ready_to_start_time, &fg.borrow().user_names)})?;
+                                    if !isJump {
+                                        let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
+                                        for user_id in &fg.borrow().user_names {
+                                            values = format!("{} ,'{}'", values, user_id);
+                                        }
+                                        for user_id in &fg.borrow().user_names {
+                                            if let Some(u) = TotalUsers.get(user_id) {
+                                                println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
+                                                values = format!("{} ,'{}'", values, u.borrow().hero);
+                                            }
+                                        }
+                                        let sql = format!(
+                                            "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
+                                            values
+                                        );
+                                        let qres = conn.query(sql.clone())?;
+                                        msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                            msg: format!(r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,&fg.borrow().ready_to_start_time, &fg.borrow().user_names)})?;
+                                    }
                                 }
                                 if fg.borrow().ready_to_start_time < 0 {
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                         msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;    
-                                    fg.borrow_mut().next_status();
+                                    fg.borrow_mut().next_at_status();
                                 }
                                 fg.borrow_mut().ready_to_start_time -= 1;
                             }
@@ -1681,7 +1703,7 @@ pub fn init(
                             if fg.borrow().ban_time < 0 {
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
                                 fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                fg.borrow_mut().next_status();
+                                fg.borrow_mut().next_at_status();
                             }
                             if fg.borrow().choose_time < 0 {
                                 let mut isJump = false;
@@ -1701,7 +1723,7 @@ pub fn init(
                                 if !isJump {
                                     fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
                                     fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                    fg.borrow_mut().next_status();
+                                    fg.borrow_mut().next_at_status();
                                 }
                             }
                             if fg.borrow().lock_cnt == 1 {
@@ -1709,7 +1731,7 @@ pub fn init(
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
                                 fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
                                 fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                fg.borrow_mut().next_status();
+                                fg.borrow_mut().next_at_status();
                             }
                         } else {
                             if fg.borrow_mut().check_status() == FightGameStatus::Ban {
@@ -1718,6 +1740,12 @@ pub fn init(
                                     fg.borrow_mut().next_pick_status();
                                 } else {
                                     if fg.borrow().ban_time == BAN_HERO_TIME {
+                                        for index in &fg.borrow().pick_position {
+                                            if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                                u.borrow_mut().isLocked = false;
+                                                u.borrow_mut().hero = "".to_string()
+                                            }
+                                        }
                                         msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                             msg: format!(r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#, fg.borrow().ban_time, vec![0,1,2,3,4,5,6,7,8,9])})?;
                                     }
@@ -1735,6 +1763,12 @@ pub fn init(
                             }
                             if fg.borrow_mut().check_status() == FightGameStatus::Pick {
                                 if fg.borrow().choose_time == CHOOSE_HERO_TIME || fg.borrow().choose_time == NG_CHOOSE_HERO_TIME {
+                                    for index in &fg.borrow().pick_position {
+                                        if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                            u.borrow_mut().isLocked = false;
+                                            u.borrow_mut().hero = "".to_string()
+                                        }
+                                    }
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                         msg: format!(r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#, fg.borrow().choose_time, &fg.borrow().pick_position)})?;
                                 }
@@ -1768,11 +1802,15 @@ pub fn init(
                                         }
                                     }
                                 }
-                                let mut len = 0;
-                                for _c in &fg.borrow().pick_position {
-                                    len += 1;
+                                let mut allLocked = true;
+                                for index in &fg.borrow().pick_position {
+                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                        if !u.borrow().isLocked {
+                                            allLocked = false;
+                                        }
+                                    }
                                 }
-                                if fg.borrow().lock_cnt == len {
+                                if allLocked {
                                     fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                     if fg.borrow().mode == "ng" {
                                         fg.borrow_mut().next_status();
@@ -1788,23 +1826,39 @@ pub fn init(
                             }
                             if fg.borrow_mut().check_status() == FightGameStatus::ReadyToStart {
                                 if fg.borrow().ready_to_start_time == READY_TO_START_TIME {
-                                    let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
-                                    for user_id in &fg.borrow().user_names {
-                                        values = format!("{} ,'{}'", values, user_id);
-                                    }
-                                    for user_id in &fg.borrow().user_names {
-                                        if let Some(u) = TotalUsers.get(user_id) {
-                                            println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
-                                            values = format!("{} ,'{}'", values, u.borrow().hero);
+                                    let mut isJump = false;
+                                    for index in &fg.borrow().pick_position {
+                                        if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                            if u.borrow().hero == "" {
+                                                let jumpData = JumpData{
+                                                    id: u.borrow().id.clone(),
+                                                    game: *game_id,
+                                                    msg: "jump".to_string(),
+                                                };
+                                                tx2.try_send(RoomEventData::Jump(jumpData));
+                                                isJump = true;
+                                            }
                                         }
                                     }
-                                    let sql = format!(
-                                        "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
-                                        values
-                                    );
-                                    let qres = conn.query(sql.clone())?;
-                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                                        msg: format!(r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,&fg.borrow().ready_to_start_time, &fg.borrow().user_names)})?;
+                                    if !isJump {
+                                        let mut values = format!("values ({}, '{}'", game_id, fg.borrow().mode);
+                                        for user_id in &fg.borrow().user_names {
+                                            values = format!("{} ,'{}'", values, user_id);
+                                        }
+                                        for user_id in &fg.borrow().user_names {
+                                            if let Some(u) = TotalUsers.get(user_id) {
+                                                println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
+                                                values = format!("{} ,'{}'", values, u.borrow().hero);
+                                            }
+                                        }
+                                        let sql = format!(
+                                            "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10) {});",
+                                            values
+                                        );
+                                        let qres = conn.query(sql.clone())?;
+                                        msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                            msg: format!(r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,&fg.borrow().ready_to_start_time, &fg.borrow().user_names)})?;
+                                    }
                                 }
                                 if fg.borrow().ready_to_start_time < 0 {
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
