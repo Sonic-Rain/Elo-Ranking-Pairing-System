@@ -1636,22 +1636,32 @@ pub fn init(
                             if fg.borrow_mut().check_at_status() == FightGameStatus::Ban {
                                 status = "ban";
                                 time = fg.borrow().ban_time.clone();
+                                if time == CHOOSE_HERO_TIME || time == BAN_HERO_TIME {
+                                    for index in &fg.borrow().pick_position {
+                                        if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                            u.borrow_mut().isLocked = false;
+                                            u.borrow_mut().hero = "".to_string()
+                                        }
+                                    }
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                        msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
+                                }
                                 fg.borrow_mut().ban_time -= 1;
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::Pick {
                                 status = "pick";
                                 time = fg.borrow().choose_time.clone();
-                                fg.borrow_mut().choose_time -= 1;
-                            }
-                            if time == CHOOSE_HERO_TIME || time == BAN_HERO_TIME {
-                                for index in &fg.borrow().pick_position {
-                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
-                                        u.borrow_mut().isLocked = false;
-                                        u.borrow_mut().hero = "".to_string()
+                                if (fg.borrow_mut().check_at_status() == FightGameStatus::Pick && time == CHOOSE_HERO_TIME) || (fg.borrow_mut().check_at_status() == FightGameStatus::Ban && time == BAN_HERO_TIME) {
+                                    for index in &fg.borrow().pick_position {
+                                        if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                            u.borrow_mut().isLocked = false;
+                                            u.borrow_mut().hero = "".to_string()
+                                        }
                                     }
+                                    msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
+                                        msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
                                 }
-                                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                                    msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
+                                fg.borrow_mut().choose_time -= 1;
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::ReadyToStart {
                                 if fg.borrow().ready_to_start_time == READY_TO_START_TIME {
@@ -1700,12 +1710,28 @@ pub fn init(
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::Finished {
                             }
-                            if fg.borrow().ban_time < 0 {
+                            if fg.borrow().ban_time < -5 {
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
                                 fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                 fg.borrow_mut().next_status();
+                            } else {
+                                let mut allLocked = true;
+                                for index in &fg.borrow().pick_position {
+                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                        if !u.borrow().isLocked {
+                                            allLocked = false;
+                                        }
+                                    }
+                                }
+                                if allLocked {
+                                    fg.borrow_mut().lock_cnt = 0;
+                                    fg.borrow_mut().ban_time = BAN_HERO_TIME;
+                                    fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                    fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
+                                    fg.borrow_mut().next_status();
+                                } 
                             }
-                            if fg.borrow().choose_time < 0 {
+                            if fg.borrow().choose_time < -5 {
                                 let mut isJump = false;
                                 for index in &fg.borrow().pick_position {
                                     if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
@@ -1725,13 +1751,22 @@ pub fn init(
                                     fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
                                     fg.borrow_mut().next_status();
                                 }
-                            }
-                            if fg.borrow().lock_cnt == 1 {
-                                fg.borrow_mut().lock_cnt = 0;
-                                fg.borrow_mut().ban_time = BAN_HERO_TIME;
-                                fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
-                                fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                fg.borrow_mut().next_status();
+                            } else {
+                                let mut allLocked = true;
+                                for index in &fg.borrow().pick_position {
+                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                        if !u.borrow().isLocked {
+                                            allLocked = false;
+                                        }
+                                    }
+                                }
+                                if allLocked {
+                                    fg.borrow_mut().lock_cnt = 0;
+                                    fg.borrow_mut().ban_time = BAN_HERO_TIME;
+                                    fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                    fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
+                                    fg.borrow_mut().next_status();
+                                }
                             }
                         } else {
                             if fg.borrow_mut().check_status() == FightGameStatus::Ban {
@@ -1750,7 +1785,7 @@ pub fn init(
                                             msg: format!(r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#, fg.borrow().ban_time, vec![0,1,2,3,4,5,6,7,8,9])})?;
                                     }
                                     fg.borrow_mut().ban_time -= 1;
-                                    if fg.borrow().ban_time < 0 {
+                                    if fg.borrow().ban_time < -5 {
                                         fg.borrow_mut().next_status();
                                         fg.borrow_mut().next_pick_status();
                                     }
@@ -1762,7 +1797,7 @@ pub fn init(
                                 }
                             }
                             if fg.borrow_mut().check_status() == FightGameStatus::Pick {
-                                if fg.borrow().choose_time == CHOOSE_HERO_TIME || fg.borrow().choose_time == NG_CHOOSE_HERO_TIME {
+                                if (fg.borrow().mode == "rk" && fg.borrow().choose_time == CHOOSE_HERO_TIME) || (fg.borrow().choose_time == NG_CHOOSE_HERO_TIME && fg.borrow().mode == "ng") {
                                     for index in &fg.borrow().pick_position {
                                         if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
                                             u.borrow_mut().isLocked = false;
@@ -1773,7 +1808,7 @@ pub fn init(
                                         msg: format!(r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#, fg.borrow().choose_time, &fg.borrow().pick_position)})?;
                                 }
                                 fg.borrow_mut().choose_time -= 1;
-                                if fg.borrow().choose_time < 0 {
+                                if fg.borrow().choose_time < -5 {
                                     let mut isJump = false;
                                     for index in &fg.borrow().pick_position {
                                         if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
@@ -1801,25 +1836,26 @@ pub fn init(
                                             }
                                         }
                                     }
-                                }
-                                let mut allLocked = true;
-                                for index in &fg.borrow().pick_position {
-                                    if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
-                                        if !u.borrow().isLocked {
-                                            allLocked = false;
+                                } else {
+                                    let mut allLocked = true;
+                                    for index in &fg.borrow().pick_position {
+                                        if let Some(u) = TotalUsers.get(&fg.borrow().user_names[*index]) {
+                                            if !u.borrow().isLocked {
+                                                allLocked = false;
+                                            }
                                         }
                                     }
-                                }
-                                if allLocked {
-                                    fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                    if fg.borrow().mode == "ng" {
-                                        fg.borrow_mut().next_status();
-                                    } else if fg.borrow().mode == "rk" {
-                                        if fg.borrow_mut().check_rk_pick_status() == RkPickStatus::Round6 {
+                                    if allLocked {
+                                        fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
+                                        if fg.borrow().mode == "ng" {
                                             fg.borrow_mut().next_status();
-                                        }else {
-                                            fg.borrow_mut().next_pick_status();
-                                            fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                        } else if fg.borrow().mode == "rk" {
+                                            if fg.borrow_mut().check_rk_pick_status() == RkPickStatus::Round6 {
+                                                fg.borrow_mut().next_status();
+                                            }else {
+                                                fg.borrow_mut().next_pick_status();
+                                                fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
+                                            }
                                         }
                                     }
                                 }
@@ -2436,6 +2472,8 @@ pub fn init(
                                                 }
                                             }
                                             rm_list.push(fg.borrow().game_id);
+                                            mqttmsg = MqttMsg{topic:format!("game/{}/res/jump", x.game.clone()),
+                                                msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                         }
                                         for rm in rm_list {
                                             let sql = format!(
@@ -2445,8 +2483,6 @@ pub fn init(
                                             let qres = conn.query(sql.clone())?;
                                             GameingGroups.remove(&rm);
                                         }
-                                        mqttmsg = MqttMsg{topic:format!("game/{}/res/jump", x.game.clone()),
-                                            msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
                                     }
                                 },
                                 RoomEventData::BanUser(x) => {
