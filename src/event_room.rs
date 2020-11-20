@@ -1597,8 +1597,8 @@ pub fn init(
                         rkState = "close";
                     }
                     // // test
-                    rkState = "open";
-                    atState = "open";
+                    // rkState = "open";
+                    // atState = "open";
                     // // test
                     msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
                         msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
@@ -1692,7 +1692,7 @@ pub fn init(
                                 if fg.borrow().ready_to_start_time < 0 {
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                         msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;    
-                                    fg.borrow_mut().next_at_status();
+                                    fg.borrow_mut().next_status();
                                 }
                                 fg.borrow_mut().ready_to_start_time -= 1;
                             }
@@ -1703,7 +1703,7 @@ pub fn init(
                             if fg.borrow().ban_time < 0 {
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
                                 fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                fg.borrow_mut().next_at_status();
+                                fg.borrow_mut().next_status();
                             }
                             if fg.borrow().choose_time < 0 {
                                 let mut isJump = false;
@@ -1723,7 +1723,7 @@ pub fn init(
                                 if !isJump {
                                     fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
                                     fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                    fg.borrow_mut().next_at_status();
+                                    fg.borrow_mut().next_status();
                                 }
                             }
                             if fg.borrow().lock_cnt == 1 {
@@ -1731,7 +1731,7 @@ pub fn init(
                                 fg.borrow_mut().ban_time = BAN_HERO_TIME;
                                 fg.borrow_mut().choose_time = CHOOSE_HERO_TIME;
                                 fg.borrow_mut().ready_to_start_time = READY_TO_START_TIME;
-                                fg.borrow_mut().next_at_status();
+                                fg.borrow_mut().next_status();
                             }
                         } else {
                             if fg.borrow_mut().check_status() == FightGameStatus::Ban {
