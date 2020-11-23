@@ -109,6 +109,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
     mqtt_client.subscribe("server/send/control", QoS::AtMostOnce)?;//doc server.drawio
     mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;//doc server.drawio
+    mqtt_client.subscribe("server/send/free", QoS::AtMostOnce)?;
     // Client message
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;//doc login.drawio
     mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;//doc login.drwio
@@ -242,6 +243,7 @@ fn main() -> std::result::Result<(), Error> {
     let recontrol = Regex::new(r"\w+/send/control")?;
     let recheck_state = Regex::new(r"\w+/send/check_state")?;
     let reloading = Regex::new(r"\w+/(\w+)/send/loading")?;
+    let refree = Regex::new(r"\w+/send/free")?;
     
     
     //let mut QueueSender: Sender<QueueData>;
@@ -463,6 +465,9 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if recheck_state.is_match(topic_name) {
                                     // info!("recheck_state: json: {:?}", v);
                                     event_room::checkState(v, sender.clone())?;
+                                } else if refree.is_match(topic_name) {
+                                    // info!("refree: json: {:?}", v);
+                                    event_room::free(v, sender.clone())?;
                                 } else if regetGameHistorys.is_match(topic_name) {
                                     // info!("recheck_state: json: {:?}", v);
                                     let cap = regetGameHistorys.captures(topic_name).unwrap();
