@@ -305,6 +305,7 @@ pub struct UpdateQueueData {
 }
 
 
+
 #[derive(Debug)]
 pub enum RoomEventData {
     Reset(),
@@ -343,6 +344,7 @@ pub enum RoomEventData {
     BanUser(BanUserData),
     Loading(LoadingData),
     UpdateQueue(UpdateQueueData),
+    Free(),
 }
 
 #[derive(Clone, Debug)]
@@ -1551,7 +1553,6 @@ pub fn init(
                 }
                 recv(update1000ms) -> _ => {
                     let now = Local::now();
-                    let tomorrow_midnight = (now + Cduration::days(1)).date().and_hms(0, 0, 0);
                     let rank_open_time = now.date().and_hms(10, 0, 0);
                     let rank_close_time = now.date().and_hms(16, 0, 0);
                     let mut isRankOpen = false;
@@ -2098,6 +2099,7 @@ pub fn init(
                                             tx2.try_send(RoomEventData::BanUser(BanUserData{id: user.borrow().id.clone()}));
                                         }
                                     }
+                                    r.borrow_mut().ready = 0;
                                     msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
                                 }
                             }
@@ -2398,6 +2400,8 @@ pub fn init(
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
+                                                println!("len : {}", r.borrow().users.len());
+                                                println!("ready : {}", r.borrow().ready);
                                                 if r.borrow().mode == "rk"{
                                                     if r.borrow().ready == 0 && r.borrow().users.len() < 4 as usize {
                                                         r.borrow_mut().add_user(Rc::clone(j));
@@ -2529,13 +2533,23 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CheckRestriction(x) => {
-                                    let r = RestrictedUsers.get(&x.id);
-                                    if let Some(r) = r {
-                                        if let Some(u) = TotalUsers.get(&x.id) {
-                                            tx2.try_send(RoomEventData::Leave(LeaveData{room: u.borrow().rid.to_string(), id: x.id.clone()}));
-                                        }
+                                    let sql = format!(r#"select * from BAN where id="{}";"#, x.id);
+                                    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                    let mut isBan = false;
+                                    for row in qres2 {
+                                        isBan = true;
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_restriction", x.id.clone()),
-                                            msg: format!(r#"{{"time":"{}"}}"#, r.borrow().time)};
+                                            msg: format!(r#"{{"time":"2678400"}}"#)};
+                                    }
+                                    if !isBan {
+                                        let r = RestrictedUsers.get(&x.id);
+                                        if let Some(r) = r {
+                                            if let Some(u) = TotalUsers.get(&x.id) {
+                                                tx2.try_send(RoomEventData::Leave(LeaveData{room: u.borrow().rid.to_string(), id: x.id.clone()}));
+                                            }
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/check_restriction", x.id.clone()),
+                                                msg: format!(r#"{{"time":"{}"}}"#, r.borrow().time)};
+                                        }
                                     }
                                 },
                                 RoomEventData::CheckInGame(x) => {
@@ -3074,6 +3088,40 @@ pub fn init(
                                     mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
                                             msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
                                 },
+                                RoomEventData::Free() => {
+                                    let sql = format!(
+                                        "select * from Free order by week DESC limit 1;",
+                                    );
+                                    let qres = conn.query(sql.clone())?;
+                                    let mut hero1 = "".to_string();
+                                    let mut hero2 = "".to_string();
+                                    let mut hero3 = "".to_string();
+                                    let mut hero4 = "".to_string();
+                                    let mut hero5 = "".to_string();
+                                    let mut hero6 = "".to_string();
+                                    let mut hero7 = "".to_string();
+                                    let mut hero8 = "".to_string();
+                                    let mut hero9 = "".to_string();
+                                    let mut hero10 = "".to_string();
+                                    for row in qres {
+                                        let a = row?.clone();
+                                        hero1 = mysql::from_value(a.get("hero1").unwrap());
+                                        hero2 = mysql::from_value(a.get("hero2").unwrap());
+                                        hero3 = mysql::from_value(a.get("hero3").unwrap());
+                                        hero4 = mysql::from_value(a.get("hero4").unwrap());
+                                        hero5 = mysql::from_value(a.get("hero5").unwrap());
+                                        hero6 = mysql::from_value(a.get("hero6").unwrap());
+                                        hero7 = mysql::from_value(a.get("hero7").unwrap());
+                                        hero8 = mysql::from_value(a.get("hero8").unwrap());
+                                        hero9 = mysql::from_value(a.get("hero9").unwrap());
+                                        hero10 = mysql::from_value(a.get("hero10").unwrap());
+                                        break;
+                                    }
+                                    mqttmsg = MqttMsg{topic:format!("server/res/free"),
+                                            msg: format!(r#"{{"hero1":"{}", "hero2":"{}", "hero3":"{}"
+                                            , "hero4":"{}", "hero5":"{}", "hero6":"{}", "hero7":"{}", "hero8":"{}", "hero9":"{}"
+                                            , "hero10":"{}"}}"#, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10)};
+                                },
                                 RoomEventData::UpdateQueue(x) => {
                                     mqttmsg = MqttMsg{topic:format!("server/res/queue_member"),
                                             msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, x.ng, x.rk, x.at)};
@@ -3372,6 +3420,11 @@ pub fn control(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(
 pub fn checkState(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     let data: CheckStateData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::CheckState(data));
+    Ok(())
+}
+
+pub fn free(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    sender.try_send(RoomEventData::Free());
     Ok(())
 }
 
