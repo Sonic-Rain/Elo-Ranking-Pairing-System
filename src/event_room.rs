@@ -2036,11 +2036,16 @@ pub fn init(
                                                         let _: () = redis_conn.del(format!("r{}", player_id.clone()))?;
                                                         let _: () = redis_conn.del(format!("g{}", player_id.clone()))?;
                                                         let sql = format!(
-                                                            "UPDATE user SET hero=(SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1) WHERE id='{}';",
+                                                            "SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1;",
                                                             player_id.clone(),
-                                                            player_id.clone()
                                                         );
                                                         let qres = conn.query(sql.clone())?;
+                                                        for row in qres {
+                                                            let a = row?.clone();
+                                                            if let Some(u) = TotalUsers.get(&player_id.clone()) {
+                                                                u.borrow_mut().hero = mysql::from_value(a.get("hero").unwrap());
+                                                            }
+                                                        }
                                                         let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
                                                             msg: format!(r#"{{"msg":"game over"}}"#)};
                                                         find_res = true;
@@ -2845,7 +2850,7 @@ pub fn init(
                                     if TotalUsers.contains_key(&x.u.id) {
                                         let u2 = TotalUsers.get(&x.u.id);
                                         if let Some(u2) = u2 {
-                                            let sql = format!(r#"select hero from user where id="{}";"#, u2.borrow().id.clone());
+                                            let sql = format!(r#"SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1;"#, u2.borrow().id.clone());
                                             let qres2: mysql::QueryResult = conn.query(sql.clone())?;
                                             let mut hero = "".to_string();
                                             for row in qres2 {
