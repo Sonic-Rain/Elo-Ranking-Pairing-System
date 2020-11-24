@@ -521,10 +521,15 @@ fn get_gid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u6
     return 0;
 }
 
-fn get_game_id_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u64 {
-    let u = users.get(id);
-    if let Some(u) = u {
-        return u.borrow().game_id;
+fn get_game_id_by_id(id: &String, games: &BTreeMap<u64, Rc<RefCell<FightGame>>>, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u64 {
+    for (game_id, fg) in games {
+        for user_id in &fg.borrow().user_names {
+            if let Some(u) = users.get(user_id) {
+                if u.borrow().id == *id {
+                    return fg.borrow().game_id;
+                }
+            }
+        }
     }
     return 0;
 }
@@ -2878,6 +2883,15 @@ pub fn init(
                                         u2.borrow_mut().online = false;
                                     }
                                     if let Some(u) = u {
+                                        let game_id = get_game_id_by_id(&u.borrow().id, &GameingGroups, &TotalUsers);
+                                        if game_id > 0 {
+                                            let jumpData = JumpData{
+                                                id: u.borrow().id.clone(),
+                                                game: game_id,
+                                                msg: "jump".to_string(),
+                                            };
+                                            tx2.try_send(RoomEventData::Jump(jumpData));
+                                        }
                                         let mut is_null = false;
                                         let gid = u.borrow().gid;
                                         let rid = u.borrow().rid;
