@@ -51,6 +51,11 @@ impl RoomData {
             self.avg_rk = sum_rk / self.users.len() as i16;
             self.avg_at = sum_at / self.users.len() as i16;
         }
+        if self.users.len() > 1 {
+            self.avg_ng += 10 * self.users.len() as i16;
+            self.avg_rk += 10 * self.users.len() as i16;
+            self.avg_at += 10 * self.users.len() as i16;
+        }
     }
 
     pub fn add_user(&mut self, user: Rc<RefCell<User>>) {

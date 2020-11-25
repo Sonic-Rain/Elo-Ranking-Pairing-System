@@ -2413,7 +2413,7 @@ pub fn init(
                                                 println!("len : {}", r.borrow().users.len());
                                                 println!("ready : {}", r.borrow().ready);
                                                 if r.borrow().mode == "rk"{
-                                                    if r.borrow().ready == 0 && r.borrow().users.len() < 4 as usize {
+                                                    if r.borrow().ready == 0 && r.borrow().users.len() < TEAM_SIZE as usize {
                                                         r.borrow_mut().add_user(Rc::clone(j));
                                                         let m = r.borrow().master.clone();
                                                         r.borrow().publish_update(&msgtx, m)?;
@@ -3122,6 +3122,16 @@ pub fn init(
                                     let mut hero8 = "".to_string();
                                     let mut hero9 = "".to_string();
                                     let mut hero10 = "".to_string();
+                                    let mut hero11 = "".to_string();
+                                    let mut hero12 = "".to_string();
+                                    let mut hero13 = "".to_string();
+                                    let mut hero14 = "".to_string();
+                                    let mut hero15 = "".to_string();
+                                    let mut hero16 = "".to_string();
+                                    let mut hero17 = "".to_string();
+                                    let mut hero18 = "".to_string();
+                                    let mut hero19 = "".to_string();
+                                    let mut hero20 = "".to_string();
                                     for row in qres {
                                         let a = row?.clone();
                                         hero1 = mysql::from_value(a.get("hero1").unwrap());
@@ -3134,12 +3144,25 @@ pub fn init(
                                         hero8 = mysql::from_value(a.get("hero8").unwrap());
                                         hero9 = mysql::from_value(a.get("hero9").unwrap());
                                         hero10 = mysql::from_value(a.get("hero10").unwrap());
+                                        hero11 = mysql::from_value(a.get("hero11").unwrap());
+                                        hero12 = mysql::from_value(a.get("hero12").unwrap());
+                                        hero13 = mysql::from_value(a.get("hero13").unwrap());
+                                        hero14 = mysql::from_value(a.get("hero14").unwrap());
+                                        hero15 = mysql::from_value(a.get("hero15").unwrap());
+                                        hero16 = mysql::from_value(a.get("hero16").unwrap());
+                                        hero17 = mysql::from_value(a.get("hero17").unwrap());
+                                        hero18 = mysql::from_value(a.get("hero18").unwrap());
+                                        hero19 = mysql::from_value(a.get("hero19").unwrap());
+                                        hero20 = mysql::from_value(a.get("hero20").unwrap());
                                         break;
                                     }
                                     mqttmsg = MqttMsg{topic:format!("server/res/free"),
                                             msg: format!(r#"{{"hero1":"{}", "hero2":"{}", "hero3":"{}"
                                             , "hero4":"{}", "hero5":"{}", "hero6":"{}", "hero7":"{}", "hero8":"{}", "hero9":"{}"
-                                            , "hero10":"{}"}}"#, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10)};
+                                            , "hero10":"{}", "hero11":"{}", "hero12":"{}", "hero13":"{}", "hero14":"{}", "hero15":"{}"
+                                            , "hero16":"{}", "hero17":"{}", "hero18":"{}", "hero19":"{}", "hero20":"{}"}}"#
+                                            , hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10
+                                            , hero11, hero12, hero13, hero14, hero15, hero16, hero17, hero18, hero19, hero20)};
                                 },
                                 RoomEventData::UpdateQueue(x) => {
                                     mqttmsg = MqttMsg{topic:format!("server/res/queue_member"),
