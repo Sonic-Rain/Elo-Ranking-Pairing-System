@@ -2522,7 +2522,7 @@ pub fn init(
                                             j.borrow_mut().time = reset_time;
                                             let mut new_restriced = RestrictedData {
                                                 id: x.id.clone(),
-                                                time: 60,
+                                                time: 60 * (j.borrow().count+1),
                                             };
                                             let r = Rc::new(RefCell::new(new_restriced));
                                             RestrictedUsers.insert(
