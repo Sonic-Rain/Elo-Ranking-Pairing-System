@@ -1652,7 +1652,9 @@ pub fn init(
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                         msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
                                 }
-                                fg.borrow_mut().ban_time -= 1;
+                                if fg.borrow().ban_time >= -5 {
+                                    fg.borrow_mut().ban_time -= 1;
+                                }
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::Pick {
                                 status = "pick";
@@ -1667,7 +1669,9 @@ pub fn init(
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                         msg: format!(r#"{{"status":"{}", "time":{}, "picker":{:?}}}"#, status, time, &fg.borrow().pick_position)})?;
                                 }
-                                fg.borrow_mut().choose_time -= 1;
+                                if fg.borrow().choose_time >= -5 {
+                                    fg.borrow_mut().choose_time -= 1;
+                                }
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::ReadyToStart {
                                 if fg.borrow().ready_to_start_time == READY_TO_START_TIME {
@@ -1710,7 +1714,9 @@ pub fn init(
                                         msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;    
                                     fg.borrow_mut().next_status();
                                 }
-                                fg.borrow_mut().ready_to_start_time -= 1;
+                                if fg.borrow_mut().ready_to_start_time >= 0 {
+                                    fg.borrow_mut().ready_to_start_time -= 1;
+                                }
                             }
                             if fg.borrow_mut().check_at_status() == FightGameStatus::Gaming {
                             }
@@ -1790,7 +1796,9 @@ pub fn init(
                                         msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                             msg: format!(r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#, fg.borrow().ban_time, vec![0,1,2,3,4,5,6,7,8,9])})?;
                                     }
-                                    fg.borrow_mut().ban_time -= 1;
+                                    if fg.borrow().ban_time >= -5 {
+                                        fg.borrow_mut().ban_time -= 1;
+                                    }
                                     if fg.borrow().ban_time < -5 {
                                         fg.borrow_mut().next_status();
                                         fg.borrow_mut().next_pick_status();
@@ -1813,7 +1821,9 @@ pub fn init(
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
                                         msg: format!(r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#, fg.borrow().choose_time, &fg.borrow().pick_position)})?;
                                 }
-                                fg.borrow_mut().choose_time -= 1;
+                                if fg.borrow().choose_time >= -5 {
+                                    fg.borrow_mut().choose_time -= 1;
+                                }
                                 if fg.borrow().choose_time < -5 {
                                     let mut isJump = false;
                                     for index in &fg.borrow().pick_position {
@@ -1907,7 +1917,9 @@ pub fn init(
                                         msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &fg.borrow().user_names)})?;    
                                     fg.borrow_mut().next_status();
                                 }
-                                fg.borrow_mut().ready_to_start_time -= 1;
+                                if fg.borrow().ready_to_start_time >= 0 {
+                                    fg.borrow_mut().ready_to_start_time -= 1;
+                                }
                             }
                             if fg.borrow_mut().check_status() == FightGameStatus::Gaming {
                             }
