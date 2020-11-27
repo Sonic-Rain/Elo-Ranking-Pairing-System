@@ -304,6 +304,11 @@ pub struct UpdateQueueData {
     pub at: i16,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SystemBanData {
+    pub id: String,
+    pub time: u16,
+}
 
 
 #[derive(Debug)]
@@ -345,6 +350,7 @@ pub enum RoomEventData {
     Loading(LoadingData),
     UpdateQueue(UpdateQueueData),
     Free(),
+    SystemBan(SystemBanData),
 }
 
 #[derive(Clone, Debug)]
@@ -2512,7 +2518,8 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::BanUser(x) => {
-                                    let reset_time = 86400;
+                                    info!("ban user : {:?}, line: {}", x, line!());
+                                    let reset_time = 7200;
                                     if !JumpUsers.contains_key(&x.id){
                                         let jumpCountData = JumpCountData{
                                             count: 1,
@@ -3181,6 +3188,17 @@ pub fn init(
                                     mqttmsg = MqttMsg{topic:format!("server/res/queue_member"),
                                             msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, x.ng, x.rk, x.at)};
                                 },
+                                RoomEventData::SystemBan(x) => {
+                                    let mut new_restriced = RestrictedData {
+                                        id: x.id.clone(),
+                                        time: x.time,
+                                    };
+                                    let r = Rc::new(RefCell::new(new_restriced));
+                                    RestrictedUsers.insert(
+                                        x.id.clone(),
+                                        Rc::clone(&r),
+                                    );
+                                }
                             }
                         }
                         //println!("isBackup: {}, isServerLive: {}", isBackup, isServerLive);
@@ -3480,6 +3498,12 @@ pub fn checkState(v: Value, sender: Sender<RoomEventData>) -> std::result::Resul
 
 pub fn free(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     sender.try_send(RoomEventData::Free());
+    Ok(())
+}
+
+pub fn systemBan(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: SystemBanData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::SystemBan(data));
     Ok(())
 }
 
