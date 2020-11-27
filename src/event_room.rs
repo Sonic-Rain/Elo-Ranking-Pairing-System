@@ -33,12 +33,12 @@ use std::process::Command;
 
 const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
-const SCORE_INTERVAL: i16 = 2;
+const SCORE_INTERVAL: i16 = 10;
 const CHOOSE_HERO_TIME: i16 = 30;
 const NG_CHOOSE_HERO_TIME: i16 = 90;
 const BAN_HERO_TIME: i16 = 25;
 const READY_TO_START_TIME: i16 = 10;
-const READY_TIME: u16 = 15;
+const READY_TIME: u16 = 20;
 const RANK_RANGE: i16 = 100;
 const NG_RANGE: i16 = 200;
 
@@ -585,7 +585,7 @@ fn user_score(
             u.borrow().hero,
         ),
     })?;
-    println!("Update!");
+    println!("Update! user : {:?}, line: {}", u.borrow(), line!());
     let sql = format!(
         "UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';",
         u.borrow().ng.clone(),
@@ -891,16 +891,16 @@ pub fn HandleQueueRequest(
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
                                         v.borrow_mut().gid = group_id + 1;
-                                        println!("g2 {:?}", g);
+                                        println!("g2 {:?}, line: {}", g, line!());
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
                                     }
                                 }
                                 if g.user_len == TEAM_SIZE {
-                                    println!("match team_size!");
+                                    println!("match team_size!, line: {}", line!());
                                     group_id += 1;
-                                    info!("new group_id: {}", group_id);
+                                    info!("new group_id: {}, line: {}", group_id, line!());
                                     g.gid = group_id;
                                     g.queue_cnt = 1;
                                     NGReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
@@ -931,7 +931,7 @@ pub fn HandleQueueRequest(
                             let mut prestart = false;
                             let mut total_ng: i16 = 0;
                             let mut rm_ids: Vec<u64> = vec![];
-                            println!("NGReadyGroup!! {}", NGReadyGroups.len());
+                            println!("NGReadyGroup!! {}, line: {}", NGReadyGroups.len(), line!());
                             let mut new_now2 = Instant::now();
                             for (id, rg) in &mut NGReadyGroups {
                                 if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
@@ -1039,7 +1039,7 @@ pub fn HandleQueueRequest(
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
                                         v.borrow_mut().gid = group_id + 1;
-                                        println!("g2 {:?}", g);
+                                        println!("g2 {:?}, line: {}", g, line!());
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
@@ -1051,7 +1051,7 @@ pub fn HandleQueueRequest(
                                 if g.user_len == TEAM_SIZE {
                                     println!("match team_size!");
                                     group_id += 1;
-                                    info!("new group_id: {}", group_id);
+                                    info!("new group_id: {}, line: {}", group_id, line!());
                                     g.gid = group_id;
                                     g.queue_cnt = 1;
                                     RKReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
@@ -1183,7 +1183,7 @@ pub fn HandleQueueRequest(
                                         g.user_len += v.borrow().user_len;
                                         v.borrow_mut().ready = 1;
                                         v.borrow_mut().gid = group_id + 1;
-                                        println!("g2 {:?}", g);
+                                        println!("g2 {:?}, line: {}", g, line!());
                                     }
                                     else {
                                         v.borrow_mut().queue_cnt += 1;
@@ -1193,9 +1193,9 @@ pub fn HandleQueueRequest(
                                     }
                                 }
                                 if g.user_len == TEAM_SIZE {
-                                    println!("match team_size!");
+                                    println!("match team_size!, line: {}", line!());
                                     group_id += 1;
-                                    info!("new group_id: {}", group_id);
+                                    info!("new group_id: {}, line: {}", group_id, line!());
                                     g.gid = group_id;
                                     g.queue_cnt = 1;
                                     ATReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
@@ -1226,7 +1226,7 @@ pub fn HandleQueueRequest(
                             let mut prestart = false;
                             let mut total_at: i16 = 0;
                             let mut rm_ids: Vec<u64> = vec![];
-                            println!("ATReadyGroup!! {}", ATReadyGroups.len());
+                            println!("ATReadyGroup!! {}, line: {}", ATReadyGroups.len(), line!());
                             let mut new_now2 = Instant::now();
                             for (id, rg) in &mut ATReadyGroups {
                                 if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
@@ -1485,7 +1485,7 @@ pub fn init(
                 at: mysql::from_value(a.get("at").unwrap()),
                 ..Default::default()
             };
-            println!("{:?}", user);
+            println!("{:?}, line: {}", user, line!());
             userid = mysql::from_value(a.get("id").unwrap());
             //println!("userid: {}", userid);
             //ng = mysql::from_value(a.get("ng").unwrap());
@@ -1506,7 +1506,7 @@ pub fn init(
             //println!("game id: {}", game_id);
         }
         */
-        println!("game id: {}", game_id);
+        println!("game id: {}, line: {}", game_id, line!());
         loop {
             select! {
                 recv(update200ms) -> _ => {
@@ -1696,7 +1696,7 @@ pub fn init(
                                         }
                                         for user_id in &fg.borrow().user_names {
                                             if let Some(u) = TotalUsers.get(user_id) {
-                                                println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
+                                                println!("game_id: {}, user : {} , hero : {}, line: {}",game_id, u.borrow().id, u.borrow().hero, line!());
                                                 values = format!("{} ,'{}'", values, u.borrow().hero);
                                             }
                                         }
@@ -1899,7 +1899,7 @@ pub fn init(
                                         }
                                         for user_id in &fg.borrow().user_names {
                                             if let Some(u) = TotalUsers.get(user_id) {
-                                                println!("user : {} , hero : {}", u.borrow().id, u.borrow().hero);
+                                                println!("game_id: {}, user : {} , hero : {}, line: {}",game_id, u.borrow().id, u.borrow().hero, line!());
                                                 values = format!("{} ,'{}'", values, u.borrow().hero);
                                             }
                                         }
@@ -2043,8 +2043,8 @@ pub fn init(
                                                 let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",player_id.clone()));
                                                 match isGameOver {
                                                     Ok(res) => {
-                                                        println!("playerID : {}", player_id.clone());
-                                                        println!("res : {}", res);
+                                                        println!("playerID : {}, line: {}", player_id.clone(), line!());
+                                                        println!("res : {}, line: {}", res, line!());
                                                         if res == "W" {
                                                             gameOverData.win.push(player_id.clone());
                                                         } else {
@@ -2103,7 +2103,7 @@ pub fn init(
                         if res1 == true {
                             for r in &group.borrow().room_names {
                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}",
-                                    "game":"{}", "players":{:?}}}"#, r, game_id, &group.borrow().user_names)});                                    
+                                    "game":"{}", "players":{:?}}}"#, r, group.borrow().game_id, &group.borrow().user_names)});                                    
                             }
                             group.borrow_mut().next_status();
                             group.borrow_mut().choose_time = CHOOSE_HERO_TIME;
@@ -2339,7 +2339,7 @@ pub fn init(
                                 RoomEventData::ChooseNGHero(x) => {
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
-                                        println!("hero : {}", x.hero.clone());
+                                        println!("hero : {}, line: {}", x.hero.clone(), line!());
                                         u.borrow_mut().hero = x.hero.clone();
                                         // conn.query(format!("update user set hero='{}' where id='{}';",u.borrow().hero, u.borrow().id))?;
                                         // key : steamid, value : hero
@@ -2367,10 +2367,10 @@ pub fn init(
                                         if let Some(fg) = GameingGroups.get(&u.borrow().game_id) {
                                             fg.borrow_mut().lock_cnt += 1;
                                         }
-                                        println!("gid : {}", u.borrow().game_id);
+                                        println!("gid : {}, line: {}", u.borrow().game_id, line!());
                                         mqttmsg = MqttMsg{topic:format!("game/{}/res/ban_hero", u.borrow().game_id),
                                             msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, x.hero)};
-                                        println!("send ban hero : {}, {}", u.borrow().id, x.hero);
+                                        println!("send ban hero : {}, {}, line: {}", u.borrow().id, x.hero, line!());
                                     }
                                 },
                                 RoomEventData::NGGameChooseHero(x) => {
@@ -2422,8 +2422,8 @@ pub fn init(
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
-                                                println!("len : {}", r.borrow().users.len());
-                                                println!("ready : {}", r.borrow().ready);
+                                                println!("len : {}, line: {}", r.borrow().users.len(), line!());
+                                                println!("ready : {}, line: {}", r.borrow().ready, line!());
                                                 if r.borrow().mode == "rk"{
                                                     if r.borrow().ready == 0 && r.borrow().users.len() < TEAM_SIZE as usize {
                                                         r.borrow_mut().add_user(Rc::clone(j));
@@ -2590,7 +2590,7 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::SetPassword(x) => {
-                                    println!("{:?}", x);
+                                    println!("{:?}, line: {}", x, line!());
                                     if let Some(gameRoom) = GameingGroups.get(&x.game) {
                                         mqttmsg = MqttMsg{topic:format!("game/{}/res/password", x.game.clone()),
                                             msg: format!(r#"{{"password":"{}"}}"#, x.password.clone())};
@@ -2635,7 +2635,7 @@ pub fn init(
                                                         tx2.try_send(RoomEventData::BanUser(BanUserData{id: x.id.clone()}));
                                                         gr.borrow_mut().user_cancel(&x.id);
                                                         for r in &gr.borrow().rooms {
-                                                            println!("r_rid: {}, u_rid: {}", r.borrow().rid, u.borrow().rid);
+                                                            println!("r_rid: {}, u_rid: {}, line: {}", r.borrow().rid, u.borrow().rid, line!());
                                                             if r.borrow().rid != u.borrow().rid {
                                                                 let mut user_ids: Vec<String> = Vec::new();
                                                                 for user in &r.borrow().users {
@@ -2714,6 +2714,7 @@ pub fn init(
                                     game_id += 1;
                                     fg.set_game_id(game_id);
                                     fg.set_mode(x.mode);
+                                    info!("game_id: {}, game_mode: {}, game_player: {:?} line: {}", fg.game_id, fg.mode, fg.user_names, line!());
                                     PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
 
                                 },
@@ -2721,7 +2722,7 @@ pub fn init(
                                     let mut u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         u.borrow_mut().start_get = true;
-                                        println!("start get");
+                                        // println!("start get");
                                     }
                                 },
                                 RoomEventData::StartQueue(x) => {
@@ -3005,7 +3006,7 @@ pub fn init(
                                         room_id += 1
                                     }
                                     if !TotalRoom.contains_key(&room_id) {
-                                        println!("rid: {}", &room_id);
+                                        println!("rid: {}, line: {}", &room_id, line!());
                                         // room_id = x.id.parse::<u64>().unwrap();
                                         let mut new_room = RoomData {
                                             rid: room_id,
