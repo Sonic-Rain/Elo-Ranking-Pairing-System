@@ -1,4 +1,5 @@
 use crate::msg::*;
+use log::{error, info, trace, warn};
 use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
 use failure::Error;
 use serde_derive::{Deserialize, Serialize};
@@ -562,6 +563,7 @@ impl FightGame {
 
     pub fn next_status(&mut self) {
         self.game_status += 1;
+        info!("game_id : {}, status: {}, line: {}", self.game_id, self.game_status, line!());
         if self.game_status == 2 {
             self.pick_position = vec![0];
         }

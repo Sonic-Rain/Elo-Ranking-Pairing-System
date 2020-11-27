@@ -110,6 +110,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("server/send/control", QoS::AtMostOnce)?;//doc server.drawio
     mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;//doc server.drawio
     mqtt_client.subscribe("server/send/free", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("server/send/system_ban", QoS::AtMostOnce)?;
     // Client message
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;//doc login.drawio
     mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;//doc login.drwio
@@ -244,6 +245,7 @@ fn main() -> std::result::Result<(), Error> {
     let recheck_state = Regex::new(r"\w+/send/check_state")?;
     let reloading = Regex::new(r"\w+/(\w+)/send/loading")?;
     let refree = Regex::new(r"\w+/send/free")?;
+    let resystem_ban = Regex::new(r"\w+/send/system_ban")?;
     
     
     //let mut QueueSender: Sender<QueueData>;
@@ -315,7 +317,7 @@ fn main() -> std::result::Result<(), Error> {
                                 if reinvite.is_match(topic_name) {
                                     let cap = reinvite.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("invite: userid: {} json: {:?}", userid, v);
+                                    info!("invite: userid: {} json: {:?}", userid, v);
                                     event_room::invite(userid, v, sender.clone())?;
                                 } else if rechoose_hero.is_match(topic_name) {
                                     let cap = rechoose_hero.captures(topic_name).unwrap();
@@ -335,12 +337,12 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if rejoin.is_match(topic_name) {
                                     let cap = rejoin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("join: userid: {} json: {:?}", userid, v);
+                                    info!("join: userid: {} json: {:?}", userid, v);
                                     event_room::join(userid, v, sender.clone())?;
                                 } else if rereject.is_match(topic_name) {
                                     let cap = rereject.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("join: userid: {} json: {:?}", userid, v);
+                                    info!("join: userid: {} json: {:?}", userid, v);
                                     event_room::reject(userid, v, sender.clone())?;
                                 } else if rejump.is_match(topic_name) {
                                     let cap = rejump.captures(topic_name).unwrap();
@@ -350,27 +352,27 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if recheck_restriction.is_match(topic_name) {
                                     let cap = recheck_restriction.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("logout: userid: {} json: {:?}", userid, v);
                                     event_room::checkRestriction(userid, v, sender.clone())?;
                                 } else if recheckInGame.is_match(topic_name) {
                                     let cap = recheckInGame.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("logout: userid: {} json: {:?}", userid, v);
                                     event_room::checkInGame(userid, v, sender.clone())?;
                                 } else if releave_game.is_match(topic_name) {
                                     let cap = releave_game.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("logout: userid: {} json: {:?}", userid, v);
                                     event_room::leaveGame(userid, v, sender.clone())?;
                                 } else if relogin.is_match(topic_name) {
                                     let cap = relogin.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("login: userid: {} json: {:?}", userid, v);
+                                    info!("login: userid: {} json: {:?}", userid, v);
                                     event_member::login(userid, v, pool.clone(), sender.clone(), sender1.clone())?;
                                 } else if relogout.is_match(topic_name) {
                                     let cap = relogout.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("logout: userid: {} json: {:?}", userid, v);
                                     event_member::logout(userid, v, pool.clone(), sender.clone())?;
                                 } else if readd_black_list.is_match(topic_name){
                                     let cap = readd_black_list.captures(topic_name).unwrap();
@@ -387,12 +389,12 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if recreate.is_match(topic_name) {
                                     let cap = recreate.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("create: userid: {} json: {:?}", userid, v);
+                                    info!("create: userid: {} json: {:?}", userid, v);
                                     event_room::create(userid, v, sender.clone())?;
                                 } else if reclose.is_match(topic_name) {
                                     let cap = reclose.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("close: userid: {} json: {:?}", userid, v);
+                                    info!("close: userid: {} json: {:?}", userid, v);
                                     event_room::close(userid, v, sender.clone())?;
                                 } else if restart_queue.is_match(topic_name) {
                                     let cap = restart_queue.captures(topic_name).unwrap();
@@ -402,84 +404,87 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if recancel_queue.is_match(topic_name) {
                                     let cap = recancel_queue.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("cancel_queue: userid: {} json: {:?}", userid, v);
+                                    info!("cancel_queue: userid: {} json: {:?}", userid, v);
                                     event_room::cancel_queue(userid, v, sender.clone())?;
                                 } else if restart_get.is_match(topic_name) {
                                     let cap = restart_get.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("prestart_get: userid: {} json: {:?}", userid, v);
+                                    info!("prestart_get: userid: {} json: {:?}", userid, v);
                                     event_room::start_get(userid, v, sender.clone())?;
                                 } else if reready.is_match(topic_name) {
                                     let cap = reready.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("prestart: userid: {} json: {:?}", userid, v);
+                                    info!("prestart: userid: {} json: {:?}", userid, v);
                                     event_room::ready(userid, v, sender.clone())?;
                                 } else if reloading.is_match(topic_name) {
                                     let cap = reloading.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    // info!("loading: userid: {} json: {:?}", userid, v);
+                                    info!("loading: userid: {} json: {:?}", userid, v);
                                     event_room::loading(userid, v, sender.clone())?;
                                 } else if releave.is_match(topic_name) {
                                     let cap = releave.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("leave: userid: {} json: {:?}", userid, v);
+                                    info!("leave: userid: {} json: {:?}", userid, v);
                                     event_room::leave(userid, v, sender.clone())?;
                                 } else if restart_game.is_match(topic_name) {
                                     let cap = restart_game.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("start_game: userid: {} json: {:?}", userid, v);
+                                    info!("start_game: userid: {} json: {:?}", userid, v);
                                     event_room::start_game(userid, v, sender.clone())?;
                                 } else if repassword.is_match(topic_name) {
                                     let cap = repassword.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("start_game: userid: {} json: {:?}", userid, v);
+                                    info!("start_game: userid: {} json: {:?}", userid, v);
                                     event_room::set_password(userid, v, sender.clone())?;
                                 } else if regame_over.is_match(topic_name) {
                                     let cap = regame_over.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("game_over: userid: {} json: {:?}", userid, v);
+                                    info!("game_over: userid: {} json: {:?}", userid, v);
                                     event_room::game_over(userid, v, sender.clone())?;
                                 } else if regame_info.is_match(topic_name) {
                                     let cap = regame_info.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("game_info: userid: {} json: {:?}", userid, v);
+                                    info!("game_info: userid: {} json: {:?}", userid, v);
                                     event_room::game_info(userid, v, sender.clone())?;
                                 } else if regame_close.is_match(topic_name) {
                                     let cap = regame_close.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("game_close: userid: {} json: {:?}", userid, v);
+                                    info!("game_close: userid: {} json: {:?}", userid, v);
                                     event_room::game_close(userid, v, sender.clone())?;
                                 } else if restatus.is_match(topic_name) {
                                     let cap = restatus.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("status: userid: {} json: {:?}", userid, v);
+                                    info!("status: userid: {} json: {:?}", userid, v);
                                     event_room::status(userid, v, sender.clone())?;
                                 } else if rereconnect.is_match(topic_name) {
                                     let cap = rereconnect.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    //info!("reconnect: userid: {} json: {:?}", userid, v);
+                                    info!("reconnect: userid: {} json: {:?}", userid, v);
                                     event_room::reconnect(userid, v, sender.clone())?;
                                 } else if recontrol.is_match(topic_name) {
-                                    // info!("recontrol: json: {:?}", v);
+                                    info!("recontrol: json: {:?}", v);
                                     event_room::control(v, sender.clone())?;
                                 } else if recheck_state.is_match(topic_name) {
-                                    // info!("recheck_state: json: {:?}", v);
+                                    info!("recheck_state: json: {:?}", v);
                                     event_room::checkState(v, sender.clone())?;
                                 } else if refree.is_match(topic_name) {
-                                    // info!("refree: json: {:?}", v);
+                                    info!("refree: json: {:?}", v);
                                     event_room::free(v, sender.clone())?;
-                                } else if regetGameHistorys.is_match(topic_name) {
-                                    // info!("recheck_state: json: {:?}", v);
+                                } else if resystem_ban.is_match(topic_name) {
+                                    info!("resystem_ban: json: {:?}", v);
+                                    event_room::systemBan(v, sender.clone())?;
+                                }else if regetGameHistorys.is_match(topic_name) {
+                                    info!("recheck_state: json: {:?}", v);
                                     let cap = regetGameHistorys.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::GetGameHistorys(userid, v, pool.clone(), tx.clone())?;
                                 } else if rebinding.is_match(topic_name) {
-                                    // info!("recheck_state: json: {:?}", v);
+                                    info!("recheck_state: json: {:?}", v);
                                     let cap = rebinding.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::Binding(userid, v, pool.clone(), tx.clone())?;
                                 } else if recheckBinding.is_match(topic_name) {
-                                    // info!("recheck_state: json: {:?}", v);
+                                    info!("recheck_state: json: {:?}", v);
                                     let cap = recheckBinding.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::CheckBinding(userid, v, pool.clone(), tx.clone())?;

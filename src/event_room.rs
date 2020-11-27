@@ -91,7 +91,7 @@ pub struct JumpData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RestrictedData {
     pub id: String,
-    pub time: u16,
+    pub time: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -307,7 +307,7 @@ pub struct UpdateQueueData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SystemBanData {
     pub id: String,
-    pub time: u16,
+    pub time: i32,
 }
 
 
@@ -431,7 +431,7 @@ pub struct RemoveRoomData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct JumpCountData {
-    pub count: u16,
+    pub count: i32,
     pub time: i32,
 }
 
@@ -1622,7 +1622,7 @@ pub fn init(
                     let mut rm_list: Vec<String> = Vec::new();
                     for (id, restriction) in &mut RestrictedUsers {
                         restriction.borrow_mut().time -= 1;
-                        if restriction.borrow().time == 0 {
+                        if restriction.borrow().time <= 0 {
                             rm_list.push(id.clone());
                         }
                     }
@@ -2555,7 +2555,7 @@ pub fn init(
                                 RoomEventData::Loading(x) => {
                                     if let Some(fg) = GameingGroups.get(&x.game) {
                                         fg.borrow_mut().loading_cnt += 1;
-                                        // println!("{}", fg.borrow().loading_cnt);
+                                        info!("game_id : {}, loading_cnt: {}, line: {}", x.game, fg.borrow_mut().loading_cnt, line!());
                                         if fg.borrow().loading_cnt >= 10 {
                                             fg.borrow_mut().next_status();
                                         }
@@ -2635,8 +2635,8 @@ pub fn init(
                                                     if x.accept == true {
                                                         gr.borrow_mut().user_ready(&x.id);
                                                         u.borrow_mut().start_get = true;
-                                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/pre_start", u.borrow().id),
-                                                            msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
+                                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/pre_start", &x.room),
+                                                            msg: format!(r#"{{"msg":"pre_start", "room":"{}", "id":"{}"}}"#, &x.room, u.borrow().id)};
                                                     } else {
                                                         println!("accept false!");
                                                         tx2.try_send(RoomEventData::BanUser(BanUserData{id: x.id.clone()}));
