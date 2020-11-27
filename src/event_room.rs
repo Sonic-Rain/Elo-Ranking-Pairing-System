@@ -2103,7 +2103,7 @@ pub fn init(
                         if res1 == true {
                             for r in &group.borrow().room_names {
                                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r), msg: format!(r#"{{"msg":"start", "room":"{}",
-                                "game":"{}", "players":{:?}}}"#, r, game_id, &group.borrow().user_names)});
+                                    "game":"{}", "players":{:?}}}"#, r, game_id, &group.borrow().user_names)});                                    
                             }
                             group.borrow_mut().next_status();
                             group.borrow_mut().choose_time = CHOOSE_HERO_TIME;
@@ -2628,8 +2628,8 @@ pub fn init(
                                                     if x.accept == true {
                                                         gr.borrow_mut().user_ready(&x.id);
                                                         u.borrow_mut().start_get = true;
-                                                        // mqttmsg = MqttMsg{topic:format!("room/{}/res/start_get", u.borrow().id),
-                                                        //     msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
+                                                        mqttmsg = MqttMsg{topic:format!("room/{}/res/pre_start", u.borrow().id),
+                                                            msg: format!(r#"{{"msg":"start", "room":"{}"}}"#, &x.room)};
                                                     } else {
                                                         println!("accept false!");
                                                         tx2.try_send(RoomEventData::BanUser(BanUserData{id: x.id.clone()}));
