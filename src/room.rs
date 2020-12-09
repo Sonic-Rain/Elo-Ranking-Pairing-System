@@ -11,6 +11,7 @@ pub struct User {
     pub id: String,
     pub name: String,
     pub hero: String,
+    pub ban_hero: String,
     pub ng: i16,
     pub rk: i16,
     pub at: i16,
@@ -21,6 +22,7 @@ pub struct User {
     pub start_prestart: bool,
     pub start_get: bool,
     pub isLocked: bool,
+    pub isLoading: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -38,25 +40,63 @@ pub struct RoomData {
 }
 
 impl RoomData {
+    pub fn check_lock(&mut self) -> bool{
+        let mut res = true;
+        // println!("self users : {:?}", self.users);
+        for u in &self.users {
+            if !u.borrow().isLocked {
+                res = false;
+            }
+        }
+        res
+    }
+
+    pub fn check_loading(&mut self) -> bool{
+        let mut res = true;
+        println!("self users : {:?}", self.users);
+        for u in &self.users {
+            if !u.borrow().isLoading {
+                res = false;
+            }
+        }
+        res
+    }
     pub fn update_avg(&mut self) {
-        let mut sum_ng = 0;
-        let mut sum_rk = 0;
-        let mut sum_at = 0;
+        let mut highest_ng = 0;
+        let mut highest_rk = 0;
+        let mut highest_at = 0;
         for user in &self.users {
-            sum_ng += user.borrow().ng;
-            sum_rk += user.borrow().rk;
-            sum_at += user.borrow().at;
+            if user.borrow().ng > highest_ng {
+                highest_ng = user.borrow().ng;
+            }
+            if user.borrow().rk > highest_rk {
+                highest_rk = user.borrow().rk;
+            }
+            if user.borrow().rk > highest_rk {
+                highest_rk = user.borrow().rk;
+            }
         }
-        if self.users.len() > 0 {
-            self.avg_ng = sum_ng / self.users.len() as i16;
-            self.avg_rk = sum_rk / self.users.len() as i16;
-            self.avg_at = sum_at / self.users.len() as i16;
-        }
-        if self.users.len() > 1 {
-            self.avg_ng += 10 * self.users.len() as i16;
-            self.avg_rk += 10 * self.users.len() as i16;
-            self.avg_at += 10 * self.users.len() as i16;
-        }
+        self.avg_ng = highest_ng + 20 * self.users.len() as i16;
+        self.avg_rk = highest_rk + 20 * self.users.len() as i16;
+        self.avg_at = highest_at + 20 * self.users.len() as i16;
+        // let mut sum_ng = 0;
+        // let mut sum_rk = 0;
+        // let mut sum_at = 0;
+        // for user in &self.users {
+        //     sum_ng += user.borrow().ng;
+        //     sum_rk += user.borrow().rk;
+        //     sum_at += user.borrow().at;
+        // }
+        // if self.users.len() > 0 {
+        //     self.avg_ng = sum_ng / self.users.len() as i16;
+        //     self.avg_rk = sum_rk / self.users.len() as i16;
+        //     self.avg_at = sum_at / self.users.len() as i16;
+        // }
+        // if self.users.len() > 1 {
+        //     self.avg_ng += 10 * self.users.len() as i16;
+        //     self.avg_rk += 10 * self.users.len() as i16;
+        //     self.avg_at += 10 * self.users.len() as i16;
+        // }
     }
 
     pub fn add_user(&mut self, user: Rc<RefCell<User>>) {
@@ -177,6 +217,27 @@ pub struct FightGroup {
 }
 
 impl FightGroup {
+
+    pub fn check_lock(&mut self) -> bool{
+        let mut res = true;
+        for room in &self.rooms {
+            if !room.borrow_mut().check_lock() {
+                res = false;
+            }
+        }
+        res
+    }
+
+    pub fn check_loading(&mut self) -> bool {
+        let mut res = true;
+        for room in &self.rooms {
+            if !room.borrow_mut().check_loading() {
+                res = false;
+            }
+        }
+        res
+    }
+
     pub fn user_ready(&mut self, id: &String) -> bool {
         for c in &mut self.checks {
             //println!("c: {}, id: {}", c.id, *id);
@@ -349,7 +410,7 @@ pub struct FightGame {
     pub winteam: i16,
     pub game_status: u16,
     pub game_port: u16,
-    pub ready_cnt: u16,
+    pub ready_cnt: f32,
     pub loading_cnt: u16,
     pub ban_time: i16,
     pub choose_time: i16,
@@ -357,6 +418,7 @@ pub struct FightGame {
     pub mode: String,
     pub pick_status: u16,
     pub lock_cnt: u16,
+    pub time: u64,
 }
 
 #[derive(PartialEq)]

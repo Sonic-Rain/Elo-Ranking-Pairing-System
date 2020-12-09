@@ -3,6 +3,8 @@ use log::{info, warn, error, trace};
 
 mod event_member;
 mod event_room;
+mod game;
+mod game_flow;
 mod room;
 mod msg;
 mod elo;
@@ -41,8 +43,8 @@ fn generate_client_id() -> String {
 }
 
 fn get_url() -> String {
-    "mysql://root:sonicrain2020@172.104.72.206:4000/nobu".into()
-    // "mysql://elo:elo@localhost:3306/nobu".into() //test
+    // "mysql://root:sonicrain2020@172.104.72.206:4000/nobu".into()
+    "mysql://elo:elo@localhost:3306/nobu".into() //test
 }
 
 fn main() -> std::result::Result<(), Error> {
@@ -90,8 +92,8 @@ fn main() -> std::result::Result<(), Error> {
             .help("backup"),
         ).get_matches();
 
-    let server_addr = matches.value_of("SERVER").unwrap_or("172.104.72.206").to_owned();
-    // let server_addr = matches.value_of("SERVER").unwrap_or("172.105.232.176").to_owned(); //test
+    // let server_addr = matches.value_of("SERVER").unwrap_or("172.104.72.206").to_owned();
+    let server_addr = matches.value_of("SERVER").unwrap_or("172.105.232.176").to_owned(); //test
     let server_port = matches.value_of("PORT").unwrap_or("1883").to_owned();
     let client_id = matches
         .value_of("CLIENT_ID")
@@ -126,6 +128,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/get_game_historys", QoS::AtMostOnce)?;//doc get_game_historys
     mqtt_client.subscribe("member/+/send/binding", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_binding", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/get_leaderboard", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;//doc room
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;//doc room
@@ -241,6 +244,7 @@ fn main() -> std::result::Result<(), Error> {
     let regetGameHistorys = Regex::new(r"\w+/(\w+)/send/get_game_historys")?;
     let rebinding = Regex::new(r"\w+/(\w+)/send/binding")?;
     let recheckBinding = Regex::new(r"\w+/(\w+)/send/check_binding")?;
+    let regetLeaderboard = Regex::new(r"\w+/(\w+)/send/get_leaderboard")?;
     let recontrol = Regex::new(r"\w+/send/control")?;
     let recheck_state = Regex::new(r"\w+/send/check_state")?;
     let reloading = Regex::new(r"\w+/(\w+)/send/loading")?;
@@ -347,22 +351,22 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if rejump.is_match(topic_name) {
                                     let cap = rejump.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("jump: userid: {} json: {:?}", userid, v);
                                     event_room::jump(userid, v, sender.clone())?;
                                 } else if recheck_restriction.is_match(topic_name) {
                                     let cap = recheck_restriction.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("check_restriction: userid: {} json: {:?}", userid, v);
                                     event_room::checkRestriction(userid, v, sender.clone())?;
                                 } else if recheckInGame.is_match(topic_name) {
                                     let cap = recheckInGame.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("checkInGame: userid: {} json: {:?}", userid, v);
                                     event_room::checkInGame(userid, v, sender.clone())?;
                                 } else if releave_game.is_match(topic_name) {
                                     let cap = releave_game.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
-                                    info!("logout: userid: {} json: {:?}", userid, v);
+                                    info!("leave_game: userid: {} json: {:?}", userid, v);
                                     event_room::leaveGame(userid, v, sender.clone())?;
                                 } else if relogin.is_match(topic_name) {
                                     let cap = relogin.captures(topic_name).unwrap();
@@ -474,20 +478,25 @@ fn main() -> std::result::Result<(), Error> {
                                     info!("resystem_ban: json: {:?}", v);
                                     event_room::systemBan(v, sender.clone())?;
                                 }else if regetGameHistorys.is_match(topic_name) {
-                                    info!("recheck_state: json: {:?}", v);
+                                    info!("regetGameHistorys: json: {:?}", v);
                                     let cap = regetGameHistorys.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::GetGameHistorys(userid, v, pool.clone(), tx.clone())?;
                                 } else if rebinding.is_match(topic_name) {
-                                    info!("recheck_state: json: {:?}", v);
+                                    info!("rebinding: json: {:?}", v);
                                     let cap = rebinding.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::Binding(userid, v, pool.clone(), tx.clone())?;
                                 } else if recheckBinding.is_match(topic_name) {
-                                    info!("recheck_state: json: {:?}", v);
+                                    info!("recheckBinding: json: {:?}", v);
                                     let cap = recheckBinding.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::CheckBinding(userid, v, pool.clone(), tx.clone())?;
+                                } else if regetLeaderboard.is_match(topic_name) {
+                                    info!("regetLeaderboard: json: {:?}", v);
+                                    let cap = regetLeaderboard.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    event_member::GetLeaderboard(userid, v, pool.clone(), tx.clone())?;
                                 }
                             } else {
                                 warn!("Json Parser error");

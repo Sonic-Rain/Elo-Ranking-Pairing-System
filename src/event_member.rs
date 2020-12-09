@@ -81,6 +81,18 @@ struct GameHistoryData {
     items: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct ScoreData {
+    steamID: String,
+    score: u16,
+}
+
+#[derive(Serialize, Deserialize)]
+struct LeaderboardData {
+    rkLeaderboard: Vec<ScoreData>,
+    atLeaderboard: Vec<ScoreData>,
+}
+
 pub fn login(
     id: String,
     v: Value,
@@ -385,5 +397,49 @@ pub fn CheckBinding(
                 msg: format!(r#"{{"msg":"fail"}}"#)}
         )?;
     }
+    Ok(())
+}
+
+pub fn GetLeaderboard(
+    id: String,
+    v: Value,
+    pool: mysql::Pool,
+    msgtx: Sender<MqttMsg>,
+) -> std::result::Result<(), Error> {
+    let mut conn = pool.get_conn()?;
+    let mut rkScores: Vec<ScoreData> = vec![];
+    let mut atScores: Vec<ScoreData> = vec![];
+    let mut rkSql = format!(
+        r#"select id, rk from user order by rk desc limit 30;"#
+    );
+    let qres: mysql::QueryResult = conn.query(rkSql.clone())?;
+    for row in qres {
+        let a = row?.clone();
+        let data = ScoreData {
+            steamID: mysql::from_value(a.get("id").unwrap()),
+            score: mysql::from_value(a.get("rk").unwrap()),
+        };
+        rkScores.push(data);
+    }
+    let mut atSql = format!(
+        r#"select id, at from user order by at desc limit 30;"#
+    );
+    let qres: mysql::QueryResult = conn.query(atSql.clone())?;
+    for row in qres {
+        let a = row?.clone();
+        let data = ScoreData {
+            steamID: mysql::from_value(a.get("id").unwrap()),
+            score: mysql::from_value(a.get("at").unwrap()),
+        };
+        atScores.push(data);
+    }
+    let mut leaderBoard = LeaderboardData {
+        rkLeaderboard: rkScores,
+        atLeaderboard: atScores,
+    };
+    msgtx.try_send(MqttMsg {
+        topic: format!("member/{}/res/get_leaderboard", id),
+            msg: serde_json::to_string(&leaderBoard).unwrap(),
+    })?;
     Ok(())
 }
