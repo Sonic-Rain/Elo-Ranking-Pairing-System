@@ -1853,10 +1853,10 @@ pub fn init(
                     if bForceCloseRkState {
                         rkState = "close";
                     }
-                    // test
-                    rkState = "open";
-                    atState = "open";
-                    // test
+                    // // test
+                    // rkState = "open";
+                    // atState = "open";
+                    // // test
                     msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
                         msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
                     // println!("Duration between {:?} and {:?}: {:?}", now, rank_close_time, duration);
