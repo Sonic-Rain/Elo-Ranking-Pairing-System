@@ -2694,10 +2694,8 @@ pub fn init(
                                 },
                                 RoomEventData::SetPassword(x) => {
                                     println!("{:?}, line: {}", x, line!());
-                                    if let Some(gameRoom) = GameingGroups.get(&x.game) {
-                                        mqttmsg = MqttMsg{topic:format!("game/{}/res/password", x.game.clone()),
-                                            msg: format!(r#"{{"password":"{}"}}"#, x.password.clone())};
-                                    }
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/password", x.game.clone()),
+                                        msg: format!(r#"{{"password":"{}"}}"#, x.password.clone())};
                                 },
                                 RoomEventData::LeaveGame(x) => {
                                     let _: () = redis_conn.del(format!("g{}", x.id))?;
