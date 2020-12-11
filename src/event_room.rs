@@ -888,6 +888,7 @@ fn canGroupNG(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
+    info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -932,6 +933,7 @@ fn canGroupRK(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
+    info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -976,6 +978,7 @@ fn canGroupAT(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
+    info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -1898,7 +1901,6 @@ pub fn init(
                 recv(update5000ms) -> _ => {
                     // check isInGame
                     let mut inGameRm_list: Vec<String> = Vec::new();
-                    // 改這
                     let mut del_list: Vec<u64> = Vec::new();
                     let sql = format!("select * from Gaming where status='finished';",);
                     let qres = conn.query(sql.clone())?;
@@ -1970,7 +1972,7 @@ pub fn init(
                             game
                         );
                         let qres2 = conn.query(sql2.clone())?;
-                        if let Some(fg) = GameingGroups.get(&game) {
+                        if let Some(fg) = NGGameingGroups.get(&game) {
                             for uid in &fg.borrow().user_names {
                                 if let Some(u) = TotalUsers.get(uid) {
                                     u.borrow_mut().isLocked = false;
@@ -1979,7 +1981,29 @@ pub fn init(
                                 }
                             }
                         }
-                        GameingGroups.remove(&game);
+                        NGGameingGroups.remove(&game);
+
+                        if let Some(fg) = RKGameingGroups.get(&game) {
+                            for uid in &fg.borrow().user_names {
+                                if let Some(u) = TotalUsers.get(uid) {
+                                    u.borrow_mut().isLocked = false;
+                                    u.borrow_mut().hero = "".to_string();
+                                    u.borrow_mut().gid = 0;
+                                }
+                            }
+                        }
+                        RKGameingGroups.remove(&game);
+
+                        if let Some(fg) = ATGameingGroups.get(&game) {
+                            for uid in &fg.borrow().user_names {
+                                if let Some(u) = TotalUsers.get(uid) {
+                                    u.borrow_mut().isLocked = false;
+                                    u.borrow_mut().hero = "".to_string();
+                                    u.borrow_mut().gid = 0;
+                                }
+                            }
+                        }
+                        ATGameingGroups.remove(&game);
                     }
                     for (id, u) in &mut InGameUsers {
                         // println!("in game id : {}", id);
