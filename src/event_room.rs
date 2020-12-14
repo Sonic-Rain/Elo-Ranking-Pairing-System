@@ -786,7 +786,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                 recv(update1000ms) -> _ => {
                     if len > 0 {
                         // insert new user in NewUsers
-                        let mut insert_str: String = "insert into user (userid, name, status, hero) values".to_string();
+                        let mut insert_str: String = "REPLACE into user (id, name, status, hero) values".to_string();
                         for (i, u) in NewUsers.iter().enumerate() {
                             let mut new_user = format!(" ('{}', 'default name', 'online', '')", u);
                             insert_str += &new_user;
@@ -850,6 +850,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                                     let qres = conn.query(sql.clone())?;
                                 }
                                 SqlData::UpdateGameInfo(x) => {
+                                    info!("update Game Info : {:?}, line : {}", x, line!());
                                     let mut values = format!("values ({}, '{}'", x.game, x.mode);
                                     for data in x.chooseData.clone() {
                                         values = format!("{} ,'{}'", values, data.steam_id);
@@ -864,6 +865,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                                         "REPLACE INTO Gaming(game, mode, steam_id1, steam_id2, steam_id3, steam_id4, steam_id5, steam_id6, steam_id7, steam_id8, steam_id9, steam_id10, hero1, hero2, hero3, hero4, hero5, hero6, hero7, hero8, hero9, hero10, ban1, ban2, ban3, ban4, ban5, ban6, ban7, ban8, ban9, ban10) {});",
                                         values
                                     );
+                                    info!("sql : {}, line: {}", sql, line!());
                                     let qres = conn.query(sql.clone())?;
                                 }
                             }
@@ -871,7 +873,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                         Ok(())
                     };
                     if let Err(msg) = handle() {
-                        println!("{:?}", msg);
+                        println!("Mysql Error : {:?}", msg);
                         continue;
                     }
                 }
@@ -978,7 +980,7 @@ fn canGroupAT(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
+    // info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
