@@ -850,7 +850,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                                     let qres = conn.query(sql.clone())?;
                                 }
                                 SqlData::UpdateGameInfo(x) => {
-                                    let mut values = format!("values ({}, 'ng'", x.game);
+                                    let mut values = format!("values ({}, '{}'", x.game, x.mode);
                                     for data in x.chooseData.clone() {
                                         values = format!("{} ,'{}'", values, data.steam_id);
                                     }
