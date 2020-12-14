@@ -81,10 +81,11 @@ struct GameHistoryData {
     items: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct ScoreData {
     steamID: String,
     score: u16,
+    win: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -410,7 +411,7 @@ pub fn GetLeaderboard(
     let mut rkScores: Vec<ScoreData> = vec![];
     let mut atScores: Vec<ScoreData> = vec![];
     let mut rkSql = format!(
-        r#"select id, rk from user order by rk desc limit 30;"#
+        r#"select id, rk, count(res) from user, Finished_detail where id = steam_id and mode = 'rk' and res = 'W' group by steam_id order by rk desc limit 30;"#
     );
     let qres: mysql::QueryResult = conn.query(rkSql.clone())?;
     for row in qres {
@@ -418,11 +419,12 @@ pub fn GetLeaderboard(
         let data = ScoreData {
             steamID: mysql::from_value(a.get("id").unwrap()),
             score: mysql::from_value(a.get("rk").unwrap()),
+            win: mysql::from_value(a.get("win").unwrap()),
         };
         rkScores.push(data);
     }
     let mut atSql = format!(
-        r#"select id, at from user order by at desc limit 30;"#
+        r#"select id, at, count(res) from user, Finished_detail where id = steam_id and mode = 'at' and res = 'W' group by steam_id order by at desc limit 30;"#
     );
     let qres: mysql::QueryResult = conn.query(atSql.clone())?;
     for row in qres {
@@ -430,6 +432,7 @@ pub fn GetLeaderboard(
         let data = ScoreData {
             steamID: mysql::from_value(a.get("id").unwrap()),
             score: mysql::from_value(a.get("at").unwrap()),
+            win: mysql::from_value(a.get("win").unwrap()),
         };
         atScores.push(data);
     }
