@@ -411,7 +411,7 @@ pub fn GetLeaderboard(
     let mut rkScores: Vec<ScoreData> = vec![];
     let mut atScores: Vec<ScoreData> = vec![];
     let mut rkSql = format!(
-        r#"select id, rk, count(res) from user, Finished_detail where id = steam_id and mode = 'rk' and res = 'W' group by steam_id order by rk desc limit 30;"#
+        r#"select id, rk, count(res) as win from user, Finished_detail where id = steam_id and mode = 'rk' and res = 'W' group by steam_id order by rk desc limit 30;"#
     );
     let qres: mysql::QueryResult = conn.query(rkSql.clone())?;
     for row in qres {
@@ -424,7 +424,7 @@ pub fn GetLeaderboard(
         rkScores.push(data);
     }
     let mut atSql = format!(
-        r#"select id, at, count(res) from user, Finished_detail where id = steam_id and mode = 'at' and res = 'W' group by steam_id order by at desc limit 30;"#
+        r#"select id, at, count(res) as win from user, Finished_detail where id = steam_id and mode = 'at' and res = 'W' group by steam_id order by at desc limit 30;"#
     );
     let qres: mysql::QueryResult = conn.query(atSql.clone())?;
     for row in qres {
