@@ -796,42 +796,10 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                         }
                         insert_str += ";";
                         // println!("{}", insert_str);
-                        {
-                            conn.query(insert_str.clone())?;
-                        }
-
+                        conn.query(insert_str.clone())?;
                         len = 0;
                         NewUsers.clear();
                     }
-
-                    if info_len > 0 {
-
-                        // let mut insert_info: String = "insert into game_info (userid, game_id, hero, level, damage, take_damage, heal, kill_cnt, death, assist) values".to_string();
-                        // let mut user_info: String = "insert into user_info (userid, game_id, equ, gift_A, gift_B, gift_C, gift_D, gift_E) values".to_string();
-                        // for (i, info) in UpdateInfo.iter().enumerate() {
-                        //     let mut new_user = format!(" ({}, {}, '{}', {}, {}, {}, {}, {}, {}, {})", info.id, info.game, info.hero, info.level, info.damage, info.take_damage, info.heal, info.kill, info.death, info.assist);
-                        //     insert_info += &new_user;
-                        //     let mut new_user1 = format!(" ({}, {}, '{}', {}, {}, {}, {}, {})", info.id, info.game, info.equ, info.gift.a, info.gift.b, info.gift.c, info.gift.d, info.gift.e);
-                        //     user_info += &new_user1;
-                        //     if i < info_len-1 {
-                        //         insert_info += ",";
-                        //         user_info += ",";
-                        //     }
-                        // }
-                        // insert_info += ";";
-                        // user_info += ";";
-                        // {
-                        //     conn.query(insert_info.clone())?;
-                        // }
-                        // {
-                        //     conn.query(user_info.clone())?;
-                        // }
-
-
-                        // info_len = 0;
-                        // UpdateInfo.clear();
-                    }
-
                 }
 
                 recv(rx1) -> d => {

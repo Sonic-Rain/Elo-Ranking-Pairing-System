@@ -63,7 +63,7 @@ struct CheckBindingData {
     steam_id: String
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct GameHistoryData {
     gameId: String,
     steamId: String,
@@ -133,10 +133,6 @@ pub fn login(
         } else {
             name = "".to_string();
         }
-        // ng = mysql::from_value(a.get("ng").unwrap());
-        // rk = mysql::from_value(a.get("rk").unwrap());
-        // at = mysql::from_value(a.get("at").unwrap());
-        // name = mysql::from_value(a.get("name").unwrap());
         break;
     }
     //查無此人 建立表
@@ -262,8 +258,9 @@ pub fn QueryBlackList(
         if let Some(n) = a.get("black") {
             blackid = mysql::from_value(n);
             list.push(blackid);
+        } else {
+            warn!("mysql error: {}, line  : {}", sql, line!());
         }
-        // blackid = mysql::from_value(a.get("black").unwrap());
     }
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/query_black_list", id),
@@ -289,43 +286,47 @@ pub fn GetGameHistorys(
     let mut gameHistorysData: Vec<GameHistoryData> = Vec::new();
     for row in qres {
         let a = row?.clone();
-        let isWin: bool;
-        let res: String = mysql::from_value(a.get("res").unwrap());
-        if res == "W" {
-            isWin = true;
-        } else {
-            isWin = false;
-        }
-        let mut items: Vec<String> = Vec::new();
-        items.push(mysql::from_value(a.get("equ_1").unwrap()));
-        items.push(mysql::from_value(a.get("equ_2").unwrap()));
-        items.push(mysql::from_value(a.get("equ_3").unwrap()));
-        items.push(mysql::from_value(a.get("equ_4").unwrap()));
-        items.push(mysql::from_value(a.get("equ_5").unwrap()));
-        items.push(mysql::from_value(a.get("equ_6").unwrap()));
-        let mut mode = String::from("ng");
-        if let Some(n) = a.get("mode") {
-            if let Some(m) = mysql::from_value(n) {
-                mode = m;
+        let mut isWin: bool;
+        let mut res: String;
+        if let Some(r) = a.get("res") {
+            res = mysql::from_value(r);
+            if res == "W" {
+                isWin = true;
+            } else {
+                isWin = false;
             }
+            let mut items: Vec<String> = Vec::new();
+            for i in (1..6) {
+                if let Some(e) = a.get(&*("equ_".to_owned() + &i.to_string())) {
+                    items.push(mysql::from_value(e));
+                } else {
+                    warn!("mysql error: {}, line  : {}", sql, line!());
+                }
+            }
+            let mut mode = String::from("ng");
+            if let Some(n) = a.get("mode") {
+                mode = mysql::from_value(n);
+            }
+            let gameHistory = GameHistoryData {
+                gameId: mysql::from_value(a.get("game_id").unwrap()), 
+                steamId: mysql::from_value(a.get("steam_id").unwrap()), 
+                hero: mysql::from_value(a.get("hero").unwrap()),
+                mode: mode,
+                level: mysql::from_value(a.get("level").unwrap()),
+                isWin: isWin,
+                k: mysql::from_value(a.get("k").unwrap()),
+                d: mysql::from_value(a.get("d").unwrap()),
+                a: mysql::from_value(a.get("a").unwrap()),
+                cs: mysql::from_value(a.get("killed_unit").unwrap()),
+                money: mysql::from_value(a.get("income").unwrap()),
+                playTime: mysql::from_value(a.get("play_time").unwrap()),
+                date: mysql::from_value(a.get("createtime").unwrap()),
+                items: items,
+            };
+            gameHistorysData.push(gameHistory);
+        } else {
+            warn!("mysql error: {}, line  : {}", sql, line!());
         }
-        let gameHistory = GameHistoryData {
-            gameId: mysql::from_value(a.get("game_id").unwrap()), 
-            steamId: mysql::from_value(a.get("steam_id").unwrap()), 
-            hero: mysql::from_value(a.get("hero").unwrap()),
-            mode: mode,
-            level: mysql::from_value(a.get("level").unwrap()),
-            isWin: isWin,
-            k: mysql::from_value(a.get("k").unwrap()),
-            d: mysql::from_value(a.get("d").unwrap()),
-            a: mysql::from_value(a.get("a").unwrap()),
-            cs: mysql::from_value(a.get("killed_unit").unwrap()),
-            money: mysql::from_value(a.get("income").unwrap()),
-            playTime: mysql::from_value(a.get("play_time").unwrap()),
-            date: mysql::from_value(a.get("createtime").unwrap()),
-            items: items,
-        };
-        gameHistorysData.push(gameHistory);
     }
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/get_game_historys", id),

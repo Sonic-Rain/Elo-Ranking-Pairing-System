@@ -12,6 +12,7 @@ edition = "2018"
 [dependencies]
 crossbeam-channel = "0.3"
 mysql = "16.1"
+mysql_common = "0.18.0"
 rumqtt = "0.31"
 clap = "2"
 log = "0.4.8"
