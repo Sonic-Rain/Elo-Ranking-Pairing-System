@@ -2840,11 +2840,6 @@ pub fn init(
                                         if u.borrow().rid != 0 {
                                             hasRoom = true;
                                             rid = u.borrow().rid;
-                                        }else{
-                                            rid = u.borrow().id.parse().unwrap();
-                                            ng = u.borrow().ng;
-                                            rk = u.borrow().rk;
-                                            at = u.borrow().at;
                                         }
                                         if hasRoom {
                                             let r = TotalRoom.get(&rid);
@@ -2879,30 +2874,6 @@ pub fn init(
                                             }
                                         }else{
                                             tx2.try_send(RoomEventData::Create(CreateRoomData{id: x.id.clone(), mode: x.mode.clone()}));
-                                            let mut user_ids: Vec<String> = Vec::new();
-                                            user_ids.push(x.id.clone());
-                                            let mut data = QueueRoomData {
-                                                rid: rid,
-                                                gid: 0,
-                                                user_len: 1,
-                                                user_ids: user_ids,
-                                                avg_ng: ng,
-                                                avg_rk: rk,
-                                                avg_at: at,
-                                                ready: 0,
-                                                notify: false,
-                                                queue_cnt: 1,
-                                                mode: x.mode.clone(),
-                                            };
-                                            QueueSender.send(QueueData::UpdateRoom(data));
-                                            success = true;
-                                            if success {
-                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", rid),
-                                                    msg: format!(r#"{{"msg":"ok"}}"#)};
-                                            } else {
-                                                mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", rid),
-                                                    msg: format!(r#"{{"msg":"fail"}}"#)}
-                                            }
                                         }
                                     }
                                 },
