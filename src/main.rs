@@ -129,6 +129,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/binding", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_binding", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/get_leaderboard", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/check_state", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;//doc room
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;//doc room
@@ -246,7 +247,7 @@ fn main() -> std::result::Result<(), Error> {
     let recheckBinding = Regex::new(r"\w+/(\w+)/send/check_binding")?;
     let regetLeaderboard = Regex::new(r"\w+/(\w+)/send/get_leaderboard")?;
     let recontrol = Regex::new(r"\w+/send/control")?;
-    let recheck_state = Regex::new(r"\w+/send/check_state")?;
+    let recheck_state = Regex::new(r"\w+/(\w+)/send/check_state")?;
     let reloading = Regex::new(r"\w+/(\w+)/send/loading")?;
     let refree = Regex::new(r"\w+/send/free")?;
     let resystem_ban = Regex::new(r"\w+/send/system_ban")?;

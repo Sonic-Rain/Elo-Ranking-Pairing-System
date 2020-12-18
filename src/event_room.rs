@@ -279,6 +279,7 @@ pub struct ContinueData {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct CheckStateData {
+    pub id: String,
     pub msg: String,
 }
 
@@ -858,7 +859,12 @@ fn canGroupNG(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
+    info!(
+        "room : {:?} try_join group {:?}, line : {}",
+        queueRoom,
+        readyGroup,
+        line!()
+    );
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -867,18 +873,27 @@ fn canGroupNG(
         if readyGroup.avg_ng == 0
             || Difference <= NG_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
         {
-            let isBlack =
-                check_is_black(queueRoom.borrow().user_ids.clone(), readyGroup.user_ids.clone(), conn)?;
+            let isBlack = check_is_black(
+                queueRoom.borrow().user_ids.clone(),
+                readyGroup.user_ids.clone(),
+                conn,
+            )?;
             if (isBlack) {
                 res = false;
-                return Ok(res)
+                return Ok(res);
             }
-            info!("group user_len : {}, room user_len : {}", readyGroup.user_len, queueRoom.borrow().user_len);
-            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0){
+            info!(
+                "group user_len : {}, room user_len : {}",
+                readyGroup.user_len,
+                queueRoom.borrow().user_len
+            );
+            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
                 res = false;
-                return Ok(res)
+                return Ok(res);
             }
-            ng = (readyGroup.avg_ng * readyGroup.user_len + queueRoom.borrow().avg_ng * queueRoom.borrow().user_len) as i16 / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
+            ng = (readyGroup.avg_ng * readyGroup.user_len
+                + queueRoom.borrow().avg_ng * queueRoom.borrow().user_len) as i16
+                / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
             for user_id in &queueRoom.borrow().user_ids {
                 readyGroup.user_ids.push(user_id.clone());
             }
@@ -903,7 +918,12 @@ fn canGroupRK(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
+    info!(
+        "room : {:?} try_join group {:?}, line : {}",
+        queueRoom,
+        readyGroup,
+        line!()
+    );
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -912,18 +932,27 @@ fn canGroupRK(
         if readyGroup.avg_rk == 0
             || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
         {
-            let isBlack =
-                check_is_black(queueRoom.borrow().user_ids.clone(), readyGroup.user_ids.clone(), conn)?;
+            let isBlack = check_is_black(
+                queueRoom.borrow().user_ids.clone(),
+                readyGroup.user_ids.clone(),
+                conn,
+            )?;
             if (isBlack) {
                 res = false;
-                return Ok(res)
+                return Ok(res);
             }
-            info!("group user_len : {}, room user_len : {}", readyGroup.user_len, queueRoom.borrow().user_len);
-            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0){
+            info!(
+                "group user_len : {}, room user_len : {}",
+                readyGroup.user_len,
+                queueRoom.borrow().user_len
+            );
+            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
                 res = false;
-                return Ok(res)
+                return Ok(res);
             }
-            rk = (readyGroup.avg_rk * readyGroup.user_len + queueRoom.borrow().avg_rk * queueRoom.borrow().user_len) as i16 / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
+            rk = (readyGroup.avg_rk * readyGroup.user_len
+                + queueRoom.borrow().avg_rk * queueRoom.borrow().user_len) as i16
+                / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
             for user_id in &queueRoom.borrow().user_ids {
                 readyGroup.user_ids.push(user_id.clone());
             }
@@ -957,18 +986,27 @@ fn canGroupAT(
         if readyGroup.avg_at == 0
             || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
         {
-            let isBlack =
-                check_is_black(queueRoom.borrow().user_ids.clone(), readyGroup.user_ids.clone(), conn)?;
+            let isBlack = check_is_black(
+                queueRoom.borrow().user_ids.clone(),
+                readyGroup.user_ids.clone(),
+                conn,
+            )?;
             if (isBlack) {
                 res = false;
-                return Ok(res)
+                return Ok(res);
             }
-            info!("group user_len : {}, room user_len : {}", readyGroup.user_len, queueRoom.borrow().user_len);
-            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0){
+            info!(
+                "group user_len : {}, room user_len : {}",
+                readyGroup.user_len,
+                queueRoom.borrow().user_len
+            );
+            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
                 res = false;
-                return Ok(res)
+                return Ok(res);
             }
-            at = (readyGroup.avg_at * readyGroup.user_len + queueRoom.borrow().avg_at * queueRoom.borrow().user_len) as i16 / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
+            at = (readyGroup.avg_at * readyGroup.user_len
+                + queueRoom.borrow().avg_at * queueRoom.borrow().user_len) as i16
+                / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
             for user_id in &queueRoom.borrow().user_ids {
                 readyGroup.user_ids.push(user_id.clone());
             }
@@ -1634,7 +1672,7 @@ pub fn init(
         let mut bForceCloseRkState = false;
         let mut atState = "close";
         let mut bForceCloseAtState = false;
-
+        let mut currentState = "ng";
         let sql = format!(r#"select id, ng, rk, at, name, hero from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
         let mut userid: String = "".to_owned();
@@ -1813,9 +1851,19 @@ pub fn init(
                     if isRankOpen {
                         rkState = "open";
                         atState = "open";
+                        if currentState == "ng" {
+                            currentState = "rk";
+                            msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
+                                    msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
+                        }
                     } else {
                         rkState = "close";
                         atState = "close";
+                        if currentState == "rk" {
+                            currentState = "ng";
+                            msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
+                                    msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
+                        }
                     }
                     if bForceCloseAtState {
                         atState = "close";
@@ -1830,8 +1878,8 @@ pub fn init(
                     // rkState = "open";
                     // atState = "open";
                     // // test
-                    msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
-                        msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
+                    // msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
+                    //     msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
                     // println!("Duration between {:?} and {:?}: {:?}", now, rank_close_time, duration);
                     if !isBackup || (isBackup && isServerLive == false) {
                         //msgtx.try_send(MqttMsg{topic:format!("server/0/res/heartbeat"),
@@ -2315,7 +2363,7 @@ pub fn init(
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         if let Some(fg) = NGGameingGroups.get(&u.borrow().game_id) {
-                                            if fg.borrow().user_names[0..5].contains(&x.id) { 
+                                            if fg.borrow().user_names[0..5].contains(&x.id) {
                                                 for uid in &fg.borrow().user_names[0..5] {
                                                     if *uid != x.id {
                                                         if let Some(u2) = TotalUsers.get(uid) {
@@ -2326,7 +2374,7 @@ pub fn init(
                                                     }
                                                 }
                                             }
-                                            if fg.borrow().user_names[5..10].contains(&x.id) { 
+                                            if fg.borrow().user_names[5..10].contains(&x.id) {
                                                 for uid in &fg.borrow().user_names[5..10] {
                                                     if *uid != x.id {
                                                         if let Some(u2) = TotalUsers.get(uid) {
@@ -2335,7 +2383,7 @@ pub fn init(
                                                             }
                                                         }
                                                     }
-                                                } 
+                                                }
                                             }
                                         }
                                         if !isDup {
@@ -2354,7 +2402,7 @@ pub fn init(
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
                                         if let Some(fg) = NGGameingGroups.get(&u.borrow().game_id) {
-                                            if fg.borrow().user_names[0..5].contains(&x.id) { 
+                                            if fg.borrow().user_names[0..5].contains(&x.id) {
                                                 for uid in &fg.borrow().user_names[0..5] {
                                                     if *uid != x.id {
                                                         if let Some(u2) = TotalUsers.get(uid) {
@@ -2365,7 +2413,7 @@ pub fn init(
                                                     }
                                                 }
                                             }
-                                            if fg.borrow().user_names[5..10].contains(&x.id) { 
+                                            if fg.borrow().user_names[5..10].contains(&x.id) {
                                                 for uid in &fg.borrow().user_names[5..10] {
                                                     if *uid != x.id {
                                                         if let Some(u2) = TotalUsers.get(uid) {
@@ -2374,7 +2422,7 @@ pub fn init(
                                                             }
                                                         }
                                                     }
-                                                } 
+                                                }
                                             }
                                         }
                                         if !isDup {
@@ -2428,23 +2476,6 @@ pub fn init(
                                     let j = TotalUsers.get(&x.join);
                                     let mut sendok = false;
                                     if let Some(u) = u {
-                                        // let r = TotalRoom.get(&u.borrow().rid);
-                                        // let mut is_null = false;
-                                        // if let Some(r) = r {
-                                        //     let m = r.borrow().master.clone();
-                                        //     r.borrow_mut().rm_user(&u.borrow().id);
-                                        //     if r.borrow().users.len() > 0 {
-                                        //         r.borrow().publish_update(&msgtx, m)?;
-                                        //     }
-                                        //     else {
-                                        //         is_null = true;
-                                        //     }
-                                        // }
-                                        // if is_null {
-                                        //     TotalRoom.remove(&u.borrow().rid);
-                                        //     QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
-                                        // }
-                                        // u.borrow_mut().rid = 0;
                                         if let Some(j) = j {
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
@@ -2788,7 +2819,7 @@ pub fn init(
                                             }
                                         }
                                     }
-                                    g.prestart();                                 
+                                    g.prestart();
                                     g.set_group_id(group_id);
                                     g.game_status = 1;
                                     ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
@@ -3210,8 +3241,10 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CheckState(x) => {
-                                    mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
-                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                    if let Some(u) = TotalUsers.get(&x.id) {
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/check_state", x.id),
+                                                msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                    }
                                 },
                                 RoomEventData::Free() => {
                                     let sql = format!(
