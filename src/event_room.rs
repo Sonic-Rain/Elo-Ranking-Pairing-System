@@ -65,6 +65,11 @@ pub struct JoinRoomData {
     pub join: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CheckRoomData {
+    pub id: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct JoinRoomCell {
     pub room: String,
@@ -308,9 +313,9 @@ pub struct LoadingData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateQueueData {
-    pub ng: i16,
-    pub rk: i16,
-    pub at: i16,
+    pub ng: i32,
+    pub rk: i32,
+    pub at: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -337,6 +342,7 @@ pub enum RoomEventData {
     LockedHero(UserNGHeroData),
     NGGameChooseHero(BTreeMap<u64, Vec<u64>>),
     Join(JoinRoomData),
+    CheckRoom(CheckRoomData),
     Reject(RejectRoomData),
     Jump(JumpData),
     CheckRestriction(CheckRestrctionData),
@@ -1483,17 +1489,17 @@ pub fn HandleQueueRequest(
                     // AT
                 }
                 recv(update5000ms) -> _ => {
-                    let mut ng_cnt = 0;
-                    let mut rk_cnt = 0;
-                    let mut at_cnt = 0;
+                    let mut ng_cnt: i32 = 0;
+                    let mut rk_cnt: i32 = 0;
+                    let mut at_cnt: i32 = 0;
                     for (k, v) in &mut NGQueueRoom {
-                        ng_cnt += v.borrow().user_len;
+                        ng_cnt += v.borrow().user_len as i32;
                     }
                     for (k, v) in &RKQueueRoom {
-                        rk_cnt += v.borrow().user_len;
+                        rk_cnt += v.borrow().user_len as i32;
                     }
                     for (k, v) in &ATQueueRoom {
-                        at_cnt += v.borrow().user_len;
+                        at_cnt += v.borrow().user_len as i32;
                     }
                     // info!("ng queue members: {}", ng_cnt);
                     // info!("rk queue members: {}", rk_cnt);
@@ -1679,6 +1685,17 @@ pub fn init(
         let mut ng: i16 = 0;
         let mut rk: i16 = 0;
         let mut name: String = "".to_owned();
+        let mut current_ng_queue_cnt: i32 = 0;
+        let mut current_rk_queue_cnt: i32 = 0;
+        let mut current_at_queue_cnt: i32 = 0;
+        let mut ng_queue_cnt: i32 = 0;
+        let mut rk_queue_cnt: i32 = 0;
+        let mut at_queue_cnt: i32 = 0;
+        let mut current_ng_game_cnt: i32 = 0;
+        let mut current_rk_game_cnt: i32 = 0;
+        let mut current_at_game_cnt: i32 = 0;
+        let mut current_online_cnt: i32 = 0;
+        let mut isUpdateCount = false;
         let id = 0;
         for row in qres2 {
             let a = row?.clone();
@@ -1743,6 +1760,7 @@ pub fn init(
                                         ..Default::default()
                                     };
                                     NGGameingGroups.insert(group.borrow().game_id,  Rc::new(RefCell::new(ngGame.clone())));
+                                    isUpdateCount = true;
                                 }
                                 if group.borrow().mode == "rk" {
                                     let rkGame = RKGame {
@@ -1754,6 +1772,7 @@ pub fn init(
                                         ..Default::default()
                                     };
                                     RKGameingGroups.insert(group.borrow().game_id,  Rc::new(RefCell::new(rkGame.clone())));
+                                    isUpdateCount = true;
                                 }
                                 if group.borrow().mode == "at" {
                                     let atGame = ATGame {
@@ -1765,12 +1784,14 @@ pub fn init(
                                         ..Default::default()
                                     };
                                     ATGameingGroups.insert(group.borrow().game_id,  Rc::new(RefCell::new(atGame.clone())));
+                                    isUpdateCount = true;
                                 }
                                 // group.borrow_mut().ban_time = BAN_HERO_TIME;
                                 // GameingGroups.insert(game_id, group.clone());
                                 rm_ids.push(id.clone());
                             },
                             PrestartStatus::Cancel => {
+                                isUpdateCount = true;
                                 group.borrow_mut().update_names();
                                 group.borrow_mut().clear_queue();
                                 group.borrow_mut().game_status = 0;
@@ -1803,6 +1824,7 @@ pub fn init(
                                             for r in &team.borrow().rooms {
                                                 for user in &r.borrow().users {
                                                     if user.borrow().start_get == false {
+                                                        isUpdateCount = true;
                                                         tx2.try_send(RoomEventData::PreStart(PreStartData{room: user.borrow().rid.to_string(), id: user.borrow().id.clone(), accept: false}));
                                                     }
                                                 }
@@ -2101,38 +2123,6 @@ pub fn init(
                     }
                     //println!("rx len: {}, tx len: {}", rx.len(), tx2.len());
                     LossSend.clear();
-                    // let mut rm_list: Vec<u64> = Vec::new();
-                    // for (id, group) in &mut PreStartGroups {
-                    //     group.borrow_mut().ready_cnt += 5;
-                    //     let res1 = group.borrow().check_start_get();
-                    //     if res1 == true {
-                    //     }else if group.borrow().ready_cnt >= READY_TIME {
-                    //         for team in &group.borrow().teams {
-                    //             for r in &team.borrow().rooms {
-                    //                 for user in &r.borrow().users {
-                    //                     if user.borrow().start_get == false {
-                    //                         tx2.try_send(RoomEventData::BanUser(BanUserData{id: user.borrow().id.clone()}));
-                    //                     }
-                    //                 }
-                    //                 r.borrow_mut().ready = 0;
-                    //                 msgtx.try_send(MqttMsg{topic:format!("room/{}/res/start_get", r.borrow().master), msg: r#"{"msg":"timeout"}"#.to_string()})?;
-                    //             }
-                    //         }
-                    //         rm_list.push(id.clone());
-                    //     }
-                    // }
-                    // for rm in rm_list{
-                    //     PreStartGroups.remove(&rm);
-                    // }
-                    //check room
-                    for (id, r) in &TotalRoom {
-                        // println!("id {}", id);
-                        // println!("r {}", r.borrow().master.clone());
-                        let m = r.borrow().master.clone();
-                        if r.borrow().users.len() > 0 {
-                            r.borrow().publish_update(&msgtx, m)?;
-                        }
-                    }
                     //get online and game count
                     let sql = format!(r#"select count(*) from user where status = 'online';"#);
                     let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -2174,10 +2164,22 @@ pub fn init(
                         at_cnt += 1;
                     }
                     for rm in timeout_list {
-                        GameingGroups.remove(&rm);
+                        NGGameingGroups.remove(&rm);
+                        RKGameingGroups.remove(&rm);
+                        ATGameingGroups.remove(&rm);
                     }
-                    msgtx.try_send(MqttMsg{topic:format!("server/res/online_count"),
-                        msg: format!(r#"{{"count":{}, "ngCount":{}, "rkCount":{}, "atCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt)})?;
+                    if isUpdateCount {
+                        isUpdateCount = false;
+                        current_online_cnt = online_cnt;
+                        current_ng_game_cnt = ng_cnt;
+                        current_rk_game_cnt = rk_cnt;
+                        current_at_game_cnt = at_cnt;
+                        current_ng_queue_cnt = ng_queue_cnt;
+                        current_rk_queue_cnt = rk_queue_cnt;
+                        current_at_game_cnt = at_queue_cnt;                        
+                        msgtx.try_send(MqttMsg{topic:format!("server/res/online_count"),
+                            msg: format!(r#"{{"count":{}, "ngGameCount":{}, "rkGameCount":{}, "atGameCount":{}, "ngQueueCount":{}, "rkQueueCount":{}, "atQueueCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt, ng_queue_cnt, rk_queue_cnt, at_queue_cnt)})?;   
+                    }
                 }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
@@ -2207,16 +2209,16 @@ pub fn init(
                                     //info!("Status TotalUsers {:#?}", TotalUsers);
                                 },
                                 RoomEventData::Reconnect(x) => {
-                                    let u = get_user(&x.id, &TotalUsers);
-                                    if let Some(u) = u {
-                                        let g = GameingGroups.get(&u.borrow().game_id);
-                                        if let Some(g) = g {
-                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/reconnect", x.id),
-                                                msg: format!(r#"{{"server":"172.104.78.55:{}"}}"#, g.borrow().game_port)};
-                                            //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id),
-                                            //    msg: format!(r#"{{"server":"172.104.78.55:{}"}}"#, g.borrow().game_port)})?;
-                                        }
-                                    }
+                                    // let u = get_user(&x.id, &TotalUsers);
+                                    // if let Some(u) = u {
+                                    //     let g = GameingGroups.get(&u.borrow().game_id);
+                                    //     if let Some(g) = g {
+                                    //         mqttmsg = MqttMsg{topic:format!("member/{}/res/reconnect", x.id),
+                                    //             msg: format!(r#"{{"server":"172.104.78.55:{}"}}"#, g.borrow().game_port)};
+                                    //         //msgtx.try_send(MqttMsg{topic:format!("member/{}/res/reconnect", x.id),
+                                    //         //    msg: format!(r#"{{"server":"172.104.78.55:{}"}}"#, g.borrow().game_port)})?;
+                                    //     }
+                                    // }
                                 },
                                 RoomEventData::GameClose(x) => {
                                     //let p = PreStartGroups.remove(&x.game);
@@ -2269,6 +2271,7 @@ pub fn init(
                                     }
                                     msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", x.game),
                                         msg: format!(r#"{{"status":"finished", "game": {}}}"#,x.game)})?;
+                                    isUpdateCount = true;
                                 },
                                 RoomEventData::GameInfo(x) => {
                                     // println!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -2533,6 +2536,16 @@ pub fn init(
                                             msg: format!(r#"{{"room":"{}","msg":"full"}}"#, x.room.clone())};
                                     }
                                 },
+                                RoomEventData::CheckRoom(x) => {
+                                    if let Some(u) = TotalUsers.get(&x.id) {
+                                        if let Some(r) = TotalRoom.get(&u.borrow().rid) {
+                                            let m = r.borrow().master.clone();
+                                            if r.borrow().users.len() > 0 {
+                                                r.borrow().publish_update(&msgtx, m)?;
+                                            }
+                                        }
+                                    }
+                                },
                                 RoomEventData::Reject(x) => {
                                     if TotalUsers.contains_key(&x.id) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()),
@@ -2626,6 +2639,7 @@ pub fn init(
                                             ATGameingGroups.remove(&rm);
                                         }
                                     }
+                                    isUpdateCount = true;
                                 },
                                 RoomEventData::BanUser(x) => {
                                     info!("ban user : {:?}, line: {}", x, line!());
@@ -2942,6 +2956,7 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CancelQueue(x) => {
+                                    isUpdateCount = true;
                                     let mut success = false;
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
@@ -2970,6 +2985,7 @@ pub fn init(
                                 },
                                 RoomEventData::Login(x) => {
                                     let mut success = true;
+                                    isUpdateCount = true;
                                     if TotalUsers.contains_key(&x.u.id) {
                                         let u2 = TotalUsers.get(&x.u.id);
                                         if let Some(u2) = u2 {
@@ -2995,6 +3011,7 @@ pub fn init(
                                 },
                                 RoomEventData::Logout(x) => {
                                     let mut success = false;
+                                    isUpdateCount = true;
                                     let u = TotalUsers.get(&x.id);
                                     let u2 = get_user(&x.id, &TotalUsers);
                                     if let Some(u2) = u2 {
@@ -3304,8 +3321,9 @@ pub fn init(
                                             , hero11, hero12, hero13, hero14, hero15, hero16, hero17, hero18, hero19, hero20)};
                                 },
                                 RoomEventData::UpdateQueue(x) => {
-                                    mqttmsg = MqttMsg{topic:format!("server/res/queue_member"),
-                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, x.ng, x.rk, x.at)};
+                                    ng_queue_cnt = x.ng;
+                                    rk_queue_cnt = x.rk;
+                                    at_queue_cnt = x.at;
                                 },
                                 RoomEventData::SystemBan(x) => {
                                     let mut new_restriced = RestrictedData {
@@ -3429,6 +3447,12 @@ pub fn start_get(
 pub fn join(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     let data: JoinRoomData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::Join(data));
+    Ok(())
+}
+
+pub fn check_room(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: CheckRoomData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::CheckRoom(data));
     Ok(())
 }
 

@@ -130,6 +130,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/check_binding", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/get_leaderboard", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_state", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("member/+/send/check_room", QoS::AtMostOnce)?;
 
     mqtt_client.subscribe("room/+/send/create", QoS::AtMostOnce)?;//doc room
     mqtt_client.subscribe("room/+/send/close", QoS::AtMostOnce)?;//doc room
@@ -226,6 +227,7 @@ fn main() -> std::result::Result<(), Error> {
     let reready = Regex::new(r"\w+/(\w+)/send/ready")?;
     let reinvite = Regex::new(r"\w+/(\w+)/send/invite")?;
     let rejoin = Regex::new(r"\w+/(\w+)/send/join")?;
+    let recheck_room = Regex::new(r"\w+/(\w+)/send/check_room")?;
     let rereject = Regex::new(r"\w+/(\w+)/send/reject")?;
     let reset = Regex::new(r"reset")?;
     let rechoose_hero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
@@ -344,6 +346,11 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     info!("join: userid: {} json: {:?}", userid, v);
                                     event_room::join(userid, v, sender.clone())?;
+                                } else if recheck_room.is_match(topic_name) {
+                                    let cap = recheck_room.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    info!("recheck_room: userid: {} json: {:?}", userid, v);
+                                    event_room::check_room(userid, v, sender.clone())?;
                                 } else if rereject.is_match(topic_name) {
                                     let cap = rereject.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();

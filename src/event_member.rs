@@ -305,7 +305,7 @@ pub fn GetGameHistorys(
             }
             let mut mode = String::from("ng");
             if let Some(n) = a.get("mode") {
-                mode = mysql::from_value(n);
+                mode = mysql::from_value_opt(n)?;
             }
             let gameHistory = GameHistoryData {
                 gameId: mysql::from_value(a.get("game_id").unwrap()), 
