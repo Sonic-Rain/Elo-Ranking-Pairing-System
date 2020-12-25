@@ -1,5 +1,6 @@
 use crate::msg::*;
 use failure::Error;
+use std::io::ErrorKind;
 use log::{error, info, trace, warn};
 use rumqtt::{MqttClient, MqttOptions, QoS, ReconnectOptions};
 use serde_derive::{Deserialize, Serialize};
@@ -297,30 +298,22 @@ pub fn GetGameHistorys(
             }
             let mut items: Vec<String> = Vec::new();
             for i in (1..6) {
-                if let Some(e) = a.get(&*("equ_".to_owned() + &i.to_string())) {
-                    items.push(mysql::from_value(e));
-                } else {
-                    warn!("mysql error: {}, line  : {}", sql, line!());
-                }
-            }
-            let mut mode = String::from("ng");
-            if let Some(n) = a.get("mode") {
-                mode = mysql::from_value_opt(n)?;
+                items.push(mysql::from_value_opt(a.get(&*("equ_".to_owned() + &i.to_string())).ok_or(Error::from(core::fmt::Error))?)?);
             }
             let gameHistory = GameHistoryData {
-                gameId: mysql::from_value(a.get("game_id").unwrap()), 
-                steamId: mysql::from_value(a.get("steam_id").unwrap()), 
-                hero: mysql::from_value(a.get("hero").unwrap()),
-                mode: mode,
-                level: mysql::from_value(a.get("level").unwrap()),
+                gameId: mysql::from_value_opt(a.get("game_id").ok_or(Error::from(core::fmt::Error))?)?,
+                steamId: mysql::from_value_opt(a.get("steam_id").ok_or(Error::from(core::fmt::Error))?)?,
+                hero: mysql::from_value_opt(a.get("hero").ok_or(Error::from(core::fmt::Error))?)?,
+                mode: mysql::from_value_opt(a.get("mode").ok_or(Error::from(core::fmt::Error))?)?,
+                level: mysql::from_value_opt(a.get("level").ok_or(Error::from(core::fmt::Error))?)?,
                 isWin: isWin,
-                k: mysql::from_value(a.get("k").unwrap()),
-                d: mysql::from_value(a.get("d").unwrap()),
-                a: mysql::from_value(a.get("a").unwrap()),
-                cs: mysql::from_value(a.get("killed_unit").unwrap()),
-                money: mysql::from_value(a.get("income").unwrap()),
-                playTime: mysql::from_value(a.get("play_time").unwrap()),
-                date: mysql::from_value(a.get("createtime").unwrap()),
+                k: mysql::from_value_opt(a.get("k").ok_or(Error::from(core::fmt::Error))?)?,
+                d: mysql::from_value_opt(a.get("d").ok_or(Error::from(core::fmt::Error))?)?,
+                a: mysql::from_value_opt(a.get("a").ok_or(Error::from(core::fmt::Error))?)?,
+                cs: mysql::from_value_opt(a.get("killed_unit").ok_or(Error::from(core::fmt::Error))?)?,
+                money: mysql::from_value_opt(a.get("income").ok_or(Error::from(core::fmt::Error))?)?,
+                playTime: mysql::from_value_opt(a.get("play_time").ok_or(Error::from(core::fmt::Error))?)?,
+                date: mysql::from_value_opt(a.get("createtime").ok_or(Error::from(core::fmt::Error))?)?,
                 items: items,
             };
             gameHistorysData.push(gameHistory);
@@ -330,7 +323,7 @@ pub fn GetGameHistorys(
     }
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/get_game_historys", id),
-        msg: serde_json::to_string(&gameHistorysData).unwrap(),
+        msg: serde_json::to_string(&gameHistorysData)?,
     })?;
     Ok(())
 }
@@ -418,9 +411,9 @@ pub fn GetLeaderboard(
     for row in qres {
         let a = row?.clone();
         let data = ScoreData {
-            steamID: mysql::from_value(a.get("id").unwrap()),
-            score: mysql::from_value(a.get("rk").unwrap()),
-            win: mysql::from_value(a.get("win").unwrap()),
+            steamID: mysql::from_value_opt(a.get("id").ok_or(Error::from(core::fmt::Error))?)?,
+            score: mysql::from_value_opt(a.get("rk").ok_or(Error::from(core::fmt::Error))?)?,
+            win: mysql::from_value_opt(a.get("win").ok_or(Error::from(core::fmt::Error))?)?,
         };
         rkScores.push(data);
     }
@@ -431,9 +424,9 @@ pub fn GetLeaderboard(
     for row in qres {
         let a = row?.clone();
         let data = ScoreData {
-            steamID: mysql::from_value(a.get("id").unwrap()),
-            score: mysql::from_value(a.get("at").unwrap()),
-            win: mysql::from_value(a.get("win").unwrap()),
+            steamID: mysql::from_value_opt(a.get("id").ok_or(Error::from(core::fmt::Error))?)?,
+            score: mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?,
+            win: mysql::from_value_opt(a.get("win").ok_or(Error::from(core::fmt::Error))?)?,
         };
         atScores.push(data);
     }
@@ -443,7 +436,7 @@ pub fn GetLeaderboard(
     };
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/get_leaderboard", id),
-            msg: serde_json::to_string(&leaderBoard).unwrap(),
+            msg: serde_json::to_string(&leaderBoard)?,
     })?;
     Ok(())
 }

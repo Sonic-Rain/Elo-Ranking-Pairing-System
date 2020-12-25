@@ -175,7 +175,7 @@ impl RoomData {
         }
         msgtx.try_send(MqttMsg {
             topic: format!("room/{}/res/update", r),
-            msg: serde_json::to_string(&t).unwrap(),
+            msg: serde_json::to_string(&t)?,
         })?;
         Ok(())
     }

@@ -697,11 +697,15 @@ fn check_is_black(
                 r#"select count(*) from black_list where user={} and black={};"#,
                 user_id, g_user_id
             );
-            let qres = conn.query(sql)?;
+            let qres = conn.query(sql.clone())?;
             let mut count = 0;
             for row in qres {
                 let a = row?.clone();
-                count = mysql::from_value(a.get("count(*)").unwrap());
+                if let Some(n) = a.get("count(*)") {
+                    count = mysql::from_value_opt(n)?;
+                } else {
+                    warn!("mysql error: {}, can not get count(*), line : {}", sql.clone(), line!());
+                }
                 break;
             }
             if count > 0 {
@@ -712,10 +716,14 @@ fn check_is_black(
                 r#"select count(*) from black_list where user={} and black={};"#,
                 g_user_id, user_id
             );
-            let qres2 = conn.query(sql)?;
+            let qres2 = conn.query(sql.clone())?;
             for row in qres2 {
                 let a = row?.clone();
-                count = mysql::from_value(a.get("count(*)").unwrap());
+                if let Some(n) = a.get("count(*)") {
+                    count = mysql::from_value_opt(n)?;
+                } else {
+                    warn!("mysql error: {}, can not get count(*), line : {}", sql.clone(), line!());
+                }
                 break;
             }
             if count > 0 {
@@ -1700,35 +1708,21 @@ pub fn init(
         for row in qres2 {
             let a = row?.clone();
             let user = User {
-                id: mysql::from_value(a.get("id").unwrap()),
-                name: mysql::from_value(a.get("name").unwrap()),
-                hero: mysql::from_value(a.get("hero").unwrap()),
-                ng: mysql::from_value(a.get("ng").unwrap()),
-                rk: mysql::from_value(a.get("rk").unwrap()),
-                at: mysql::from_value(a.get("at").unwrap()),
+                id: mysql::from_value_opt(a.get("id").ok_or(Error::from(core::fmt::Error))?)?,
+                name: mysql::from_value_opt(a.get("name").ok_or(Error::from(core::fmt::Error))?)?,
+                hero: mysql::from_value_opt(a.get("hero").ok_or(Error::from(core::fmt::Error))?)?,
+                ng: mysql::from_value_opt(a.get("ng").ok_or(Error::from(core::fmt::Error))?)?,
+                rk: mysql::from_value_opt(a.get("rk").ok_or(Error::from(core::fmt::Error))?)?,
+                at: mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?,
                 ..Default::default()
             };
             println!("{:?}, line: {}", user, line!());
-            userid = mysql::from_value(a.get("id").unwrap());
-            //println!("userid: {}", userid);
-            //ng = mysql::from_value(a.get("ng").unwrap());
-            //rk = mysql::from_value(a.get("rk").unwrap());
-            //name = mysql::from_value(a.get("name").unwrap());
-            TotalUsers.insert(userid, Rc::new(RefCell::new(user.clone())));
+            TotalUsers.insert(mysql::from_value_opt(a.get("id").ok_or(Error::from(core::fmt::Error))?)?, Rc::new(RefCell::new(user.clone())));
         }
         let sql2 = format!("DELETE FROM Gaming where status='wait';");
         conn.query(sql2.clone())?;
         let sql3 = format!("update user set status='offline';");
         conn.query(sql3.clone())?;
-        /*
-        let get_game_id = format!("select MAX(game_id) from game_info;");
-        let qres3: mysql::QueryResult = conn.query(get_game_id.clone())?;
-        for row in qres3 {
-            let a = row?.clone();
-            game_id = mysql::from_value(a.get("MAX(game_id)").unwrap());
-            //println!("game id: {}", game_id);
-        }
-        */
         println!("game id: {}, line: {}", game_id, line!());
         loop {
             select! {
@@ -1947,30 +1941,30 @@ pub fn init(
                     for row in qres {
                         let ea = row?.clone();
                         let gamingData = GamingData{
-                            game: mysql::from_value(ea.get("game").unwrap()),
-                            mode: mysql::from_value(ea.get("mode").unwrap()),
-                            steam_id1: mysql::from_value(ea.get("steam_id1").unwrap()),
-                            steam_id2: mysql::from_value(ea.get("steam_id2").unwrap()),
-                            steam_id3: mysql::from_value(ea.get("steam_id3").unwrap()),
-                            steam_id4: mysql::from_value(ea.get("steam_id4").unwrap()),
-                            steam_id5: mysql::from_value(ea.get("steam_id5").unwrap()),
-                            steam_id6: mysql::from_value(ea.get("steam_id6").unwrap()),
-                            steam_id7: mysql::from_value(ea.get("steam_id7").unwrap()),
-                            steam_id8: mysql::from_value(ea.get("steam_id8").unwrap()),
-                            steam_id9: mysql::from_value(ea.get("steam_id9").unwrap()),
-                            steam_id10: mysql::from_value(ea.get("steam_id10").unwrap()),
-                            hero1: mysql::from_value(ea.get("hero1").unwrap()),
-                            hero2: mysql::from_value(ea.get("hero2").unwrap()),
-                            hero3: mysql::from_value(ea.get("hero3").unwrap()),
-                            hero4: mysql::from_value(ea.get("hero4").unwrap()),
-                            hero5: mysql::from_value(ea.get("hero5").unwrap()),
-                            hero6: mysql::from_value(ea.get("hero6").unwrap()),
-                            hero7: mysql::from_value(ea.get("hero7").unwrap()),
-                            hero8: mysql::from_value(ea.get("hero8").unwrap()),
-                            hero9: mysql::from_value(ea.get("hero9").unwrap()),
-                            hero10: mysql::from_value(ea.get("hero10").unwrap()),
-                            status: mysql::from_value(ea.get("status").unwrap()),
-                            win_team: mysql::from_value(ea.get("win_team").unwrap()),
+                            game: mysql::from_value_opt(ea.get("game").ok_or(Error::from(core::fmt::Error))?)?,
+                            mode: mysql::from_value_opt(ea.get("mode").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id1: mysql::from_value_opt(ea.get("steam_id1").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id2: mysql::from_value_opt(ea.get("steam_id2").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id3: mysql::from_value_opt(ea.get("steam_id3").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id4: mysql::from_value_opt(ea.get("steam_id4").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id5: mysql::from_value_opt(ea.get("steam_id5").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id6: mysql::from_value_opt(ea.get("steam_id6").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id7: mysql::from_value_opt(ea.get("steam_id7").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id8: mysql::from_value_opt(ea.get("steam_id8").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id9: mysql::from_value_opt(ea.get("steam_id9").ok_or(Error::from(core::fmt::Error))?)?,
+                            steam_id10: mysql::from_value_opt(ea.get("steam_id10").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero1: mysql::from_value_opt(ea.get("hero1").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero2: mysql::from_value_opt(ea.get("hero2").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero3: mysql::from_value_opt(ea.get("hero3").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero4: mysql::from_value_opt(ea.get("hero4").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero5: mysql::from_value_opt(ea.get("hero5").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero6: mysql::from_value_opt(ea.get("hero6").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero7: mysql::from_value_opt(ea.get("hero7").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero8: mysql::from_value_opt(ea.get("hero8").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero9: mysql::from_value_opt(ea.get("hero9").ok_or(Error::from(core::fmt::Error))?)?,
+                            hero10: mysql::from_value_opt(ea.get("hero10").ok_or(Error::from(core::fmt::Error))?)?,
+                            status: mysql::from_value_opt(ea.get("status").ok_or(Error::from(core::fmt::Error))?)?,
+                            win_team: mysql::from_value_opt(ea.get("win_team").ok_or(Error::from(core::fmt::Error))?)?,
                         };
                         AbandonGames.insert(gamingData.game, true);
                         let mut gameOverData = GameOverData{
@@ -2045,79 +2039,6 @@ pub fn init(
                         }
                         ATGameingGroups.remove(&game);
                     }
-                    for (id, u) in &mut InGameUsers {
-                        // println!("in game id : {}", id);
-                        let inGame: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("g{}",id.clone()));
-                        match inGame {
-                           Ok(game_id) => {
-                               // pinrlnt!("game_id : {}", game_id);
-                                let gameInfo: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("gid{}",game_id));
-                                match gameInfo {
-                                    Ok(game_info) => {
-                                        // println!("gid{} : {}", game_id, game_info);
-                                        // println!("r : {}", res);
-                                        let data: StartGameData = serde_json::from_str(&String::from(game_info))?;
-                                        let mut gameOverData = GameOverData{
-                                            game: data.game,
-                                            mode: data.mode,
-                                            win: Vec::new(),
-                                            lose: Vec::new()
-                                        };
-                                        let mut find_res = false;
-                                        // println!("players : {:?}", data.players.clone());
-                                        for player_id in data.players.clone() {
-                                            if player_id.len() > 0 {
-                                                let isGameOver: std::result::Result<String, redis::RedisError> = redis_conn.get(format!("r{}",player_id.clone()));
-                                                match isGameOver {
-                                                    Ok(res) => {
-                                                        println!("playerID : {}, line: {}", player_id.clone(), line!());
-                                                        println!("res : {}, line: {}", res, line!());
-                                                        if res == "W" {
-                                                            gameOverData.win.push(player_id.clone());
-                                                        } else {
-                                                            gameOverData.lose.push(player_id.clone());
-                                                        }
-                                                        let _: () = redis_conn.del(format!("r{}", player_id.clone()))?;
-                                                        let _: () = redis_conn.del(format!("g{}", player_id.clone()))?;
-                                                        let sql = format!(
-                                                            "SELECT hero FROM Hero_usage WHERE steam_id='{}' ORDER BY choose_count DESC LIMIT 1;",
-                                                            player_id.clone(),
-                                                        );
-                                                        let qres = conn.query(sql.clone())?;
-                                                        for row in qres {
-                                                            let a = row?.clone();
-                                                            if let Some(u) = TotalUsers.get(&player_id.clone()) {
-                                                                u.borrow_mut().hero = mysql::from_value(a.get("hero").unwrap());
-                                                            }
-                                                        }
-                                                        let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", player_id.clone()),
-                                                            msg: format!(r#"{{"msg":"game over"}}"#)};
-                                                        find_res = true;
-                                                    },
-                                                    Err(e) => {
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        if (find_res) {
-                                            let _: () = redis_conn.del(format!("gid{}", game_id))?;
-                                            AbandonGames.insert(game_id.clone().parse::<u64>().unwrap(), true);
-                                            tx2.try_send(RoomEventData::GameOver(gameOverData));
-                                        }
-                                    },
-                                    Err(e) => {
-
-                                    }
-                                }
-                           },
-                           Err(e) => {
-                                inGameRm_list.push(id.clone());
-                                let mqttmsg = MqttMsg{topic:format!("member/{}/res/check_in_game", id.clone()),
-                                    msg: format!(r#"{{"msg":"game over"}}"#)};
-                                msgtx.try_send(mqttmsg);
-                           }
-                        }
-                    }
                     for rm in inGameRm_list {
                         InGameUsers.remove(&rm);
                     }
@@ -2132,7 +2053,7 @@ pub fn init(
                     let mut at_cnt = 0;
                     for row in qres2 {
                         let a = row?.clone();
-                        online_cnt = mysql::from_value(a.get("count(*)").unwrap());
+                        online_cnt = mysql::from_value_opt(a.get("count(*)").ok_or(Error::from(core::fmt::Error))?)?;
                         break;
                     }
                     let mut timeout_list: Vec<u64> = vec![];
@@ -2168,7 +2089,12 @@ pub fn init(
                         RKGameingGroups.remove(&rm);
                         ATGameingGroups.remove(&rm);
                     }
-                    if isUpdateCount {
+                    if isUpdateCount || online_cnt != current_online_cnt || current_ng_game_cnt != ng_cnt ||
+                    current_rk_game_cnt != rk_cnt ||
+                    current_at_game_cnt != at_cnt ||
+                    current_ng_queue_cnt != ng_queue_cnt ||
+                    current_rk_queue_cnt != rk_queue_cnt ||
+                    current_at_game_cnt != at_queue_cnt{
                         isUpdateCount = false;
                         current_online_cnt = online_cnt;
                         current_ng_game_cnt = ng_cnt;
@@ -2499,9 +2425,8 @@ pub fn init(
                                                             room.team.push(user.borrow().id.clone());
                                                         }
                                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
-                                                            msg: serde_json::to_string(&room).unwrap()};
+                                                            msg: serde_json::to_string(&room)?};
                                                         sendok = true;
-                                                        // let rid = x.room.parse::<u64>().unwrap();
                                                         let rid = u.borrow().rid;
                                                         u.borrow_mut().rid = rid;
                                                     }
@@ -2519,9 +2444,8 @@ pub fn init(
                                                         room.team.push(user.borrow().id.clone());
                                                     }
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/join", x.join.clone()),
-                                                        msg: serde_json::to_string(&room).unwrap()};
+                                                        msg: serde_json::to_string(&room)?};
                                                     sendok = true;
-                                                    // let rid = x.room.parse::<u64>().unwrap();
                                                     let rid = u.borrow().rid;
                                                     u.borrow_mut().rid = rid;
                                                 }
@@ -2994,7 +2918,7 @@ pub fn init(
                                             let mut hero = "".to_string();
                                             for row in qres2 {
                                                 let a = row?.clone();
-                                                hero = mysql::from_value(a.get("hero").unwrap());
+                                                hero = mysql::from_value_opt(a.get("hero").ok_or(Error::from(core::fmt::Error))?)?;
                                                 break;
                                             }
                                             u2.borrow_mut().online = true;
@@ -3148,7 +3072,6 @@ pub fn init(
                                     }
                                     if !TotalRoom.contains_key(&room_id) {
                                         println!("rid: {}, line: {}", &room_id, line!());
-                                        // room_id = x.id.parse::<u64>().unwrap();
                                         let mut new_room = RoomData {
                                             rid: room_id,
                                             users: vec![],
@@ -3290,26 +3213,26 @@ pub fn init(
                                     let mut hero20 = "".to_string();
                                     for row in qres {
                                         let a = row?.clone();
-                                        hero1 = mysql::from_value(a.get("hero1").unwrap());
-                                        hero2 = mysql::from_value(a.get("hero2").unwrap());
-                                        hero3 = mysql::from_value(a.get("hero3").unwrap());
-                                        hero4 = mysql::from_value(a.get("hero4").unwrap());
-                                        hero5 = mysql::from_value(a.get("hero5").unwrap());
-                                        hero6 = mysql::from_value(a.get("hero6").unwrap());
-                                        hero7 = mysql::from_value(a.get("hero7").unwrap());
-                                        hero8 = mysql::from_value(a.get("hero8").unwrap());
-                                        hero9 = mysql::from_value(a.get("hero9").unwrap());
-                                        hero10 = mysql::from_value(a.get("hero10").unwrap());
-                                        hero11 = mysql::from_value(a.get("hero11").unwrap());
-                                        hero12 = mysql::from_value(a.get("hero12").unwrap());
-                                        hero13 = mysql::from_value(a.get("hero13").unwrap());
-                                        hero14 = mysql::from_value(a.get("hero14").unwrap());
-                                        hero15 = mysql::from_value(a.get("hero15").unwrap());
-                                        hero16 = mysql::from_value(a.get("hero16").unwrap());
-                                        hero17 = mysql::from_value(a.get("hero17").unwrap());
-                                        hero18 = mysql::from_value(a.get("hero18").unwrap());
-                                        hero19 = mysql::from_value(a.get("hero19").unwrap());
-                                        hero20 = mysql::from_value(a.get("hero20").unwrap());
+                                        hero1 = mysql::from_value_opt(a.get("hero1").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero2 = mysql::from_value_opt(a.get("hero2").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero3 = mysql::from_value_opt(a.get("hero3").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero4 = mysql::from_value_opt(a.get("hero4").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero5 = mysql::from_value_opt(a.get("hero5").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero6 = mysql::from_value_opt(a.get("hero6").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero7 = mysql::from_value_opt(a.get("hero7").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero8 = mysql::from_value_opt(a.get("hero8").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero9 = mysql::from_value_opt(a.get("hero9").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero10 = mysql::from_value_opt(a.get("hero10").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero11 = mysql::from_value_opt(a.get("hero11").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero12 = mysql::from_value_opt(a.get("hero12").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero13 = mysql::from_value_opt(a.get("hero13").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero14 = mysql::from_value_opt(a.get("hero14").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero15 = mysql::from_value_opt(a.get("hero15").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero16 = mysql::from_value_opt(a.get("hero16").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero17 = mysql::from_value_opt(a.get("hero17").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero18 = mysql::from_value_opt(a.get("hero18").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero19 = mysql::from_value_opt(a.get("hero19").ok_or(Error::from(core::fmt::Error))?)?;
+                                        hero20 = mysql::from_value_opt(a.get("hero20").ok_or(Error::from(core::fmt::Error))?)?;
                                         break;
                                     }
                                     mqttmsg = MqttMsg{topic:format!("server/res/free"),

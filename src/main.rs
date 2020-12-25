@@ -99,7 +99,7 @@ fn main() -> std::result::Result<(), Error> {
         .value_of("CLIENT_ID")
         .map(|x| x.to_owned())
         .unwrap_or("Elo test Server".to_owned());
-    let mut isBackup: bool = matches.value_of("BACKUP").unwrap_or("false").to_owned().parse().unwrap();
+    let mut isBackup: bool = matches.value_of("BACKUP").unwrap_or("false").to_owned().parse()?;
     println!("Backup: {}", isBackup);
     let mut mqtt_options = MqttOptions::new(client_id.as_str(), server_addr.as_str(), server_port.parse::<u16>()?);
     mqtt_options = mqtt_options.set_keep_alive(100);
@@ -108,7 +108,7 @@ fn main() -> std::result::Result<(), Error> {
     let (mut mqtt_client, notifications) = MqttClient::start(mqtt_options.clone())?;
     
     // Server message
-    mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce).unwrap();
+    mqtt_client.subscribe("server/+/res/heartbeat", QoS::AtMostOnce)?;
     mqtt_client.subscribe("server/send/control", QoS::AtMostOnce)?;//doc server.drawio
     mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;//doc server.drawio
     mqtt_client.subscribe("server/send/free", QoS::AtMostOnce)?;
