@@ -213,6 +213,7 @@ pub struct GameOverData {
     pub mode: String,
     pub win: Vec<String>,
     pub lose: Vec<String>,
+    pub time: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -631,32 +632,49 @@ fn user_score(
     sender: &Sender<SqlData>,
     conn: &mut mysql::PooledConn,
     mode: String,
+    isWin: bool,
+    raindrop: u64,
 ) -> Result<(), Error> {
     if mode == "ng" {
+        info!("user: {}, ng: {} + {}, raindrop: {} + {}, line: {}",u.borrow().id, u.borrow().ng, value, u.borrow().raindrop, raindrop, line!());
         u.borrow_mut().ng += value;
     } else if mode == "rk" {
+        info!("user: {}, rk: {} + {}, raindrop: {} + {}, line: {}",u.borrow().id, u.borrow().rk, value, u.borrow().raindrop, raindrop, line!());
         u.borrow_mut().rk += value;
     } else if mode == "at" {
+        info!("user: {}, at: {} + {}, raindrop: {} + {}, line: {}",u.borrow().id, u.borrow().at, value, u.borrow().raindrop, raindrop, line!());
         u.borrow_mut().at += value;
     }
+    u.borrow_mut().raindrop += raindrop;
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/login", u.borrow().id),
         msg: format!(
-            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#,
+            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop":{} ,"hero":"{}"}}"#,
             u.borrow().ng,
             u.borrow().rk,
             u.borrow().at,
+            u.borrow().raindrop,
             u.borrow().hero,
         ),
     })?;
-    println!("Update! user : {:?}, line: {}", u.borrow(), line!());
-    let sql = format!(
-        "UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';",
+    let mut sql = format!(
+        "UPDATE user SET ng={}, rk={}, at={}, raindrop=raindrop+{} WHERE id='{}';",
         u.borrow().ng.clone(),
         u.borrow().rk.clone(),
         u.borrow().at.clone(),
+        raindrop,
         u.borrow().id.clone()
     );
+    if isWin {
+        sql = format!(
+            "UPDATE user SET ng={}, rk={}, at={}, raindrop=raindrop+{}, first_win=true WHERE id='{}';",
+            u.borrow().ng.clone(),
+            u.borrow().rk.clone(),
+            u.borrow().at.clone(),
+            raindrop,
+            u.borrow().id.clone()
+        );
+    }
     let qres = conn.query(sql.clone())?;
     Ok(())
 }
@@ -745,6 +763,7 @@ fn settlement_score(
     sender: &Sender<SqlData>,
     conn: &mut mysql::PooledConn,
     mode: String,
+    time: u64,
 ) {
     if win.len() == 0 || lose.len() == 0 {
         return;
@@ -761,16 +780,38 @@ fn settlement_score(
     // println!("win : {:?}, lose : {:?}", win_score, lose_score);
     let elo = EloRank { k: 40.0 };
     let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
-    println!("Game Over");
+    let mut raindrop: u64 = 20 + 2 * time / 60;
+    if time > 3000 {
+        raindrop = 20 + 2 * 3000 / 60;
+    }
+    if time < 900 {
+        raindrop = 20 + 2 * 900 / 60;
+    }
     for (i, u) in win.iter().enumerate() {
-        user_score(
-            u,
-            (rw[i] - win_score[i]) as i16,
-            msgtx,
-            sender,
-            conn,
-            mode.clone(),
-        );
+        if !u.borrow().first_win {
+            user_score(
+                u,
+                (rw[i] - win_score[i]) as i16,
+                msgtx,
+                sender,
+                conn,
+                mode.clone(),
+                true,
+                raindrop + 400,
+            );
+        } else {
+            user_score(
+                u,
+                (rw[i] - win_score[i]) as i16,
+                msgtx,
+                sender,
+                conn,
+                mode.clone(),
+                true,
+                raindrop,
+            );
+        }
+        u.borrow_mut().first_win = true;
     }
     for (i, u) in lose.iter().enumerate() {
         user_score(
@@ -780,6 +821,8 @@ fn settlement_score(
             sender,
             conn,
             mode.clone(),
+            false,
+            raindrop/2,
         );
     }
 }
@@ -1687,7 +1730,7 @@ pub fn init(
         let mut atState = "close";
         let mut bForceCloseAtState = false;
         let mut currentState = "ng";
-        let sql = format!(r#"select id, ng, rk, at, name, hero from user;"#);
+        let sql = format!(r#"select * from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
         let mut userid: String = "".to_owned();
         let mut ng: i16 = 0;
@@ -1704,6 +1747,7 @@ pub fn init(
         let mut current_at_game_cnt: i32 = 0;
         let mut current_online_cnt: i32 = 0;
         let mut isUpdateCount = false;
+        let mut isNewDay = false;
         let id = 0;
         for row in qres2 {
             let a = row?.clone();
@@ -1714,6 +1758,8 @@ pub fn init(
                 ng: mysql::from_value_opt(a.get("ng").ok_or(Error::from(core::fmt::Error))?)?,
                 rk: mysql::from_value_opt(a.get("rk").ok_or(Error::from(core::fmt::Error))?)?,
                 at: mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?,
+                raindrop: mysql::from_value_opt(a.get("raindrop").ok_or(Error::from(core::fmt::Error))?)?,
+                first_win: mysql::from_value_opt(a.get("first_win").ok_or(Error::from(core::fmt::Error))?)?,
                 ..Default::default()
             };
             println!("{:?}, line: {}", user, line!());
@@ -1838,6 +1884,7 @@ pub fn init(
                     let now = Local::now();
                     let rank_open_time = now.date().and_hms(10, 0, 0);
                     let rank_close_time = now.date().and_hms(16, 0, 0);
+                    let midnight = now.date().and_hms(16,0,0);
                     let mut isRankOpen = false;
                     let mut time_result = rank_open_time.signed_duration_since(now).to_std();
                     let mut duration = Duration::new(0, 0);
@@ -1851,7 +1898,23 @@ pub fn init(
                     if duration == Duration::new(0, 0) {
                         isRankOpen = true;
                     }
-                    // println!("Duration between {:?} and {:?}: {:?}", now, rank_open_time, duration);
+                    time_result = midnight.signed_duration_since(now).to_std();
+                    duration = Duration::new(0, 0);
+                    match time_result {
+                        Ok(v) => {
+                            isNewDay = true;
+                        },
+                        Err(e) => {
+                            if isNewDay {
+                                isNewDay = false;
+                                let sql = format!("update user set first_win=false;");
+                                let qres = conn.query(sql.clone())?;
+                                for (_, u) in &TotalUsers {
+                                    u.borrow_mut().first_win = false;
+                                }
+                            }
+                        }
+                    }
                     time_result = rank_close_time.signed_duration_since(now).to_std();
                     duration = Duration::new(0, 0);
                     match time_result {
@@ -1971,7 +2034,8 @@ pub fn init(
                             game: gamingData.game,
                             mode: gamingData.mode,
                             win: Vec::new(),
-                            lose: Vec::new()
+                            lose: Vec::new(),
+                            time: 0,
                         };
                         if gamingData.win_team == 1 {
                             gameOverData.win.push(gamingData.steam_id1.clone());
@@ -1998,6 +2062,15 @@ pub fn init(
                             gameOverData.win.push(gamingData.steam_id10.clone());
                         }
                         del_list.push(gameOverData.game);
+                        if let Some(fg) = NGGameingGroups.get(&gameOverData.game) {
+                            gameOverData.time = fg.borrow().time;
+                        }
+                        if let Some(fg) = RKGameingGroups.get(&gameOverData.game) {
+                            gameOverData.time = fg.borrow().time;
+                        }
+                        if let Some(fg) = ATGameingGroups.get(&gameOverData.game) {
+                            gameOverData.time = fg.borrow().time;
+                        }
                         tx2.try_send(RoomEventData::GameOver(gameOverData));
                     }
                     for game in del_list {
@@ -2191,7 +2264,7 @@ pub fn init(
                                 RoomEventData::GameOver(x) => {
                                     let win = get_users(&x.win, &TotalUsers)?;
                                     let lose = get_users(&x.lose, &TotalUsers)?;
-                                    settlement_score(&win, &lose, &msgtx, &sender, &mut conn, x.mode);
+                                    settlement_score(&win, &lose, &msgtx, &sender, &mut conn, x.mode, x.time);
                                     if let Some(fg) = GameingGroups.get(&x.game) {
                                         fg.borrow_mut().next_status();
                                     }
@@ -2908,6 +2981,7 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::Login(x) => {
+                                    tx2.try_send(RoomEventData::Logout(UserLogoutData{id: x.u.id.clone()}));
                                     let mut success = true;
                                     isUpdateCount = true;
                                     if TotalUsers.contains_key(&x.u.id) {
@@ -2923,14 +2997,14 @@ pub fn init(
                                             }
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, hero)};
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop": {}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().raindrop, hero)};
                                         }
                                     }
                                     else {
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "hero":""}}"#, 1200, 1200, 1200)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop": {}, "hero":""}}"#, 1200, 1200, 0, 1200)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {
