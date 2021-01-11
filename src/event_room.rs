@@ -321,6 +321,7 @@ pub struct UpdateQueueData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SystemBanData {
+    pub password: String,
     pub id: String,
     pub time: i32,
 }
@@ -3323,15 +3324,17 @@ pub fn init(
                                     at_queue_cnt = x.at;
                                 },
                                 RoomEventData::SystemBan(x) => {
-                                    let mut new_restriced = RestrictedData {
-                                        id: x.id.clone(),
-                                        time: x.time,
-                                    };
-                                    let r = Rc::new(RefCell::new(new_restriced));
-                                    RestrictedUsers.insert(
-                                        x.id.clone(),
-                                        Rc::clone(&r),
-                                    );
+                                    if (x.password == "HibikiHibiki") {
+                                        let mut new_restriced = RestrictedData {
+                                            id: x.id.clone(),
+                                            time: x.time,
+                                        };
+                                        let r = Rc::new(RefCell::new(new_restriced));
+                                        RestrictedUsers.insert(
+                                            x.id.clone(),
+                                            Rc::clone(&r),
+                                        );
+                                    }
                                 }
                             }
                         }
