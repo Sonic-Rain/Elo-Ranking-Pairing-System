@@ -37,7 +37,7 @@ pub struct RoomData {
     pub avg_rk: i16,
     pub avg_at: i16,
     pub ready: i8,
-    pub queue_cnt: i16,
+    pub queue_cnt: i64,
     pub mode: String,
 }
 
@@ -215,7 +215,7 @@ pub struct FightGroup {
     pub checks: Vec<FightCheck>,
     pub rids: Vec<u64>,
     pub game_status: u16,
-    pub queue_cnt: i16,
+    pub queue_cnt: i64,
 }
 
 impl FightGroup {

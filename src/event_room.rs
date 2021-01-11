@@ -35,10 +35,10 @@ use std::process::Command;
 
 const TEAM_SIZE: i16 = 5;
 const MATCH_SIZE: usize = 2;
-const SCORE_INTERVAL: i16 = 2;
+const SCORE_INTERVAL: i64 = 2;
 const READY_TIME: f32 = 30.0;
-const RANK_RANGE: i16 = 50;
-const NG_RANGE: i16 = 50;
+const RANK_RANGE: i64 = 50;
+const NG_RANGE: i64 = 50;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -420,7 +420,7 @@ pub struct QueueRoomData {
     pub avg_at: i16,
     pub ready: i8,
     pub notify: bool,
-    pub queue_cnt: i16,
+    pub queue_cnt: i64,
     pub mode: String,
 }
 
@@ -434,7 +434,7 @@ pub struct ReadyGroupData {
     pub avg_rk: i16,
     pub avg_at: i16,
     pub game_status: u16,
-    pub queue_cnt: i16,
+    pub queue_cnt: i64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -925,7 +925,7 @@ fn canGroupNG(
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
-        let Difference: i16 = i16::abs(queueRoom.borrow().avg_ng - readyGroup.avg_ng);
+        let Difference: i64 = i64::abs((queueRoom.borrow().avg_ng - readyGroup.avg_ng).into());
         let mut ng = 0;
         if readyGroup.avg_ng == 0
             || Difference <= NG_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
@@ -984,7 +984,7 @@ fn canGroupRK(
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
-        let Difference: i16 = i16::abs(queueRoom.borrow().avg_rk - readyGroup.avg_rk);
+        let Difference: i64 = i64::abs((queueRoom.borrow().avg_rk - readyGroup.avg_rk).into());
         let mut rk = 0;
         if readyGroup.avg_rk == 0
             || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
@@ -1038,7 +1038,7 @@ fn canGroupAT(
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
-        let Difference: i16 = i16::abs(queueRoom.borrow().avg_at - readyGroup.avg_at);
+        let Difference: i64 = i64::abs((queueRoom.borrow().avg_at - readyGroup.avg_at).into());
         let mut at = 0;
         if readyGroup.avg_at == 0
             || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
@@ -1201,7 +1201,7 @@ pub fn HandleQueueRequest(
                                             if fg.team_len < MATCH_SIZE && !isInFG {
                                                 let mut difference = 0;
                                                 if fg.team_len > 0 {
-                                                    difference = i16::abs(rg2.borrow().avg_ng as i16 - total_ng/fg.team_len as i16);
+                                                    difference = i64::abs((rg2.borrow().avg_ng as i16 - total_ng/fg.team_len as i16).into());
                                                 }
                                                 if difference <= NG_RANGE + SCORE_INTERVAL * rg2.borrow().queue_cnt {
                                                     total_ng += rg2.borrow().avg_ng as i16;
@@ -1343,7 +1343,7 @@ pub fn HandleQueueRequest(
                                             if fg.team_len < MATCH_SIZE && !isInFG {
                                                 let mut difference = 0;
                                                 if fg.team_len > 0 {
-                                                    difference = i16::abs(rg2.borrow().avg_rk as i16 - total_rk/fg.team_len as i16);
+                                                    difference = i64::abs((rg2.borrow().avg_rk as i16 - total_rk/fg.team_len as i16).into());
                                                 }
                                                 if difference <= RANK_RANGE + SCORE_INTERVAL * rg2.borrow().queue_cnt {
                                                     total_rk += rg2.borrow().avg_rk as i16;
@@ -1490,7 +1490,7 @@ pub fn HandleQueueRequest(
                                             if fg.team_len < MATCH_SIZE && !isInFG {
                                                 let mut difference = 0;
                                                 if fg.team_len > 0 {
-                                                    difference = i16::abs(rg2.borrow().avg_at as i16 - total_at/fg.team_len as i16);
+                                                    difference = i64::abs((rg2.borrow().avg_at as i16 - total_at/fg.team_len as i16).into());
                                                 }
                                                 if difference <= RANK_RANGE + SCORE_INTERVAL * rg2.borrow().queue_cnt {
                                                     total_at += rg2.borrow().avg_at as i16;
