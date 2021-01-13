@@ -1247,7 +1247,7 @@ pub fn HandleQueueRequest(
                         for (k, v) in &mut NGQueueRoom {
                             for uid in &v.borrow().user_ids {
                                 sender.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: uid.to_string(), room: "".to_string(), mode: "ng".to_string()}));
-                                sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
+                                // sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
                             }
                         }
                     }
@@ -2704,6 +2704,7 @@ pub fn init(
                                             msg: format!(r#"{{"time":"2678400"}}"#)};
                                     }
                                     if !isBan {
+                                        info!("{:?}, line: {}", RestrictedUsers, line!());
                                         let r = RestrictedUsers.get(&x.id);
                                         if let Some(r) = r {
                                             if let Some(u) = TotalUsers.get(&x.id) {
