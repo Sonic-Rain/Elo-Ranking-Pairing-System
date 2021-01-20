@@ -917,12 +917,12 @@ fn canGroupNG(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    info!(
-        "room : {:?} try_join group {:?}, line : {}",
-        queueRoom,
-        readyGroup,
-        line!()
-    );
+    // info!(
+    //     "room : {:?} try_join group {:?}, line : {}",
+    //     queueRoom,
+    //     readyGroup,
+    //     line!()
+    // );
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -2338,6 +2338,7 @@ pub fn init(
                                             //println!("id: {}, rid: {}", u.borrow().id, &get_rid_by_id(&u.borrow().id, &TotalUsers));
                                             let mut is_null = false;
                                             if let Some(r) = r {
+                                                tx2.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: r.borrow().master.clone(), room: r.borrow().master.clone(), mode: r.borrow().mode.clone()}));
                                                 let m = r.borrow().master.clone();
                                                 r.borrow_mut().rm_user(&x.id);
                                                 if r.borrow().users.len() > 0 {
@@ -2480,6 +2481,12 @@ pub fn init(
                                     let mut sendok = false;
                                     if let Some(u) = u {
                                         if let Some(j) = j {
+                                            let old_room = TotalRoom.get(&j.borrow().rid);
+                                            if let Some(old_room) = old_room {
+                                                println!("rid : {}", j.borrow().rid.clone());
+                                                tx2.try_send(RoomEventData::Leave(LeaveData{room: old_room.borrow().master.clone(), id: j.borrow().id.clone()}));
+                                                println!("rid : {}", j.borrow().rid.clone());
+                                            }
                                             let r = TotalRoom.get(&u.borrow().rid);
                                             if let Some(r) = r {
                                                 println!("len : {}, line: {}", r.borrow().users.len(), line!());
@@ -2522,6 +2529,9 @@ pub fn init(
                                                     sendok = true;
                                                     let rid = u.borrow().rid;
                                                     u.borrow_mut().rid = rid;
+                                                }
+                                                if sendok {
+                                                    QueueSender.send(QueueData::RemoveRoom(RemoveRoomData{rid: u.borrow().rid}));
                                                 }
                                             }
                                         }
@@ -2955,10 +2965,13 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CancelQueue(x) => {
+                                    println!("cancel queue");
+                                    println!("{:?}", x);
                                     isUpdateCount = true;
                                     let mut success = false;
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
+                                        println!("{}", u.borrow().rid.clone());
                                         //let r = QueueRoom.remove(&u.borrow().rid);
                                         let g = ReadyGroups.get(&u.borrow().gid);
                                         if let Some(g) = g {
