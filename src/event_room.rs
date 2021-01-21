@@ -4,6 +4,7 @@ use redis::Commands;
 
 use chrono::prelude::*;
 use chrono::Duration as Cduration;
+use chrono::DateTime;
 use log::{error, info, trace, warn};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
@@ -917,12 +918,12 @@ fn canGroupNG(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    // info!(
-    //     "room : {:?} try_join group {:?}, line : {}",
-    //     queueRoom,
-    //     readyGroup,
-    //     line!()
-    // );
+    info!(
+        "room : {:?} try_join group {:?}, line : {}",
+        queueRoom,
+        readyGroup,
+        line!()
+    );
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -2705,13 +2706,33 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CheckRestriction(x) => {
-                                    let sql = format!(r#"select * from BAN where id="{}";"#, x.id);
-                                    let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                    let sql = format!(r#"select UNIX_TIMESTAMP(end) from BAN where id="{}";"#, x.id.clone());
+                                    let qres: mysql::QueryResult = conn.query(sql.clone())?;
                                     let mut isBan = false;
-                                    for row in qres2 {
+                                    let mut rm_list: Vec<String> = Vec::new();
+                                    for row in qres {
                                         isBan = true;
+                                        let a = row?.clone();
+                                        let dateTime: String = mysql::from_value_opt(a.get("UNIX_TIMESTAMP(end)").ok_or(Error::from(core::fmt::Error))?)?;
+                                        let ndt = NaiveDateTime::parse_from_str(&dateTime, "%s")?;
+                                        let dt = DateTime::<Utc>::from_utc(ndt, Utc);
+                                        let now = Local::now();
+                                        let mut time_result = dt.signed_duration_since(now).to_std();
+                                        let mut duration = Duration::new(0, 0);
+                                        match time_result {
+                                            Ok(v) => {
+                                                duration = v;
+                                            },
+                                            Err(e) => {
+                                                rm_list.push(x.id.clone());
+                                            }
+                                        }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_restriction", x.id.clone()),
-                                            msg: format!(r#"{{"time":"2678400"}}"#)};
+                                            msg: format!(r#"{{"time":"{}"}}"#, duration.as_secs())};
+                                    }
+                                    for rm in rm_list {
+                                        let sql2 = format!(r#"delete from BAN where id="{}";"#, rm);
+                                        conn.query(sql2.clone())?;    
                                     }
                                     if !isBan {
                                         info!("{:?}, line: {}", RestrictedUsers, line!());
@@ -3339,15 +3360,11 @@ pub fn init(
                                 },
                                 RoomEventData::SystemBan(x) => {
                                     if (x.password == "HibikiHibiki") {
-                                        let mut new_restriced = RestrictedData {
-                                            id: x.id.clone(),
-                                            time: x.time,
-                                        };
-                                        let r = Rc::new(RefCell::new(new_restriced));
-                                        RestrictedUsers.insert(
-                                            x.id.clone(),
-                                            Rc::clone(&r),
+                                        let sql = format!(
+                                            "replace BAN values ('{}', date_add(now(), interval {} second));",
+                                            x.id.clone(), x.time.clone()
                                         );
+                                        conn.query(sql.clone())?;
                                     }
                                 }
                             }
