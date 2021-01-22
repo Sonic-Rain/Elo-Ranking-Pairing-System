@@ -34,12 +34,12 @@ use crate::msg::*;
 use crate::room::*;
 use std::process::Command;
 
-const TEAM_SIZE: i16 = 5;
-const MATCH_SIZE: usize = 2;
-const SCORE_INTERVAL: i64 = 2;
-const READY_TIME: f32 = 30.0;
-const RANK_RANGE: i64 = 50;
-const NG_RANGE: i64 = 50;
+pub const TEAM_SIZE: i16 = 5;
+pub const MATCH_SIZE: usize = 2;
+pub const SCORE_INTERVAL: i64 = 2;
+pub const READY_TIME: f32 = 30.0;
+pub const RANK_RANGE: i64 = 50;
+pub const NG_RANGE: i64 = 50;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -918,12 +918,12 @@ fn canGroupNG(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    info!(
-        "room : {:?} try_join group {:?}, line : {}",
-        queueRoom,
-        readyGroup,
-        line!()
-    );
+    // info!(
+    //     "room : {:?} try_join group {:?}, line : {}",
+    //     queueRoom,
+    //     readyGroup,
+    //     line!()
+    // );
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -941,11 +941,11 @@ fn canGroupNG(
                 res = false;
                 return Ok(res);
             }
-            info!(
-                "group user_len : {}, room user_len : {}",
-                readyGroup.user_len,
-                queueRoom.borrow().user_len
-            );
+            // info!(
+            //     "group user_len : {}, room user_len : {}",
+            //     readyGroup.user_len,
+            //     queueRoom.borrow().user_len
+            // );
             if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
                 res = false;
                 return Ok(res);
@@ -977,12 +977,12 @@ fn canGroupRK(
     group_id: u64,
 ) -> Result<bool, Error> {
     let mut res = false;
-    info!(
-        "room : {:?} try_join group {:?}, line : {}",
-        queueRoom,
-        readyGroup,
-        line!()
-    );
+    // info!(
+    //     "room : {:?} try_join group {:?}, line : {}",
+    //     queueRoom,
+    //     readyGroup,
+    //     line!()
+    // );
     if queueRoom.borrow().ready == 0
         && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
     {
@@ -1000,11 +1000,11 @@ fn canGroupRK(
                 res = false;
                 return Ok(res);
             }
-            info!(
-                "group user_len : {}, room user_len : {}",
-                readyGroup.user_len,
-                queueRoom.borrow().user_len
-            );
+            // info!(
+            //     "group user_len : {}, room user_len : {}",
+            //     readyGroup.user_len,
+            //     queueRoom.borrow().user_len
+            // );
             if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
                 res = false;
                 return Ok(res);
@@ -1054,11 +1054,11 @@ fn canGroupAT(
                 res = false;
                 return Ok(res);
             }
-            info!(
-                "group user_len : {}, room user_len : {}",
-                readyGroup.user_len,
-                queueRoom.borrow().user_len
-            );
+            // info!(
+            //     "group user_len : {}, room user_len : {}",
+            //     readyGroup.user_len,
+            //     queueRoom.borrow().user_len
+            // );
             if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
                 res = false;
                 return Ok(res);
@@ -1094,10 +1094,12 @@ pub fn HandleQueueRequest(
     let update5000ms = tick(Duration::from_millis(5000));
 
     thread::spawn(move || -> Result<(), Error> {
+        let mut SoloNGQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut NGQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         // let mut NGGroupedQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut RKQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut ATQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut SoloNGReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut NGReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut RKReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut ATReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
@@ -1111,6 +1113,148 @@ pub fn HandleQueueRequest(
             select! {
                 recv(update) -> _ => {
                     let mut new_now = Instant::now();
+                    // sng
+                    if ngState == "open" {
+                        if SoloNGQueueRoom.len() >= MATCH_SIZE {
+                            let mut g: ReadyGroupData = Default::default();
+                            let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
+                            let mut id: Vec<u64> = vec![];
+                            let mut new_now = Instant::now();
+                            tq = SoloNGQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                            let mut new_now = Instant::now();
+                            tq.sort_by_key(|x| x.borrow().avg_ng);
+                            let mut new_now1 = Instant::now();
+                            for (k, v) in &SoloNGQueueRoom {
+                                v.borrow_mut().queue_cnt += 1;
+                                let updateRoomQueueCntData = UpdateRoomQueueCntData {
+                                    rid: v.borrow().rid,
+                                };
+                                sender.try_send(RoomEventData::UpdateRoomQueueCnt(updateRoomQueueCntData));
+                            }
+                            for (k, v) in &SoloNGQueueRoom {
+                                for (k2 , v2) in &SoloNGQueueRoom {
+                                    let mut isMatch = false;
+                                    if let Some(gid) = matchGroup.get(&v2.borrow().gid.clone()) {
+                                        isMatch = true;
+                                    }
+                                    if !isMatch {
+                                        v2.borrow_mut().ready = 0;
+                                        v2.borrow_mut().gid = 0;
+                                    }
+                                }
+                                g = Default::default();
+                                canGroupNG(&mut g, v, &mut conn, group_id);
+                                for (k2, mut v2) in &SoloNGQueueRoom {
+                                    canGroupNG(&mut g, v2, &mut conn, group_id);
+                                }
+                                if g.user_len == TEAM_SIZE {
+                                    println!("match team_size!, line: {}", line!());
+                                    group_id += 1;
+                                    info!("new group_id: {}, line: {}", group_id, line!());
+                                    g.gid = group_id;
+                                    SoloNGReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                    matchGroup.insert(group_id, Rc::new(RefCell::new(group_id.clone())));
+                                    g = Default::default();
+                                }
+                                // info!("{:?}", matchGroup);
+                            }
+                            //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
+                            if g.user_len < TEAM_SIZE {
+                                for r in g.rid {
+                                    let mut room = SoloNGQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
+                                for r in id {
+                                    let mut room = SoloNGQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
+                            }
+                        }
+                        if SoloNGReadyGroups.len() > 0 {
+                            println!("SoloNGReadyGroup!! {}, line: {}", SoloNGReadyGroups.len(), line!());
+                            println!("SoloNGReadyGroup!! {:?}, line: {}", SoloNGReadyGroups, line!());
+                        }
+                        if SoloNGReadyGroups.len() >= MATCH_SIZE {
+                            let mut prestart = false;
+                            let mut total_ng: i16 = 0;
+                            let mut rm_ids: Vec<u64> = vec![];
+                            let mut new_now2 = Instant::now();
+                            let mut isMatch = false;
+                            for (id, rg) in &SoloNGReadyGroups {
+                                let mut fg: ReadyGameData = Default::default();
+                                total_ng = 0;
+                                if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
+                                    if total_ng == 0 {
+                                        total_ng += rg.borrow().avg_ng as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.gid.push(*id);
+                                        fg.team_len += 1;
+                                        for (id2, rg2) in &SoloNGReadyGroups {
+                                            let mut isInFG = false;
+                                            for gid in &fg.gid {
+                                                if gid == id2 {
+                                                    isInFG = true;
+                                                }
+                                            }
+                                            if fg.team_len < MATCH_SIZE && !isInFG {
+                                                let mut difference = 0;
+                                                if fg.team_len > 0 {
+                                                    difference = i64::abs((rg2.borrow().avg_ng as i16 - total_ng/fg.team_len as i16).into());
+                                                }
+                                                if difference <= NG_RANGE + SCORE_INTERVAL * rg2.borrow().queue_cnt {
+                                                    total_ng += rg2.borrow().avg_ng as i16;
+                                                    fg.group.push(rg2.borrow().rid.clone());
+                                                    fg.team_len += 1;
+                                                    fg.gid.push(*id2);
+                                                }
+                                                else {
+                                                    rg2.borrow_mut().queue_cnt += 1;
+                                                }
+                                            }
+                                            if fg.team_len == MATCH_SIZE {
+                                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone(), mode: "ng".to_string()}));
+                                                for id in fg.gid {
+                                                    rm_ids.push(id);
+                                                }
+                                                fg = Default::default();
+                                                isMatch = true;
+                                            }
+                                            if isMatch {
+                                                break;
+                                            }
+                                        }
+                                        if isMatch {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            for id in rm_ids {
+                                let rg = SoloNGReadyGroups.remove(&id);
+                                if let Some(rg) = rg {
+                                    for rid in &rg.borrow().rid {
+                                        SoloNGQueueRoom.remove(&rid);
+                                    }
+                                }
+                            }
+                            // println!("GroupedRoom : {:?}", NGGroupedQueueRoom);
+                            // println!("MatchedGroup : {:?}", NGMatchedGroups);
+                        }
+                    } else {
+                        for (k, v) in &mut SoloNGQueueRoom {
+                            for uid in &v.borrow().user_ids {
+                                sender.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: uid.to_string(), room: "".to_string(), mode: "ng".to_string()}));
+                                // sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
+                            }
+                        }
+                    }
+                    // sng
                     // ng
                     if ngState == "open" {
                         if NGQueueRoom.len() >= MATCH_SIZE {
@@ -1545,6 +1689,9 @@ pub fn HandleQueueRequest(
                     let mut ng_cnt: i32 = 0;
                     let mut rk_cnt: i32 = 0;
                     let mut at_cnt: i32 = 0;
+                    for (k, v) in &mut SoloNGQueueRoom {
+                        ng_cnt += v.borrow().user_len as i32;
+                    }
                     for (k, v) in &mut NGQueueRoom {
                         ng_cnt += v.borrow().user_len as i32;
                     }
@@ -1566,6 +1713,8 @@ pub fn HandleQueueRequest(
                                 QueueData::UpdateRoom(x) => {
                                     if x.mode == "ng" {
                                         NGQueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
+                                    }else if x.mode == "sng" {
+                                        SoloNGQueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
                                     }else if x.mode == "rk" {
                                         RKQueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
                                     }else if x.mode == "at" {
@@ -1573,6 +1722,26 @@ pub fn HandleQueueRequest(
                                     }
                                 }
                                 QueueData::RemoveRoom(x) => {
+                                    //sng
+                                    let mut r = SoloNGQueueRoom.get(&x.rid);
+                                    if let Some(r) = r {
+                                        let mut rg = SoloNGReadyGroups.get(&r.borrow().gid);
+                                        if let Some(rg) = rg {
+                                            for rid in &rg.borrow().rid {
+                                                if rid == &x.rid {
+                                                    continue;
+                                                }
+                                                let mut room = SoloNGQueueRoom.get(rid);
+                                                if let Some(room) = room {
+                                                    room.borrow_mut().gid = 0;
+                                                    room.borrow_mut().ready = 0;
+                                                }
+                                            }
+                                        }
+                                        SoloNGReadyGroups.remove(&r.borrow().gid);
+                                    }
+                                    SoloNGQueueRoom.remove(&x.rid);
+                                    //sng
                                     // ng
                                     let mut r = NGQueueRoom.get(&x.rid);
                                     if let Some(r) = r {
@@ -2920,6 +3089,8 @@ pub fn init(
                                             let r = TotalRoom.get(&rid);
                                             if let Some(y) = r {
                                                 y.borrow_mut().update_avg();
+                                                println!("xmode : {}", x.mode.clone());
+                                                y.borrow_mut().mode = x.mode.clone();
                                                 let mut user_ids: Vec<String> = Vec::new();
                                                 for user in &y.borrow().users {
                                                     user_ids.push(user.borrow().id.clone());
@@ -2935,13 +3106,13 @@ pub fn init(
                                                     ready: 0,
                                                     notify: false,
                                                     queue_cnt: 1,
-                                                    mode: y.borrow().mode.clone(),
+                                                    mode: x.mode.clone(),
                                                 };
                                                 QueueSender.send(QueueData::UpdateRoom(data));
                                                 success = true;
                                                 if success {
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()),
-                                                        msg: format!(r#"{{"msg":"ok", "mode": "{}"}}"#, y.borrow().mode.clone())};
+                                                        msg: format!(r#"{{"msg":"ok", "mode": "{}"}}"#, x.mode.clone())};
                                                 } else {
                                                     mqttmsg = MqttMsg{topic:format!("room/{}/res/start_queue", y.borrow().master.clone()),
                                                         msg: format!(r#"{{"msg":"fail"}}"#)}
@@ -2986,13 +3157,10 @@ pub fn init(
                                     }
                                 },
                                 RoomEventData::CancelQueue(x) => {
-                                    println!("cancel queue");
-                                    println!("{:?}", x);
                                     isUpdateCount = true;
                                     let mut success = false;
                                     let u = TotalUsers.get(&x.id);
                                     if let Some(u) = u {
-                                        println!("{}", u.borrow().rid.clone());
                                         //let r = QueueRoom.remove(&u.borrow().rid);
                                         let g = ReadyGroups.get(&u.borrow().gid);
                                         if let Some(g) = g {
