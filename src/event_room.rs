@@ -71,6 +71,49 @@ pub struct CheckRoomData {
     pub id: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct SerialNumberData {
+    pub steamID: String,
+    pub serialNumber: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct AddGoodData {
+    pub name: String,
+    pub kind: String,
+    pub price: u64,
+    pub password: String,
+    pub quantity: u64,
+    pub description: String,
+    pub imageURL: String,
+    pub snList: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct GoodData {
+    pub id: u64,
+    pub name: String,
+    pub kind: String,
+    pub price: i64,
+    pub quantity: u64,
+    pub description: String,
+    pub imageURL: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct BuyGoodResData {
+    pub steamID: String,
+    pub goodData: GoodData,
+    pub sn: String,
+    pub balance: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct BuyGoodData {
+    pub steamID: String,
+    pub id: u64,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct JoinRoomCell {
     pub room: String,
@@ -346,6 +389,7 @@ pub enum RoomEventData {
     NGGameChooseHero(BTreeMap<u64, Vec<u64>>),
     Join(JoinRoomData),
     CheckRoom(CheckRoomData),
+    BuyGood(BuyGoodData),
     Reject(RejectRoomData),
     Jump(JumpData),
     CheckRestriction(CheckRestrctionData),
@@ -635,7 +679,7 @@ fn user_score(
     conn: &mut mysql::PooledConn,
     mode: String,
     isWin: bool,
-    raindrop: u64,
+    raindrop: i64,
 ) -> Result<(), Error> {
     if mode == "ng" {
         info!("user: {}, ng: {} + {}, raindrop: {} + {}, line: {}",u.borrow().id, u.borrow().ng, value, u.borrow().raindrop, raindrop, line!());
@@ -782,7 +826,7 @@ fn settlement_score(
     // println!("win : {:?}, lose : {:?}", win_score, lose_score);
     let elo = EloRank { k: 40.0 };
     let (rw, rl) = elo.compute_elo_team(&win_score, &lose_score);
-    let mut raindrop: u64 = 20 + 2 * time / 60;
+    let mut raindrop: i64 = (20 + 2 * time / 60) as i64;
     if time > 3000 {
         raindrop = 20 + 2 * 3000 / 60;
     }
@@ -2724,6 +2768,53 @@ pub fn init(
                                         }
                                     }
                                 },
+                                RoomEventData::BuyGood(x) => {
+                                    if let Some(u) = TotalUsers.get(&x.steamID) {
+                                        let mut buyGoodResData: BuyGoodResData = BuyGoodResData::default();
+                                        let mut sql = format!("select * from Goods where id = {};", x.id);
+                                        let qres: mysql::QueryResult = conn.query(sql.clone())?;
+                                        buyGoodResData.goodData = Default::default();
+                                        for row in qres {
+                                            let ea = row?.clone();
+                                            buyGoodResData.goodData.id = mysql::from_value(ea.get("id").unwrap());
+                                            buyGoodResData.goodData.name = mysql::from_value(ea.get("name").unwrap());
+                                            buyGoodResData.goodData.kind = mysql::from_value(ea.get("kind").unwrap());
+                                            buyGoodResData.goodData.price = mysql::from_value(ea.get("price").unwrap());
+                                            buyGoodResData.goodData.quantity = mysql::from_value(ea.get("quantity").unwrap());
+                                            buyGoodResData.goodData.description = mysql::from_value(ea.get("description").unwrap());
+                                            buyGoodResData.goodData.imageURL = mysql::from_value(ea.get("imageURL").unwrap());
+                                        }
+                                        buyGoodResData.balance = u.borrow().raindrop - buyGoodResData.goodData.price;
+                                        if buyGoodResData.balance >= 0 {
+                                            u.borrow_mut().raindrop = buyGoodResData.balance;
+                                            let mut sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn) values ('{}', '{}', '{}', '{}', '{}', '')",
+                                                    buyGoodResData.steamID, buyGoodResData.goodData.name, buyGoodResData.goodData.kind, buyGoodResData.goodData.imageURL, buyGoodResData.goodData.description);
+                                            if buyGoodResData.goodData.kind == "序號" {
+                                                sql = format!(
+                                                    "select sn from Serial_numbers where good_id = {} and sold = false limit 1;",
+                                                    x.id
+                                                );
+                                                let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                                for row in qres2 {
+                                                    let ea = row?.clone();
+                                                    buyGoodResData.sn = mysql::from_value(ea.get("sn").unwrap());
+                                                }
+                                                sql = format!(
+                                                    "UPDATE Serial_numbers SET sold=true WHERE sn='{}'",
+                                                    buyGoodResData.sn
+                                                );
+                                                conn.query(sql.clone())?;
+                                                sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn) values ('{}', '{}', '{}', '{}', '{}', '{}')",
+                                                    buyGoodResData.steamID, buyGoodResData.goodData.name, buyGoodResData.goodData.kind, buyGoodResData.goodData.imageURL, buyGoodResData.goodData.description, buyGoodResData.sn);
+                                            }
+                                            sql = format!("update user set raindrop = {} where id='{}'", buyGoodResData.balance, x.steamID);
+                                            conn.query(sql.clone())?;
+                                            conn.query(sql2.clone())?;
+                                        }
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/buy_good", x.steamID.clone()),
+                                            msg: format!(r#"{{"balance":{},"msg":"Ok"}}"#, buyGoodResData.balance)};
+                                    }
+                                },
                                 RoomEventData::Reject(x) => {
                                     if TotalUsers.contains_key(&x.id) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()),
@@ -3652,6 +3743,12 @@ pub fn join(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result:
 pub fn check_room(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     let data: CheckRoomData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::CheckRoom(data));
+    Ok(())
+}
+
+pub fn buy_good(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: BuyGoodData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::BuyGood(data));
     Ok(())
 }
 

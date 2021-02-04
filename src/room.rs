@@ -21,7 +21,7 @@ pub struct User {
     pub online: bool,
     pub start_prestart: bool,
     pub start_get: bool,
-    pub raindrop: u64,
+    pub raindrop: i64,
     pub first_win: bool,
     pub isLocked: bool,
     pub isLoading: bool,
