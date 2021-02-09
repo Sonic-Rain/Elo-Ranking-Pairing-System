@@ -114,6 +114,11 @@ pub struct BuyGoodData {
     pub id: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct GetGoodData {
+    pub steamID: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct JoinRoomCell {
     pub room: String,
@@ -390,6 +395,7 @@ pub enum RoomEventData {
     Join(JoinRoomData),
     CheckRoom(CheckRoomData),
     BuyGood(BuyGoodData),
+    GetGood(GetGoodData),
     Reject(RejectRoomData),
     Jump(JumpData),
     CheckRestriction(CheckRestrctionData),
@@ -2815,6 +2821,28 @@ pub fn init(
                                             msg: format!(r#"{{"balance":{},"msg":"Ok"}}"#, buyGoodResData.balance)};
                                     }
                                 },
+                                RoomEventData::GetGood(x) => {
+                                    if let Some(u) = TotalUsers.get(&x.steamID) {
+                                        let sql = format!("select *, (select count(*) from Serial_numbers as b where a.id=b.good_id and b.sold = false) as count from Goods as a;");
+                                        println!("{}", sql);
+                                        let qres: mysql::QueryResult = conn.query(sql.clone())?;
+                                        let mut goods: Vec<GoodData> = Vec::new();
+                                        for row in qres {
+                                            let ea = row?.clone();
+                                            let mut goodData: GoodData = Default::default();
+                                            goodData.id = mysql::from_value(ea.get("id").unwrap());
+                                            goodData.name = mysql::from_value(ea.get("name").unwrap());
+                                            goodData.kind = mysql::from_value(ea.get("kind").unwrap());
+                                            goodData.price = mysql::from_value(ea.get("price").unwrap());
+                                            goodData.quantity = mysql::from_value(ea.get("count").unwrap());
+                                            goodData.description = mysql::from_value(ea.get("description").unwrap());
+                                            goodData.imageURL = mysql::from_value(ea.get("imageURL").unwrap());
+                                            goods.push(goodData);
+                                        }
+                                        mqttmsg = MqttMsg{topic:format!("member/{}/res/get_good", x.steamID.clone()),
+                                            msg: format!("{}", serde_json::to_string(&goods)?)};
+                                    }
+                                },
                                 RoomEventData::Reject(x) => {
                                     if TotalUsers.contains_key(&x.id) {
                                         mqttmsg = MqttMsg{topic:format!("room/{}/res/reject", x.room.clone()),
@@ -3749,6 +3777,12 @@ pub fn check_room(id: String, v: Value, sender: Sender<RoomEventData>) -> std::r
 pub fn buy_good(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     let data: BuyGoodData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::BuyGood(data));
+    Ok(())
+}
+
+pub fn get_good(id: String, v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: GetGoodData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::GetGood(data));
     Ok(())
 }
 
