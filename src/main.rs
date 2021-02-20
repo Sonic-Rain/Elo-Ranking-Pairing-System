@@ -126,6 +126,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("member/+/send/check_in_game", QoS::AtMostOnce)?;//doc check_state
     mqtt_client.subscribe("member/+/send/leave_game", QoS::AtMostOnce)?;//doc game
     mqtt_client.subscribe("member/+/send/get_game_historys", QoS::AtMostOnce)?;//doc get_game_historys
+    mqtt_client.subscribe("member/+/send/get_buy_historys", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/binding", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/check_binding", QoS::AtMostOnce)?;
     mqtt_client.subscribe("member/+/send/get_leaderboard", QoS::AtMostOnce)?;
@@ -249,6 +250,7 @@ fn main() -> std::result::Result<(), Error> {
     let recheckInGame = Regex::new(r"\w+/(\w+)/send/check_in_game")?;
     let releave_game = Regex::new(r"\w+/(\w+)/send/leave_game")?;
     let regetGameHistorys = Regex::new(r"\w+/(\w+)/send/get_game_historys")?;
+    let regetBuyHistorys = Regex::new(r"\w+/(\w+)/send/get_buy_historys")?;
     let rebinding = Regex::new(r"\w+/(\w+)/send/binding")?;
     let recheckBinding = Regex::new(r"\w+/(\w+)/send/check_binding")?;
     let regetLeaderboard = Regex::new(r"\w+/(\w+)/send/get_leaderboard")?;
@@ -504,6 +506,11 @@ fn main() -> std::result::Result<(), Error> {
                                     let cap = regetGameHistorys.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
                                     event_member::GetGameHistorys(userid, v, pool.clone(), tx.clone())?;
+                                } else if regetBuyHistorys.is_match(topic_name) {
+                                    info!("regetBuyHistoryselse: json: {:?}", v);
+                                    let cap = regetBuyHistorys.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    event_member::GetBuyHistorys(userid, v, pool.clone(), tx.clone())?;
                                 } else if rebinding.is_match(topic_name) {
                                     info!("rebinding: json: {:?}", v);
                                     let cap = rebinding.captures(topic_name).unwrap();

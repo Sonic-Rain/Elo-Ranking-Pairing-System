@@ -25,6 +25,8 @@ pub struct User {
     pub first_win: bool,
     pub isLocked: bool,
     pub isLoading: bool,
+    pub email: String,
+    pub phone: String,
 }
 
 #[derive(Clone, Debug)]

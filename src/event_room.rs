@@ -1981,6 +1981,8 @@ pub fn init(
                 at: mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?,
                 raindrop: mysql::from_value_opt(a.get("raindrop").ok_or(Error::from(core::fmt::Error))?)?,
                 first_win: mysql::from_value_opt(a.get("first_win").ok_or(Error::from(core::fmt::Error))?)?,
+                email: mysql::from_value_opt(a.get("email").ok_or(Error::from(core::fmt::Error))?)?,
+                phone: mysql::from_value_opt(a.get("phone").ok_or(Error::from(core::fmt::Error))?)?,
                 ..Default::default()
             };
             println!("{:?}, line: {}", user, line!());
@@ -2780,6 +2782,7 @@ pub fn init(
                                         let mut sql = format!("select * from Goods where id = {};", x.id);
                                         let qres: mysql::QueryResult = conn.query(sql.clone())?;
                                         buyGoodResData.goodData = Default::default();
+                                        buyGoodResData.steamID = x.steamID.clone();
                                         for row in qres {
                                             let ea = row?.clone();
                                             buyGoodResData.goodData.id = mysql::from_value(ea.get("id").unwrap());
@@ -2793,7 +2796,7 @@ pub fn init(
                                         buyGoodResData.balance = u.borrow().raindrop - buyGoodResData.goodData.price;
                                         if buyGoodResData.balance >= 0 {
                                             u.borrow_mut().raindrop = buyGoodResData.balance;
-                                            let mut sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn) values ('{}', '{}', '{}', '{}', '{}', '')",
+                                            let mut sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn, date) values ('{}', '{}', '{}', '{}', '{}', '', now())",
                                                     buyGoodResData.steamID, buyGoodResData.goodData.name, buyGoodResData.goodData.kind, buyGoodResData.goodData.imageURL, buyGoodResData.goodData.description);
                                             if buyGoodResData.goodData.kind == "序號" {
                                                 sql = format!(
@@ -2810,7 +2813,7 @@ pub fn init(
                                                     buyGoodResData.sn
                                                 );
                                                 conn.query(sql.clone())?;
-                                                sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn) values ('{}', '{}', '{}', '{}', '{}', '{}')",
+                                                sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn, date) values ('{}', '{}', '{}', '{}', '{}', '{}', now())",
                                                     buyGoodResData.steamID, buyGoodResData.goodData.name, buyGoodResData.goodData.kind, buyGoodResData.goodData.imageURL, buyGoodResData.goodData.description, buyGoodResData.sn);
                                             }
                                             sql = format!("update user set raindrop = {} where id='{}'", buyGoodResData.balance, x.steamID);
@@ -3175,7 +3178,9 @@ pub fn init(
                                     game_id += 1;
                                     fg.set_game_id(game_id);
                                     fg.set_mode(x.mode);
-                                    info!("game_id: {}, game_mode: {}, game_player: {:?} line: {}", fg.game_id, fg.mode, fg.user_names, line!());
+                                    fg.ready_cnt = 0.0;
+                                    info!("PreStartGroups : {:?}, line: {}", fg, line!());
+                                    // info!("game_id: {}, game_mode: {}, game_player: {:?} line: {}", fg.game_id, fg.mode, fg.user_names, line!());
                                     PreStartGroups.insert(game_id, Rc::new(RefCell::new(fg)));
 
                                 },
@@ -3318,9 +3323,16 @@ pub fn init(
                                                 hero = mysql::from_value_opt(a.get("hero").ok_or(Error::from(core::fmt::Error))?)?;
                                                 break;
                                             }
+                                            let sql = format!(r#"SELECT * FROM user where id='{}';"#, u2.borrow().id.clone());
+                                            let qres2: mysql::QueryResult = conn.query(sql.clone())?;
+                                            for row in qres2 {
+                                                let a = row?.clone();
+                                                u2.borrow_mut().phone = mysql::from_value_opt(a.get("phone").ok_or(Error::from(core::fmt::Error))?)?;
+                                                u2.borrow_mut().email = mysql::from_value_opt(a.get("email").ok_or(Error::from(core::fmt::Error))?)?;
+                                            }
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop": {}, "hero":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().raindrop, hero)};
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop": {}, "hero":"{}", "phone":"{}", "email":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().raindrop, hero, u2.borrow().phone, u2.borrow().email)};
                                         }
                                     }
                                     else {

@@ -53,6 +53,11 @@ struct GetGameHistorysData {
 }
 
 #[derive(Serialize, Deserialize)]
+struct GetBuyHistorysData {
+    id: String,
+}
+
+#[derive(Serialize, Deserialize)]
 struct BindingData {
     id: String,
     steam_id: String,
@@ -80,6 +85,17 @@ struct GameHistoryData {
     playTime: u16,
     date: String,
     items: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct BuyHistoryData {
+    steamId: String,
+    name: String,
+    kind: String,
+    imageURL: String,
+    description: String,
+    sn: String,
+    date: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -266,6 +282,41 @@ pub fn QueryBlackList(
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/query_black_list", id),
         msg: format!(r#"{{"list":{}}}"#, serde_json::to_value(list)?),
+    })?;
+    Ok(())
+}
+
+pub fn GetBuyHistorys(
+    id: String,
+    v: Value,
+    pool: mysql::Pool,
+    msgtx: Sender<MqttMsg>,
+) -> std::result::Result<(), Error> {
+    let data: GetBuyHistorysData = serde_json::from_value(v)?;
+    let mut conn = pool.get_conn()?;
+    let mut sql = format!(
+        r#"select * from Items where steam_id='{}' order by date DESC;"#,
+        id
+    );
+    println!("{}",sql);
+    let qres: mysql::QueryResult = conn.query(sql.clone())?;
+    let mut buyHistorysData: Vec<BuyHistoryData> = Vec::new();
+    for row in qres {
+        let a = row?.clone();
+        let buyHistory = BuyHistoryData {
+            steamId: mysql::from_value_opt(a.get("steam_id").ok_or(Error::from(core::fmt::Error))?)?,
+            name: mysql::from_value_opt(a.get("name").ok_or(Error::from(core::fmt::Error))?)?,
+            kind: mysql::from_value_opt(a.get("kind").ok_or(Error::from(core::fmt::Error))?)?,
+            imageURL: mysql::from_value_opt(a.get("imageURL").ok_or(Error::from(core::fmt::Error))?)?,
+            description: mysql::from_value_opt(a.get("description").ok_or(Error::from(core::fmt::Error))?)?,
+            sn: mysql::from_value_opt(a.get("sn").ok_or(Error::from(core::fmt::Error))?)?,
+            date: mysql::from_value_opt(a.get("date").ok_or(Error::from(core::fmt::Error))?)?,
+        };
+        buyHistorysData.push(buyHistory);
+    }
+    msgtx.try_send(MqttMsg {
+        topic: format!("member/{}/res/get_buy_historys", id),
+        msg: serde_json::to_string(&buyHistorysData)?,
     })?;
     Ok(())
 }
