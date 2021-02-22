@@ -2088,6 +2088,7 @@ pub fn init(
                                                 for user in &r.borrow().users {
                                                     if user.borrow().start_get == false {
                                                         isUpdateCount = true;
+                                                        info!("group out of time: {:?}", group);
                                                         tx2.try_send(RoomEventData::PreStart(PreStartData{room: user.borrow().rid.to_string(), id: user.borrow().id.clone(), accept: false}));
                                                     }
                                                 }
@@ -3386,6 +3387,7 @@ pub fn init(
                                         let rid = u.borrow().rid;
                                         let r = TotalRoom.get(&u.borrow().rid);
                                         if let Some(r) = r {
+                                            tx2.try_send(RoomEventData::PreStart(PreStartData{room: u.borrow().rid.to_string(), id: u.borrow().id.clone(), accept: false}));
                                             let m = r.borrow().master.clone();
                                             r.borrow_mut().rm_user(&x.id);
                                             if r.borrow().users.len() > 0 {
