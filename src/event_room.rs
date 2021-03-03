@@ -3326,6 +3326,10 @@ pub fn init(
                                             let qres2: mysql::QueryResult = conn.query(sql.clone())?;
                                             for row in qres2 {
                                                 let a = row?.clone();
+                                                u2.borrow_mut().ng = mysql::from_value_opt(a.get("ng").ok_or(Error::from(core::fmt::Error))?)?;
+                                                u2.borrow_mut().rk = mysql::from_value_opt(a.get("rk").ok_or(Error::from(core::fmt::Error))?)?;
+                                                u2.borrow_mut().at = mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?;
+                                                u2.borrow_mut().raindrop = mysql::from_value_opt(a.get("raindrop").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().phone = mysql::from_value_opt(a.get("phone").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().email = mysql::from_value_opt(a.get("email").ok_or(Error::from(core::fmt::Error))?)?;
                                             }
