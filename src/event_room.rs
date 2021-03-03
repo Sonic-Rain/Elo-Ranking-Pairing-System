@@ -1996,15 +1996,9 @@ pub fn init(
         loop {
             select! {
                 recv(update200ms) -> _ => {
-                    //show(start.elapsed());
-                    // update prestart groups
                     let mut rm_ids: Vec<u64> = vec![];
                     let mut start_cnt: u16 = 0;
                     for (id, group) in &mut PreStartGroups {
-                        //if start_cnt >= 10 {
-                        //    thread::sleep(Duration::from_millis(1000));
-                        //    break;
-                        //}
                         let res = group.borrow().check_prestart();
                         match res {
                             PrestartStatus::Ready => {
@@ -2089,6 +2083,7 @@ pub fn init(
                                                     if user.borrow().start_get == false {
                                                         isUpdateCount = true;
                                                         info!("group out of time: {:?}", group);
+                                                        rm_ids.push(*id);
                                                         tx2.try_send(RoomEventData::PreStart(PreStartData{room: user.borrow().rid.to_string(), id: user.borrow().id.clone(), accept: false}));
                                                     }
                                                 }
