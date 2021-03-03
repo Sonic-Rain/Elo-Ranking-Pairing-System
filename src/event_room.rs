@@ -363,6 +363,7 @@ pub struct LoadingData {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UpdateQueueData {
+    pub ng_solo: i32,
     pub ng: i32,
     pub rk: i32,
     pub at: i32,
@@ -1736,11 +1737,12 @@ pub fn HandleQueueRequest(
                     // AT
                 }
                 recv(update5000ms) -> _ => {
+                    let mut ng_solo_cnt: i32 = 0;
                     let mut ng_cnt: i32 = 0;
                     let mut rk_cnt: i32 = 0;
                     let mut at_cnt: i32 = 0;
                     for (k, v) in &mut SoloNGQueueRoom {
-                        ng_cnt += v.borrow().user_len as i32;
+                        ng_solo_cnt += v.borrow().user_len as i32;
                     }
                     for (k, v) in &mut NGQueueRoom {
                         ng_cnt += v.borrow().user_len as i32;
@@ -1751,10 +1753,7 @@ pub fn HandleQueueRequest(
                     for (k, v) in &ATQueueRoom {
                         at_cnt += v.borrow().user_len as i32;
                     }
-                    // info!("ng queue members: {}", ng_cnt);
-                    // info!("rk queue members: {}", rk_cnt);
-                    // info!("at queue members: {}", at_cnt);
-                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng: ng_cnt, rk: rk_cnt, at: at_cnt}));
+                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng_solo: ng_solo_cnt, ng: ng_cnt, rk: rk_cnt, at: at_cnt}));
                 }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
@@ -1957,9 +1956,11 @@ pub fn init(
         let mut ng: i16 = 0;
         let mut rk: i16 = 0;
         let mut name: String = "".to_owned();
+        let mut current_ng_solo_queue_cnt: i32 = 0;
         let mut current_ng_queue_cnt: i32 = 0;
         let mut current_rk_queue_cnt: i32 = 0;
         let mut current_at_queue_cnt: i32 = 0;
+        let mut ng_solo_queue_cnt: i32 = 0;
         let mut ng_queue_cnt: i32 = 0;
         let mut rk_queue_cnt: i32 = 0;
         let mut at_queue_cnt: i32 = 0;
@@ -2384,6 +2385,7 @@ pub fn init(
                     if isUpdateCount || online_cnt != current_online_cnt || current_ng_game_cnt != ng_cnt ||
                     current_rk_game_cnt != rk_cnt ||
                     current_at_game_cnt != at_cnt ||
+                    current_ng_solo_queue_cnt != ng_solo_queue_cnt ||
                     current_ng_queue_cnt != ng_queue_cnt ||
                     current_rk_queue_cnt != rk_queue_cnt ||
                     current_at_game_cnt != at_queue_cnt{
@@ -2392,11 +2394,12 @@ pub fn init(
                         current_ng_game_cnt = ng_cnt;
                         current_rk_game_cnt = rk_cnt;
                         current_at_game_cnt = at_cnt;
+                        current_ng_solo_queue_cnt = ng_solo_queue_cnt;
                         current_ng_queue_cnt = ng_queue_cnt;
                         current_rk_queue_cnt = rk_queue_cnt;
                         current_at_game_cnt = at_queue_cnt;                        
                         msgtx.try_send(MqttMsg{topic:format!("server/res/online_count"),
-                            msg: format!(r#"{{"count":{}, "ngGameCount":{}, "rkGameCount":{}, "atGameCount":{}, "ngQueueCount":{}, "rkQueueCount":{}, "atQueueCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt, ng_queue_cnt, rk_queue_cnt, at_queue_cnt)})?;   
+                            msg: format!(r#"{{"count":{}, "ngGameCount":{}, "rkGameCount":{}, "atGameCount":{},"ngSoloQueueCount":{} ,"ngQueueCount":{}, "rkQueueCount":{}, "atQueueCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt,ng_solo_queue_cnt, ng_queue_cnt, rk_queue_cnt, at_queue_cnt)})?;   
                     }
                 }
                 recv(rx) -> d => {
@@ -3650,6 +3653,7 @@ pub fn init(
                                             , hero11, hero12, hero13, hero14, hero15, hero16, hero17, hero18, hero19, hero20)};
                                 },
                                 RoomEventData::UpdateQueue(x) => {
+                                    ng_solo_queue_cnt = x.ng_solo;
                                     ng_queue_cnt = x.ng;
                                     rk_queue_cnt = x.rk;
                                     at_queue_cnt = x.at;
