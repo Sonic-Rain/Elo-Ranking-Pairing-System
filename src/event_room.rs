@@ -2084,10 +2084,18 @@ pub fn init(
                                                     if user.borrow().start_get == false {
                                                         isUpdateCount = true;
                                                         info!("group out of time: {:?}", group);
-                                                        rm_ids.push(*id);
                                                         tx2.try_send(RoomEventData::PreStart(PreStartData{room: user.borrow().rid.to_string(), id: user.borrow().id.clone(), accept: false}));
+                                                        rm_ids.push(*id);
                                                     }
                                                 }
+                                            }
+                                        }
+                                        for r in &group.borrow().room_names {
+                                            if !isBackup || (isBackup && isServerLive == false) {
+                                                msgtx.try_send(MqttMsg{topic:format!("room/{}/res/prestart", r),
+                                                    msg: format!(r#"{{"msg":"stop queue"}}"#)})?;
+                                                LossSend.push(MqttMsg{topic:format!("room/{}/res/prestart", r),
+                                                    msg: format!(r#"{{"msg":"stop queue"}}"#)});
                                             }
                                         }
                                     }
