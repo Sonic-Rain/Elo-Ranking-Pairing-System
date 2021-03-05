@@ -983,15 +983,15 @@ fn canGroupNG(
         if readyGroup.avg_ng == 0
             || Difference <= NG_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
         {
-            let isBlack = check_is_black(
-                queueRoom.borrow().user_ids.clone(),
-                readyGroup.user_ids.clone(),
-                conn,
-            )?;
-            if (isBlack) {
-                res = false;
-                return Ok(res);
-            }
+            // let isBlack = check_is_black(
+            //     queueRoom.borrow().user_ids.clone(),
+            //     readyGroup.user_ids.clone(),
+            //     conn,
+            // )?;
+            // if (isBlack) {
+            //     res = false;
+            //     return Ok(res);
+            // }
             // info!(
             //     "group user_len : {}, room user_len : {}",
             //     readyGroup.user_len,
@@ -1042,15 +1042,15 @@ fn canGroupRK(
         if readyGroup.avg_rk == 0
             || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
         {
-            let isBlack = check_is_black(
-                queueRoom.borrow().user_ids.clone(),
-                readyGroup.user_ids.clone(),
-                conn,
-            )?;
-            if (isBlack) {
-                res = false;
-                return Ok(res);
-            }
+            // let isBlack = check_is_black(
+            //     queueRoom.borrow().user_ids.clone(),
+            //     readyGroup.user_ids.clone(),
+            //     conn,
+            // )?;
+            // if (isBlack) {
+            //     res = false;
+            //     return Ok(res);
+            // }
             // info!(
             //     "group user_len : {}, room user_len : {}",
             //     readyGroup.user_len,
@@ -1096,15 +1096,15 @@ fn canGroupAT(
         if readyGroup.avg_at == 0
             || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
         {
-            let isBlack = check_is_black(
-                queueRoom.borrow().user_ids.clone(),
-                readyGroup.user_ids.clone(),
-                conn,
-            )?;
-            if (isBlack) {
-                res = false;
-                return Ok(res);
-            }
+            // let isBlack = check_is_black(
+            //     queueRoom.borrow().user_ids.clone(),
+            //     readyGroup.user_ids.clone(),
+            //     conn,
+            // )?;
+            // if (isBlack) {
+            //     res = false;
+            //     return Ok(res);
+            // }
             // info!(
             //     "group user_len : {}, room user_len : {}",
             //     readyGroup.user_len,
