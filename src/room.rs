@@ -268,6 +268,19 @@ impl FightGroup {
         }
         res
     }
+
+    pub fn get_users_ban_hero(&self) -> Vec<String> {
+        let mut res: Vec<String> = vec![];
+        for r in &self.rooms {
+            for u in &r.borrow().users {
+                res.push(
+                    u.borrow().ban_hero.clone(),
+                );
+            }
+        }
+        res
+    }
+
     pub fn user_cancel(&mut self, id: &String) -> bool {
         for c in &mut self.checks {
             if c.id == *id {

@@ -3150,24 +3150,25 @@ pub fn init(
                                 RoomEventData::UpdateGame(x) => {
                                     println!("Update Game!");
                                     println!("{:?}", x);
-                                    group_id += 1;
                                     let mut fg: FightGame = Default::default();
-                                    let mut g: FightGroup = Default::default();
+                                    let mut g: FightGroup;
                                     for r in &x.rid {
+                                        group_id += 1;
+                                        g = Default::default();
                                         for rid in r {
                                             let room = TotalRoom.get(&rid);
                                             if let Some(room) = room {
                                                 g.add_room(Rc::clone(&room));
                                             }
                                         }
-                                    }
-                                    g.prestart();
-                                    g.set_group_id(group_id);
-                                    g.game_status = 1;
-                                    ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
-                                    let mut rg = ReadyGroups.get(&group_id);
-                                    if let Some(rg) = rg {
-                                        fg.teams.push(Rc::clone(rg));
+                                        g.prestart();
+                                        g.set_group_id(group_id);
+                                        g.game_status = 1;
+                                        ReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                        let mut rg = ReadyGroups.get(&group_id);
+                                        if let Some(rg) = rg {
+                                            fg.teams.push(Rc::clone(rg));
+                                        }
                                     }
                                     fg.update_names();
                                     for user_name in &fg.user_names {

@@ -1,11 +1,12 @@
-use crate::room::*;
 use crate::msg::*;
-use log::{error, info, trace, warn};
+use crate::room::*;
 use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
 use failure::Error;
+use log::{error, info, trace, warn};
 use serde_derive::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::Rc;
+use rand::{seq::IteratorRandom, thread_rng};
 
 pub const BUFFER: i16 = -5;
 pub const CHOOSE_HERO_TIME: i16 = 30;
@@ -23,15 +24,18 @@ pub struct NGGame {
     pub user_count: u16,
     pub winteam: i16,
     pub game_status: u16,
+    pub ban_time: i16,
     pub choose_time: i16,
     pub ready_to_start_time: i16,
     pub pick_status: u16,
     pub time: u64,
+    pub ban_heros: Vec<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
 pub enum NGGameStatus {
     Loading,
+    Ban,
     Pick,
     ReadyToStart,
     Gaming,
@@ -45,37 +49,47 @@ impl NGGame {
             res = NGGameStatus::Loading;
         }
         if self.game_status == 1 {
-            res = NGGameStatus::Pick;
+            res = NGGameStatus::Ban;
         }
         if self.game_status == 2 {
-            res = NGGameStatus::ReadyToStart;
+            res = NGGameStatus::Pick;
         }
         if self.game_status == 3 {
-            res = NGGameStatus::Gaming;
+            res = NGGameStatus::ReadyToStart;
         }
         if self.game_status == 4 {
+            res = NGGameStatus::Gaming;
+        }
+        if self.game_status == 5 {
             res = NGGameStatus::Finished;
-        } 
+        }
         res
     }
     pub fn next_status(&mut self) {
         let mut res = NGGameStatus::Loading;
         self.game_status += 1;
-        info!("NG game_id : {}, status: {}, line: {}", self.game_id.clone(), self.get_status_name(), line!());
-        if self.game_status == 0 {
-        }
+        info!(
+            "NG game_id : {}, status: {}, status_code: {}, line: {}",
+            self.game_id.clone(),
+            self.get_status_name(),
+            self.game_status,
+            line!()
+        );
+        if self.game_status == 0 {}
         if self.game_status == 1 {
-            self.choose_time = NG_CHOOSE_HERO_TIME;
+            self.ban_time = BAN_HERO_TIME;
             self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         }
         if self.game_status == 2 {
-            self.ready_to_start_time = READY_TO_START_TIME;
+            self.choose_time = NG_CHOOSE_HERO_TIME;
             self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         }
         if self.game_status == 3 {
+            self.ready_to_start_time = READY_TO_START_TIME;
+            self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         }
-        if self.game_status == 4 {
-        }
+        if self.game_status == 4 {}
+        if self.game_status == 5 {}
     }
     pub fn get_status_name(&mut self) -> String {
         let mut res = "loading";
@@ -83,17 +97,20 @@ impl NGGame {
             res = "loading"
         }
         if self.game_status == 1 {
-            res = "pick"
+            res = "ban"
         }
         if self.game_status == 2 {
-            res = "readyToStart";
+            res = "pick"
         }
         if self.game_status == 3 {
-            res = "gaming";
+            res = "readyToStart";
         }
         if self.game_status == 4 {
+            res = "gaming";
+        }
+        if self.game_status == 5 {
             res = "finished";
-        } 
+        }
         res.to_string()
     }
     pub fn check_loading(&mut self) -> bool {
@@ -114,6 +131,36 @@ impl NGGame {
         }
         res
     }
+    pub fn rollBanHero(&mut self) {
+        let mut result: Vec<Vec<String>> = Vec::new();
+        for team in &self.teams {
+            let mut heros: Vec<String> = Vec::new();
+            for hero in team.borrow_mut().get_users_ban_hero() {
+                if hero != "" {
+                    heros.push(hero);
+                }
+            }
+            let mut done: bool = false;
+            let mut team_ban: Vec<String> = Vec::new();
+            while !done {
+                let mut rng = thread_rng();
+                let mut hero: String = "".to_string();
+                match heros.iter().choose(&mut rng) {
+                    None => println!("no hero, line: {}", line!()),
+                    Some(h) => {
+                        team_ban.push(h.to_string());
+                        hero = h.to_string();
+                    },
+                }
+                heros.retain(|h| *h != hero);
+                if team_ban.len() == 2 || heros.len() == 0{
+                    done = true;
+                }
+            }
+            result.push(team_ban);
+        }
+        self.ban_heros = result;
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -131,6 +178,7 @@ pub struct RKGame {
     pub ready_to_start_time: i16,
     pub pick_status: u16,
     pub time: u64,
+    pub ban_heros: Vec<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -184,9 +232,13 @@ impl RKGame {
 
     pub fn next_status(&mut self) {
         self.game_status += 1;
-        info!("RK game_id : {}, status: {}, line: {}", self.game_id, self.game_status, line!());
-        if self.game_status == 0 {
-        }
+        info!(
+            "RK game_id : {}, status: {}, line: {}",
+            self.game_id,
+            self.game_status,
+            line!()
+        );
+        if self.game_status == 0 {}
         if self.game_status == 1 {
             self.ban_time = BAN_HERO_TIME;
             self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -219,10 +271,8 @@ impl RKGame {
             self.ready_to_start_time = READY_TO_START_TIME;
             self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         }
-        if self.game_status == 9 {
-        }
-        if self.game_status == 10 {
-        }
+        if self.game_status == 9 {}
+        if self.game_status == 10 {}
     }
     pub fn check_loading(&mut self) -> bool {
         let mut res = true;
@@ -242,6 +292,18 @@ impl RKGame {
         }
         res
     }
+    pub fn updateBanHeros(&mut self) {
+        let mut result: Vec<Vec<String>> = Vec::new();
+        for team in &self.teams {
+            let mut heros: Vec<String> = Vec::new();
+            for hero in team.borrow_mut().get_users_ban_hero() {
+                println!("{}", hero);
+                heros.push(hero);
+            }
+            result.push(heros);
+        }
+        self.ban_heros = result;
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -259,6 +321,7 @@ pub struct ATGame {
     pub ready_to_start_time: i16,
     pub pick_status: u16,
     pub time: u64,
+    pub ban_heros: Vec<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -324,7 +387,7 @@ impl ATGame {
         }
         if self.game_status == 16 {
             res = ATGameStatus::Ban;
-        }        
+        }
         if self.game_status == 17 {
             res = ATGameStatus::Pick;
         }
@@ -351,7 +414,12 @@ impl ATGame {
     pub fn next_status(&mut self) {
         // let mut res = ATGameStatus::Loading;
         self.game_status += 1;
-        info!("AT game_id : {}, status: {}, line: {}", self.game_id, self.game_status, line!());
+        info!(
+            "AT game_id : {}, status: {}, line: {}",
+            self.game_id,
+            self.game_status,
+            line!()
+        );
         if self.game_status == 0 {
             // res = ATGameStatus::Loading;
         }
@@ -434,7 +502,7 @@ impl ATGame {
             // res = ATGameStatus::Ban;
             self.ban_time = BAN_HERO_TIME;
             self.pick_position = vec![4];
-        }        
+        }
         if self.game_status == 17 {
             // res = ATGameStatus::Pick;
             self.choose_time = CHOOSE_HERO_TIME;
@@ -485,5 +553,17 @@ impl ATGame {
             }
         }
         res
+    }
+    pub fn updateBanHeros(&mut self) {
+        let mut result: Vec<Vec<String>> = Vec::new();
+        for team in &self.teams {
+            let mut heros: Vec<String> = Vec::new();
+            for hero in team.borrow_mut().get_users_ban_hero() {
+                println!("{}", hero);
+                heros.push(hero);
+            }
+            result.push(heros);
+        }
+        self.ban_heros = result;
     }
 }

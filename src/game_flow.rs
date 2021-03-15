@@ -58,17 +58,40 @@ pub fn process_ng(
                 group.borrow_mut().next_status();
             }
         }
+        NGGameStatus::Ban => {
+            if group.borrow_mut().ban_time == BAN_HERO_TIME {
+                send_ban_msg(
+                    &msgtx,
+                    *game_id,
+                    group.borrow().ban_time.clone(),
+                    group.borrow().pick_position.clone(),
+                );
+            }
+            group.borrow_mut().ban_time -= 1;
+            let mut isJump = false;
+            for index in &group.borrow().pick_position {
+                if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
+                    if u.borrow().ban_hero == "" {
+                        isJump = true;
+                    }
+                }
+            }
+            if group.borrow_mut().ban_time <= BUFFER || !isJump {
+                group.borrow_mut().rollBanHero();
+                group.borrow_mut().next_status();
+            }
+        }
         NGGameStatus::Pick => {
             if group.borrow_mut().choose_time == NG_CHOOSE_HERO_TIME {
-                msgtx.try_send(MqttMsg {
-                    topic: format!("game/{}/res/game_status", game_id),
-                    msg: format!(
-                        r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#,
-                        group.borrow().choose_time.clone(),
-                        group.borrow().pick_position.clone()
-                    ),
-                })?;
+                send_pick_msg(
+                    &msgtx,
+                    *game_id,
+                    group.borrow().choose_time.clone(),
+                    group.borrow().pick_position.clone(),
+                    group.borrow().ban_heros.clone(),
+                );
             }
+            group.borrow_mut().choose_time -= 1;
             let mut isJump = false;
             for index in &group.borrow().pick_position {
                 if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
@@ -85,18 +108,15 @@ pub fn process_ng(
                     }
                 }
             }
-            let isCheck = group.borrow_mut().check_lock();
-            if !isJump && (isCheck || group.borrow().choose_time <= BUFFER) {
+            if !isJump {
                 group.borrow_mut().next_status();
             }
-            group.borrow_mut().choose_time -= 1;
         }
         NGGameStatus::ReadyToStart => {
             if group.borrow().ready_to_start_time == READY_TO_START_TIME {
                 let mut isJump = false;
                 for index in &group.borrow().pick_position {
                     if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
-                        println!("id : {}, hero : {}", u.borrow().id.clone(), u.borrow().hero.clone());
                         if u.borrow().hero == "" {
                             let jumpData = JumpData {
                                 id: u.borrow().id.clone(),
@@ -127,28 +147,26 @@ pub fn process_ng(
                         chooseData: chooseData,
                     };
                     tx3.try_send(SqlData::UpdateGameInfo(sqlGameInfoData));
-                    msgtx.try_send(MqttMsg {
-                        topic: format!("game/{}/res/game_status", game_id),
-                        msg: format!(
-                            r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,
-                            &group.borrow().ready_to_start_time,
-                            &group.borrow().user_names
-                        ),
-                    })?;
+                    send_ready_to_start_msg(
+                        &msgtx,
+                        *game_id,
+                        group.borrow().ready_to_start_time,
+                        group.borrow().user_names.clone(),
+                    );
                 }
             }
             if group.borrow_mut().ready_to_start_time < 0 {
-                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                    msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &group.borrow().user_names)})?;
+                send_gaming_msg(&msgtx, *game_id, group.borrow().user_names.clone());
                 for id in &group.borrow().user_names {
-                    tx2.try_send(RoomEventData::GameStart(GameStartData{id: id.to_string()}));
+                    tx2.try_send(RoomEventData::GameStart(GameStartData {
+                        id: id.to_string(),
+                    }));
                 }
                 group.borrow_mut().next_status();
             }
             group.borrow_mut().ready_to_start_time -= 1;
         }
-        NGGameStatus::Gaming => {
-        }
+        NGGameStatus::Gaming => {}
         NGGameStatus::Finished => {}
     }
     Ok(())
@@ -172,14 +190,12 @@ pub fn process_rk(
         }
         RKGameStatus::Ban => {
             if group.borrow_mut().ban_time == BAN_HERO_TIME {
-                msgtx.try_send(MqttMsg {
-                    topic: format!("game/{}/res/game_status", game_id),
-                    msg: format!(
-                        r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#,
-                        group.borrow().ban_time.clone(),
-                        group.borrow().pick_position.clone()
-                    ),
-                })?;
+                send_ban_msg(
+                    &msgtx,
+                    *game_id,
+                    group.borrow().ban_time,
+                    group.borrow().pick_position.clone(),
+                );
             }
             group.borrow_mut().ban_time -= 1;
             let mut isJump = false;
@@ -190,20 +206,20 @@ pub fn process_rk(
                     }
                 }
             }
-            if group.borrow_mut().ban_time <= BUFFER || !isJump{
+            if group.borrow_mut().ban_time <= BUFFER || !isJump {
                 group.borrow_mut().next_status();
             }
         }
         RKGameStatus::Pick => {
+            group.borrow_mut().updateBanHeros();
             if group.borrow_mut().choose_time == CHOOSE_HERO_TIME {
-                msgtx.try_send(MqttMsg {
-                    topic: format!("game/{}/res/game_status", game_id),
-                    msg: format!(
-                        r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#,
-                        group.borrow().choose_time.clone(),
-                        group.borrow().pick_position.clone()
-                    ),
-                })?;
+                send_pick_msg(
+                    &msgtx,
+                    *game_id,
+                    group.borrow().choose_time.clone(),
+                    group.borrow().pick_position.clone(),
+                    group.borrow().ban_heros.clone(),
+                );
             }
             group.borrow_mut().choose_time -= 1;
             let mut isJump = false;
@@ -231,7 +247,6 @@ pub fn process_rk(
                 let mut isJump = false;
                 for index in &group.borrow().pick_position {
                     if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
-                        println!("id : {}, hero : {}", u.borrow().id.clone(), u.borrow().hero.clone());
                         if u.borrow().hero == "" {
                             let jumpData = JumpData {
                                 id: u.borrow().id.clone(),
@@ -262,21 +277,20 @@ pub fn process_rk(
                         chooseData: chooseData,
                     };
                     tx3.try_send(SqlData::UpdateGameInfo(sqlGameInfoData));
-                    msgtx.try_send(MqttMsg {
-                        topic: format!("game/{}/res/game_status", game_id),
-                        msg: format!(
-                            r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,
-                            &group.borrow().ready_to_start_time,
-                            &group.borrow().user_names
-                        ),
-                    })?;
+                    send_ready_to_start_msg(
+                        &msgtx,
+                        *game_id,
+                        group.borrow().ready_to_start_time,
+                        group.borrow().user_names.clone(),
+                    );
                 }
             }
             if group.borrow_mut().ready_to_start_time < 0 {
-                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                    msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &group.borrow().user_names)})?;
+                send_gaming_msg(&msgtx, *game_id, group.borrow().user_names.clone());
                 for id in &group.borrow().user_names {
-                    tx2.try_send(RoomEventData::GameStart(GameStartData{id: id.to_string()}));
+                    tx2.try_send(RoomEventData::GameStart(GameStartData {
+                        id: id.to_string(),
+                    }));
                 }
                 group.borrow_mut().next_status();
             }
@@ -306,14 +320,12 @@ pub fn process_at(
         }
         ATGameStatus::Ban => {
             if group.borrow_mut().ban_time == BAN_HERO_TIME {
-                msgtx.try_send(MqttMsg {
-                    topic: format!("game/{}/res/game_status", game_id),
-                    msg: format!(
-                        r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#,
-                        group.borrow().ban_time.clone(),
-                        group.borrow().pick_position.clone()
-                    ),
-                })?;
+                send_ban_msg(
+                    &msgtx,
+                    *game_id,
+                    group.borrow().ban_time.clone(),
+                    group.borrow().pick_position.clone(),
+                );
             }
             group.borrow_mut().ban_time -= 1;
             let mut isJump = false;
@@ -324,20 +336,20 @@ pub fn process_at(
                     }
                 }
             }
-            if group.borrow_mut().ban_time <= BUFFER || !isJump{
+            if group.borrow_mut().ban_time <= BUFFER || !isJump {
                 group.borrow_mut().next_status();
             }
         }
         ATGameStatus::Pick => {
+            group.borrow_mut().updateBanHeros();
             if group.borrow_mut().choose_time == CHOOSE_HERO_TIME {
-                msgtx.try_send(MqttMsg {
-                    topic: format!("game/{}/res/game_status", game_id),
-                    msg: format!(
-                        r#"{{"status":"pick", "time":{}, "picker":{:?}}}"#,
-                        group.borrow().choose_time.clone(),
-                        group.borrow().pick_position.clone()
-                    ),
-                })?;
+                send_pick_msg(
+                    &msgtx,
+                    *game_id,
+                    group.borrow().choose_time.clone(),
+                    group.borrow().pick_position.clone(),
+                    group.borrow().ban_heros.clone(),
+                );
             }
             group.borrow_mut().choose_time -= 1;
             let mut isJump = false;
@@ -365,7 +377,6 @@ pub fn process_at(
                 let mut isJump = false;
                 for index in &group.borrow().pick_position {
                     if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
-                        println!("id : {}, hero : {}", u.borrow().id.clone(), u.borrow().hero.clone());
                         if u.borrow().hero == "" {
                             let jumpData = JumpData {
                                 id: u.borrow().id.clone(),
@@ -396,21 +407,20 @@ pub fn process_at(
                         chooseData: chooseData,
                     };
                     tx3.try_send(SqlData::UpdateGameInfo(sqlGameInfoData));
-                    msgtx.try_send(MqttMsg {
-                        topic: format!("game/{}/res/game_status", game_id),
-                        msg: format!(
-                            r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,
-                            &group.borrow().ready_to_start_time,
-                            &group.borrow().user_names
-                        ),
-                    })?;
+                    send_ready_to_start_msg(
+                        &msgtx,
+                        *game_id,
+                        group.borrow().ready_to_start_time.clone(),
+                        group.borrow().user_names.clone(),
+                    );
                 }
             }
             if group.borrow_mut().ready_to_start_time < 0 {
-                msgtx.try_send(MqttMsg{topic:format!("game/{}/res/game_status", game_id),
-                    msg: format!(r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,game_id, &group.borrow().user_names)})?;
+                send_gaming_msg(&msgtx, *game_id, group.borrow().user_names.clone());
                 for id in &group.borrow().user_names {
-                    tx2.try_send(RoomEventData::GameStart(GameStartData{id: id.to_string()}));
+                    tx2.try_send(RoomEventData::GameStart(GameStartData {
+                        id: id.to_string(),
+                    }));
                 }
                 group.borrow_mut().next_status();
             }
@@ -419,5 +429,69 @@ pub fn process_at(
         ATGameStatus::Gaming => {}
         ATGameStatus::Finished => {}
     }
+    Ok(())
+}
+
+fn send_ban_msg(
+    msgtx: &Sender<MqttMsg>,
+    game_id: u64,
+    ban_time: i16,
+    pick_position: Vec<usize>,
+) -> Result<(), Error> {
+    msgtx.try_send(MqttMsg {
+        topic: format!("game/{}/res/game_status", game_id),
+        msg: format!(
+            r#"{{"status":"ban", "time":{}, "picker":{:?}}}"#,
+            ban_time, pick_position,
+        ),
+    })?;
+    Ok(())
+}
+
+fn send_pick_msg(
+    msgtx: &Sender<MqttMsg>,
+    game_id: u64,
+    pick_time: i16,
+    pick_position: Vec<usize>,
+    ban_heros: Vec<Vec<String>>,
+) -> Result<(), Error> {
+    msgtx.try_send(MqttMsg {
+        topic: format!("game/{}/res/game_status", game_id),
+        msg: format!(
+            r#"{{"status":"pick", "time":{}, "picker":{:?}, "ban":{:?}}}"#,
+            pick_time, pick_position, ban_heros
+        ),
+    })?;
+    Ok(())
+}
+
+fn send_ready_to_start_msg(
+    msgtx: &Sender<MqttMsg>,
+    game_id: u64,
+    ready_to_start_time: i16,
+    user_names: Vec<String>,
+) -> Result<(), Error> {
+    msgtx.try_send(MqttMsg {
+        topic: format!("game/{}/res/game_status", game_id),
+        msg: format!(
+            r#"{{"status":"readyToStart", "time": {}, "player":{:?}}}"#,
+            ready_to_start_time, user_names,
+        ),
+    })?;
+    Ok(())
+}
+
+fn send_gaming_msg(
+    msgtx: &Sender<MqttMsg>,
+    game_id: u64,
+    user_names: Vec<String>,
+) -> Result<(), Error> {
+    msgtx.try_send(MqttMsg {
+        topic: format!("game/{}/res/game_status", game_id),
+        msg: format!(
+            r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,
+            game_id, user_names,
+        ),
+    })?;
     Ok(())
 }
