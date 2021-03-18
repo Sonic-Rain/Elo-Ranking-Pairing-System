@@ -763,12 +763,15 @@ fn user_score(
     msgtx.try_send(MqttMsg {
         topic: format!("member/{}/res/login", u.borrow().id),
         msg: format!(
-            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop":{} ,"hero":"{}"}}"#,
+            r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "aram":{}, "raindrop":{} ,"hero":"{}", "phone":"{}", "email":"{}"}}"#,
             u.borrow().ng,
             u.borrow().rk,
             u.borrow().at,
+            u.borrow().aram,
             u.borrow().raindrop,
             u.borrow().hero,
+            u.borrow().phone,
+            u.borrow().email,
         ),
     })?;
     let mut sql = format!(
@@ -3807,7 +3810,7 @@ pub fn init(
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "aram":{}, "raindrop": {}, "hero":""}}"#, 1200, 1200, 1200, 0, 1200)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "aram":{}, "raindrop": {}, "hero":"", "phone":"", "email":""}}"#, 1200, 1200, 1200, 0, 1200)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {

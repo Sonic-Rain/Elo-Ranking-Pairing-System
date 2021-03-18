@@ -485,24 +485,6 @@ pub fn process_aram(
                     }
                 }
                 if !isJump {
-                    let mut chooseData: Vec<UserChooseData> = vec![];
-                    let mut values = format!("values ({}, '{}'", game_id, mode);
-                    for user_id in &group.borrow().user_names {
-                        if let Some(u) = TotalUsers.get(user_id) {
-                            let data = UserChooseData {
-                                steam_id: user_id.to_string(),
-                                hero: u.borrow().hero.clone(),
-                                ban_hero: u.borrow().ban_hero.clone(),
-                            };
-                            chooseData.push(data);
-                        }
-                    }
-                    let sqlGameInfoData = SqlGameInfoData {
-                        game: group.borrow().game_id,
-                        mode: mode.to_string(),
-                        chooseData: chooseData,
-                    };
-                    tx3.try_send(SqlData::UpdateGameInfo(sqlGameInfoData));
                     send_ready_to_start_msg(
                         &msgtx,
                         *game_id,
@@ -518,6 +500,24 @@ pub fn process_aram(
                         id: id.to_string(),
                     }));
                 }
+                let mut chooseData: Vec<UserChooseData> = vec![];
+                let mut values = format!("values ({}, '{}'", game_id, mode);
+                for user_id in &group.borrow().user_names {
+                    if let Some(u) = TotalUsers.get(user_id) {
+                        let data = UserChooseData {
+                            steam_id: user_id.to_string(),
+                            hero: u.borrow().hero.clone(),
+                            ban_hero: u.borrow().ban_hero.clone(),
+                        };
+                        chooseData.push(data);
+                    }
+                }
+                let sqlGameInfoData = SqlGameInfoData {
+                    game: group.borrow().game_id,
+                    mode: mode.to_string(),
+                    chooseData: chooseData,
+                };
+                tx3.try_send(SqlData::UpdateGameInfo(sqlGameInfoData));
                 group.borrow_mut().next_status();
             }
             group.borrow_mut().ready_to_start_time -= 1;
