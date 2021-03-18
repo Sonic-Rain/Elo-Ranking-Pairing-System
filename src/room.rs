@@ -15,6 +15,7 @@ pub struct User {
     pub ng: i16,
     pub rk: i16,
     pub at: i16,
+    pub aram: i16,
     pub rid: u64,
     pub gid: u64,
     pub game_id: u64,
@@ -38,6 +39,7 @@ pub struct RoomData {
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub avg_at: i16,
+    pub avg_aram: i16,
     pub ready: i8,
     pub queue_cnt: i64,
     pub mode: String,
@@ -69,6 +71,7 @@ impl RoomData {
         let mut highest_ng = 0;
         let mut highest_rk = 0;
         let mut highest_at = 0;
+        let mut highest_aram = 0;
         for user in &self.users {
             if user.borrow().ng > highest_ng {
                 highest_ng = user.borrow().ng;
@@ -79,10 +82,14 @@ impl RoomData {
             if user.borrow().rk > highest_rk {
                 highest_rk = user.borrow().rk;
             }
+            if user.borrow().aram > highest_aram {
+                highest_aram = user.borrow().aram;
+            }
         }
         self.avg_ng = highest_ng + 20 * self.users.len() as i16;
         self.avg_rk = highest_rk + 20 * self.users.len() as i16;
         self.avg_at = highest_at + 20 * self.users.len() as i16;
+        self.avg_aram = highest_aram + 20 * self.users.len() as i16;
         // let mut sum_ng = 0;
         // let mut sum_rk = 0;
         // let mut sum_at = 0;

@@ -113,6 +113,7 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("server/send/check_state", QoS::AtMostOnce)?;//doc server.drawio
     mqtt_client.subscribe("server/send/free", QoS::AtMostOnce)?;
     mqtt_client.subscribe("server/send/system_ban", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("server/send/update_heros", QoS::AtMostOnce)?;
     // Client message
     mqtt_client.subscribe("member/+/send/login", QoS::AtMostOnce)?;//doc login.drawio
     mqtt_client.subscribe("member/+/send/logout", QoS::AtMostOnce)?;//doc login.drwio
@@ -155,6 +156,9 @@ fn main() -> std::result::Result<(), Error> {
     mqtt_client.subscribe("game/+/send/locked_hero", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/jump", QoS::AtMostOnce)?;
     mqtt_client.subscribe("game/+/send/ban_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/get_heros", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/try_swap_hero", QoS::AtMostOnce)?;
+    mqtt_client.subscribe("game/+/send/swap_hero", QoS::AtMostOnce)?;
     let mut isServerLive = true;
     
     
@@ -237,6 +241,8 @@ fn main() -> std::result::Result<(), Error> {
     let reset = Regex::new(r"reset")?;
     let rechoose_hero = Regex::new(r"\w+/(\w+)/send/ng_choose_hero")?;
     let reban_hero = Regex::new(r"\w+/(\w+)/send/ban_hero")?;
+    let reget_hero = Regex::new(r"\w+/(\w+)/send/get_heros")?;
+    let reswap_hero = Regex::new(r"\w+/(\w+)/send/swap_hero")?;
     let releave = Regex::new(r"\w+/(\w+)/send/leave")?;
     let restart_game = Regex::new(r"\w+/(\w+)/send/start_game")?;
     let repassword = Regex::new(r"\w+/(\w+)/send/set_password")?;
@@ -259,6 +265,7 @@ fn main() -> std::result::Result<(), Error> {
     let reloading = Regex::new(r"\w+/(\w+)/send/loading")?;
     let refree = Regex::new(r"\w+/send/free")?;
     let resystem_ban = Regex::new(r"\w+/send/system_ban")?;
+    let reupdate_heros = Regex::new(r"\w+/send/update_heros")?;
     
     
     //let mut QueueSender: Sender<QueueData>;
@@ -342,6 +349,16 @@ fn main() -> std::result::Result<(), Error> {
                                     let userid = cap[1].to_string();
                                     info!("ban hero: userid: {} json: {:?}", userid, v);
                                     event_room::ban_hero(userid, v, sender.clone())?;
+                                } else if reget_hero.is_match(topic_name) {
+                                    let cap = reget_hero.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    info!("get heros: userid: {} json: {:?}", userid, v);
+                                    event_room::get_heros(userid, v, sender.clone())?;
+                                } else if reswap_hero.is_match(topic_name) {
+                                    let cap = reswap_hero.captures(topic_name).unwrap();
+                                    let userid = cap[1].to_string();
+                                    info!("swap hero: userid: {} json: {:?}", userid, v);
+                                    event_room::swap_hero(userid, v, sender.clone())?;
                                 } else if relocked_hero.is_match(topic_name) {
                                     let cap = relocked_hero.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();
@@ -501,7 +518,10 @@ fn main() -> std::result::Result<(), Error> {
                                 } else if resystem_ban.is_match(topic_name) {
                                     info!("resystem_ban: json: {:?}", v);
                                     event_room::systemBan(v, sender.clone())?;
-                                }else if regetGameHistorys.is_match(topic_name) {
+                                } else if reupdate_heros.is_match(topic_name) {
+                                    info!("reupdate_heros: json: {:?}", v);
+                                    event_room::updateHeros(v, sender.clone())?;
+                                } else if regetGameHistorys.is_match(topic_name) {
                                     info!("regetGameHistorys: json: {:?}", v);
                                     let cap = regetGameHistorys.captures(topic_name).unwrap();
                                     let userid = cap[1].to_string();

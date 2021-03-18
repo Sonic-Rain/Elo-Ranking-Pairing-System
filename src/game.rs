@@ -1,5 +1,6 @@
 use crate::msg::*;
 use crate::room::*;
+use crate::event_room::*;
 use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
 use failure::Error;
 use log::{error, info, trace, warn};
@@ -7,12 +8,14 @@ use serde_derive::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::rc::Rc;
 use rand::{seq::IteratorRandom, thread_rng};
+use std::collections::{BTreeMap, HashMap};
 
 pub const BUFFER: i16 = -5;
 pub const CHOOSE_HERO_TIME: i16 = 30;
 pub const NG_CHOOSE_HERO_TIME: i16 = 90;
 pub const BAN_HERO_TIME: i16 = 25;
 pub const READY_TO_START_TIME: i16 = 10;
+pub const ARAM_READY_TO_START_TIME: i16 = 40;
 
 #[derive(Clone, Debug, Default)]
 pub struct NGGame {
@@ -565,5 +568,154 @@ impl ATGame {
             result.push(heros);
         }
         self.ban_heros = result;
+    }
+}
+#[derive(Clone, Debug, Default)]
+pub struct ARAMGame {
+    pub teams: Vec<Rc<RefCell<FightGroup>>>,
+    pub room_names: Vec<String>,
+    pub user_names: Vec<String>,
+    pub pick_position: Vec<usize>,
+    pub game_id: u64,
+    pub user_count: u16,
+    pub winteam: i16,
+    pub game_status: u16,
+    pub ban_time: i16,
+    pub choose_time: i16,
+    pub ready_to_start_time: i16,
+    pub pick_status: u16,
+    pub time: u64,
+    pub heros: Vec<String>,
+    pub TotalHeros: BTreeMap<String, Rc<RefCell<HeroData>>>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ARAMGameStatus {
+    Loading,
+    Ban,
+    Pick,
+    ReadyToStart,
+    Gaming,
+    Finished,
+}
+
+impl ARAMGame {
+    pub fn check_status(&mut self) -> ARAMGameStatus {
+        let mut res = ARAMGameStatus::Loading;
+        if self.game_status == 0 {
+            res = ARAMGameStatus::Loading;
+        }
+        if self.game_status == 1 {
+            res = ARAMGameStatus::Ban;
+        }
+        if self.game_status == 2 {
+            res = ARAMGameStatus::Pick;
+        }
+        if self.game_status == 3 {
+            res = ARAMGameStatus::ReadyToStart;
+        }
+        if self.game_status == 4 {
+            res = ARAMGameStatus::Gaming;
+        }
+        if self.game_status == 5 {
+            res = ARAMGameStatus::Finished;
+        }
+        res
+    }
+    pub fn next_status(&mut self) {
+        let mut res = ARAMGameStatus::Loading;
+        self.game_status += 1;
+        info!(
+            "NG game_id : {}, status: {}, status_code: {}, line: {}",
+            self.game_id.clone(),
+            self.get_status_name(),
+            self.game_status,
+            line!()
+        );
+        if self.game_status == 0 {}
+        if self.game_status == 1 {
+            self.ban_time = BAN_HERO_TIME;
+            self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        }
+        if self.game_status == 2 {
+            self.choose_time = NG_CHOOSE_HERO_TIME;
+            self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        }
+        if self.game_status == 3 {
+            self.ready_to_start_time = ARAM_READY_TO_START_TIME;
+            self.pick_position = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        }
+        if self.game_status == 4 {}
+        if self.game_status == 5 {}
+    }
+    pub fn get_status_name(&mut self) -> String {
+        let mut res = "loading";
+        if self.game_status == 0 {
+            res = "loading"
+        }
+        if self.game_status == 1 {
+            res = "ban"
+        }
+        if self.game_status == 2 {
+            res = "pick"
+        }
+        if self.game_status == 3 {
+            res = "readyToStart";
+        }
+        if self.game_status == 4 {
+            res = "gaming";
+        }
+        if self.game_status == 5 {
+            res = "finished";
+        }
+        res.to_string()
+    }
+    pub fn check_loading(&mut self) -> bool {
+        let mut res = true;
+        for team in &self.teams {
+            if !team.borrow_mut().check_loading() {
+                res = false;
+            }
+        }
+        res
+    }
+    pub fn check_lock(&mut self) -> bool {
+        let mut res = true;
+        for team in &self.teams {
+            if !team.borrow_mut().check_lock() {
+                res = false;
+            }
+        }
+        res
+    }
+    pub fn rollHeros(&mut self) {
+        let mut result: Vec<String> = Vec::new();
+        let mut heros: Vec<String> = Vec::new();
+        for (name, hero) in &self.TotalHeros {
+            if hero.borrow().enable {
+                heros.push(name.clone());
+            }
+        }
+        for team in &self.teams {
+            for room in &team.borrow().rooms {
+                for user in &room.borrow().users {
+                    let mut done: bool = false;
+                    while !done {
+                        let mut rng = thread_rng();
+                        let mut hero: String = "".to_string();
+                        match heros.iter().choose(&mut rng) {
+                            None => println!("no hero, line: {}", line!()),
+                            Some(h) => {
+                                done = true;
+                                hero = h.to_string();
+                                user.borrow_mut().hero = hero.clone();
+                            },
+                        }
+                        heros.retain(|h| *h != hero);
+                    }
+                }
+            }
+        }
+        self.heros = result;
     }
 }

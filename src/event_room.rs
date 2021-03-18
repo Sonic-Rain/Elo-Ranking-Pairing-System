@@ -40,6 +40,43 @@ pub const SCORE_INTERVAL: i64 = 2;
 pub const READY_TIME: f32 = 30.0;
 pub const RANK_RANGE: i64 = 50;
 pub const NG_RANGE: i64 = 50;
+pub const ARAM_RANGE: i64 = 50;
+pub const SWAP_TIME: i32 = 15;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct HeroData {
+    pub name: String,
+    pub enable: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GetHerosData {
+    pub game_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SwapHeroData {
+    pub id: String,
+    pub from: String,
+    pub is_accept: bool,
+    pub game_id: u64,
+    pub action: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct HeroSwappingData {
+    pub id: String,
+    pub from: String,
+    pub game_id: u64,
+    pub time: i32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UpdateHerosData {
+    pub password: String,
+    pub name: String,
+    pub enable: bool,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreateRoomData {
@@ -367,6 +404,7 @@ pub struct UpdateQueueData {
     pub ng: i32,
     pub rk: i32,
     pub at: i32,
+    pub aram: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -391,6 +429,8 @@ pub enum RoomEventData {
     Invite(InviteRoomData),
     ChooseHero(UserNGHeroData),
     BanHero(UserNGHeroData),
+    GetHeros(GetHerosData),
+    SwapHero(SwapHeroData),
     LockedHero(UserNGHeroData),
     NGGameChooseHero(BTreeMap<u64, Vec<u64>>),
     Join(JoinRoomData),
@@ -426,6 +466,7 @@ pub enum RoomEventData {
     UpdateQueue(UpdateQueueData),
     Free(),
     SystemBan(SystemBanData),
+    UpdateHeros(UpdateHerosData),
 }
 
 #[derive(Clone, Debug)]
@@ -440,6 +481,7 @@ pub struct SqlScoreData {
     pub ng: i16,
     pub rk: i16,
     pub at: i16,
+    pub aram: i16,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -471,6 +513,7 @@ pub struct QueueRoomData {
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub avg_at: i16,
+    pub avg_aram: i16,
     pub ready: i8,
     pub notify: bool,
     pub queue_cnt: i64,
@@ -486,6 +529,7 @@ pub struct ReadyGroupData {
     pub avg_ng: i16,
     pub avg_rk: i16,
     pub avg_at: i16,
+    pub avg_aram: i16,
     pub game_status: u16,
     pub queue_cnt: i64,
 }
@@ -604,6 +648,23 @@ fn get_gid_by_id(id: &String, users: &BTreeMap<String, Rc<RefCell<User>>>) -> u6
 fn get_ng_game_id_by_id(
     id: &String,
     games: &BTreeMap<u64, Rc<RefCell<NGGame>>>,
+    users: &BTreeMap<String, Rc<RefCell<User>>>,
+) -> u64 {
+    for (game_id, fg) in games {
+        for user_id in &fg.borrow().user_names {
+            if let Some(u) = users.get(user_id) {
+                if u.borrow().id == *id {
+                    return fg.borrow().game_id;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+fn get_aram_game_id_by_id(
+    id: &String,
+    games: &BTreeMap<u64, Rc<RefCell<ARAMGame>>>,
     users: &BTreeMap<String, Rc<RefCell<User>>>,
 ) -> u64 {
     for (game_id, fg) in games {
@@ -924,7 +985,7 @@ pub fn HandleSqlRequest(pool: mysql::Pool) -> Result<Sender<SqlData>, Error> {
                                 }
                                 SqlData::UpdateScore(x) => {
                                     println!("in");
-                                    let sql = format!("UPDATE user SET ng={}, rk={}, at={} WHERE id='{}';", x.ng, x.rk, x.at, x.id);
+                                    let sql = format!("UPDATE user SET ng={}, rk={}, at={}, aram={} WHERE id='{}';", x.ng, x.rk, x.at, x.id, x.aram);
                                     println!("sql: {}", sql);
                                     let qres = conn.query(sql.clone())?;
                                 }
@@ -1134,6 +1195,60 @@ fn canGroupAT(
     Ok(res)
 }
 
+fn canGroupARAM(
+    readyGroup: &mut ReadyGroupData,
+    queueRoom: &Rc<RefCell<QueueRoomData>>,
+    conn: &mut mysql::PooledConn,
+    group_id: u64,
+) -> Result<bool, Error> {
+    let mut res = false;
+    // info!("room : {:?} try_join group {:?}, line : {}", queueRoom, readyGroup, line!());
+    if queueRoom.borrow().ready == 0
+        && queueRoom.borrow().user_len as i16 + readyGroup.user_len <= TEAM_SIZE
+    {
+        let Difference: i64 = i64::abs((queueRoom.borrow().avg_aram - readyGroup.avg_aram).into());
+        let mut aram = 0;
+        if readyGroup.avg_aram == 0
+            || Difference <= RANK_RANGE + SCORE_INTERVAL * queueRoom.borrow().queue_cnt
+        {
+            // let isBlack = check_is_black(
+            //     queueRoom.borrow().user_ids.clone(),
+            //     readyGroup.user_ids.clone(),
+            //     conn,
+            // )?;
+            // if (isBlack) {
+            //     res = false;
+            //     return Ok(res);
+            // }
+            // info!(
+            //     "group user_len : {}, room user_len : {}",
+            //     readyGroup.user_len,
+            //     queueRoom.borrow().user_len
+            // );
+            if (readyGroup.user_len + queueRoom.borrow().user_len <= 0) {
+                res = false;
+                return Ok(res);
+            }
+            aram = (readyGroup.avg_aram * readyGroup.user_len
+                + queueRoom.borrow().avg_aram * queueRoom.borrow().user_len) as i16
+                / (readyGroup.user_len + queueRoom.borrow().user_len) as i16;
+            for user_id in &queueRoom.borrow().user_ids {
+                readyGroup.user_ids.push(user_id.clone());
+            }
+            if queueRoom.borrow().queue_cnt > readyGroup.queue_cnt {
+                readyGroup.queue_cnt = queueRoom.borrow().queue_cnt;
+            }
+            readyGroup.rid.push(queueRoom.borrow().rid);
+            readyGroup.avg_aram = aram;
+            readyGroup.user_len += queueRoom.borrow().user_len;
+            queueRoom.borrow_mut().ready = 1;
+            queueRoom.borrow_mut().gid = group_id + 1;
+            info!("group {:?}, line: {}", readyGroup, line!());
+        }
+    }
+    Ok(res)
+}
+
 pub fn HandleQueueRequest(
     msgtx: Sender<MqttMsg>,
     sender: Sender<RoomEventData>,
@@ -1147,11 +1262,13 @@ pub fn HandleQueueRequest(
     thread::spawn(move || -> Result<(), Error> {
         let mut SoloNGQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut NGQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
+        let mut ARAMQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         // let mut NGGroupedQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut RKQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut ATQueueRoom: BTreeMap<u64, Rc<RefCell<QueueRoomData>>> = BTreeMap::new();
         let mut SoloNGReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut NGReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
+        let mut ARAMReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut RKReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut ATReadyGroups: BTreeMap<u64, Rc<RefCell<ReadyGroupData>>> = BTreeMap::new();
         let mut matchGroup: BTreeMap<u64, Rc<RefCell<u64>>> = BTreeMap::new();
@@ -1160,6 +1277,7 @@ pub fn HandleQueueRequest(
         let mut ngState = "open";
         let mut rkState = "open";
         let mut atState = "open";
+        let mut aramState = "open";
         loop {
             select! {
                 recv(update) -> _ => {
@@ -1448,6 +1566,148 @@ pub fn HandleQueueRequest(
                         }
                     }
                     // ng
+                    // aram
+                    if aramState == "open" {
+                        if ARAMQueueRoom.len() >= MATCH_SIZE {
+                            let mut g: ReadyGroupData = Default::default();
+                            let mut tq: Vec<Rc<RefCell<QueueRoomData>>> = vec![];
+                            let mut id: Vec<u64> = vec![];
+                            let mut new_now = Instant::now();
+                            tq = ARAMQueueRoom.iter().map(|x|Rc::clone(x.1)).collect();
+                            let mut new_now = Instant::now();
+                            tq.sort_by_key(|x| x.borrow().avg_aram);
+                            let mut new_now1 = Instant::now();
+                            for (k, v) in &ARAMQueueRoom {
+                                v.borrow_mut().queue_cnt += 1;
+                                let updateRoomQueueCntData = UpdateRoomQueueCntData {
+                                    rid: v.borrow().rid,
+                                };
+                                sender.try_send(RoomEventData::UpdateRoomQueueCnt(updateRoomQueueCntData));
+                            }
+                            for (k, v) in &ARAMQueueRoom {
+                                for (k2 , v2) in &ARAMQueueRoom {
+                                    let mut isMatch = false;
+                                    if let Some(gid) = matchGroup.get(&v2.borrow().gid.clone()) {
+                                        isMatch = true;
+                                    }
+                                    if !isMatch {
+                                        v2.borrow_mut().ready = 0;
+                                        v2.borrow_mut().gid = 0;
+                                    }
+                                }
+                                g = Default::default();
+                                canGroupARAM(&mut g, v, &mut conn, group_id);
+                                for (k2, mut v2) in &ARAMQueueRoom {
+                                    canGroupARAM(&mut g, v2, &mut conn, group_id);
+                                }
+                                if g.user_len == TEAM_SIZE {
+                                    println!("match team_size!, line: {}", line!());
+                                    group_id += 1;
+                                    info!("new group_id: {}, line: {}", group_id, line!());
+                                    g.gid = group_id;
+                                    ARAMReadyGroups.insert(group_id, Rc::new(RefCell::new(g.clone())));
+                                    matchGroup.insert(group_id, Rc::new(RefCell::new(group_id.clone())));
+                                    g = Default::default();
+                                }
+                                // info!("{:?}", matchGroup);
+                            }
+                            //println!("Time 2: {:?}",Instant::now().duration_since(new_now1));
+                            if g.user_len < TEAM_SIZE {
+                                for r in g.rid {
+                                    let mut room = ARAMQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
+                                for r in id {
+                                    let mut room = NGQueueRoom.get(&r);
+                                    if let Some(room) = room {
+                                        room.borrow_mut().ready = 0;
+                                        room.borrow_mut().gid = 0;
+                                    }
+                                }
+                            }
+                        }
+                        if ARAMReadyGroups.len() > 0 {
+                            println!("ARAMReadyGroup!! {}, line: {}", ARAMReadyGroups.len(), line!());
+                            println!("ARAMReadyGroup!! {:?}, line: {}", ARAMReadyGroups, line!());
+                        }
+                        if ARAMReadyGroups.len() >= MATCH_SIZE {
+                            let mut prestart = false;
+                            let mut total_aram: i16 = 0;
+                            let mut rm_ids: Vec<u64> = vec![];
+                            let mut new_now2 = Instant::now();
+                            let mut isMatch = false;
+                            for (id, rg) in &ARAMReadyGroups {
+                                let mut fg: ReadyGameData = Default::default();
+                                total_aram = 0;
+                                if rg.borrow().game_status == 0 && fg.team_len < MATCH_SIZE {
+                                    if total_aram == 0 {
+                                        total_aram += rg.borrow().avg_aram as i16;
+                                        fg.group.push(rg.borrow().rid.clone());
+                                        fg.gid.push(*id);
+                                        fg.team_len += 1;
+                                        for (id2, rg2) in &ARAMReadyGroups {
+                                            let mut isInFG = false;
+                                            for gid in &fg.gid {
+                                                if gid == id2 {
+                                                    isInFG = true;
+                                                }
+                                            }
+                                            if fg.team_len < MATCH_SIZE && !isInFG {
+                                                let mut difference = 0;
+                                                if fg.team_len > 0 {
+                                                    difference = i64::abs((rg2.borrow().avg_aram as i16 - total_aram/fg.team_len as i16).into());
+                                                }
+                                                if difference <= ARAM_RANGE + SCORE_INTERVAL * rg2.borrow().queue_cnt {
+                                                    total_aram += rg2.borrow().avg_aram as i16;
+                                                    fg.group.push(rg2.borrow().rid.clone());
+                                                    fg.team_len += 1;
+                                                    fg.gid.push(*id2);
+                                                }
+                                                else {
+                                                    rg2.borrow_mut().queue_cnt += 1;
+                                                }
+                                            }
+                                            if fg.team_len == MATCH_SIZE {
+                                                sender.send(RoomEventData::UpdateGame(PreGameData{rid: fg.group.clone(), mode: "aram".to_string()}));
+                                                for id in fg.gid {
+                                                    rm_ids.push(id);
+                                                }
+                                                fg = Default::default();
+                                                isMatch = true;
+                                            }
+                                            if isMatch {
+                                                break;
+                                            }
+                                        }
+                                        if isMatch {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            for id in rm_ids {
+                                let rg = ARAMReadyGroups.remove(&id);
+                                if let Some(rg) = rg {
+                                    for rid in &rg.borrow().rid {
+                                        ARAMQueueRoom.remove(&rid);
+                                    }
+                                }
+                            }
+                            // println!("GroupedRoom : {:?}", ARAMGroupedQueueRoom);
+                            // println!("MatchedGroup : {:?}", ARAMMatchedGroups);
+                        }
+                    } else {
+                        for (k, v) in &mut ARAMQueueRoom {
+                            for uid in &v.borrow().user_ids {
+                                sender.try_send(RoomEventData::CancelQueue(CancelQueueData{action: "cancel_queue".to_string(), id: uid.to_string(), room: "".to_string(), mode: "aram".to_string()}));
+                                // sender.try_send(RoomEventData::Leave(LeaveData{id: uid.to_string(), room: "".to_string()}));
+                            }
+                        }
+                    }
+                    // aram
                     // rank
                     if rkState == "open" {
                         if RKQueueRoom.len() >= MATCH_SIZE {
@@ -1741,6 +2001,7 @@ pub fn HandleQueueRequest(
                     let mut ng_cnt: i32 = 0;
                     let mut rk_cnt: i32 = 0;
                     let mut at_cnt: i32 = 0;
+                    let mut aram_cnt: i32 = 0;
                     for (k, v) in &mut SoloNGQueueRoom {
                         ng_solo_cnt += v.borrow().user_len as i32;
                     }
@@ -1753,7 +2014,10 @@ pub fn HandleQueueRequest(
                     for (k, v) in &ATQueueRoom {
                         at_cnt += v.borrow().user_len as i32;
                     }
-                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng_solo: ng_solo_cnt, ng: ng_cnt, rk: rk_cnt, at: at_cnt}));
+                    for (k, v) in &ARAMQueueRoom {
+                        aram_cnt += v.borrow().user_len as i32;
+                    }
+                    sender.try_send(RoomEventData::UpdateQueue(UpdateQueueData{ng_solo: ng_solo_cnt, ng: ng_cnt, rk: rk_cnt, at: at_cnt, aram: aram_cnt}));
                 }
                 recv(rx) -> d => {
                     let handle = || -> Result<(), Error> {
@@ -1768,6 +2032,8 @@ pub fn HandleQueueRequest(
                                         RKQueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
                                     }else if x.mode == "at" {
                                         ATQueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
+                                    }else if x.mode == "aram" {
+                                        ARAMQueueRoom.insert(x.rid.clone(), Rc::new(RefCell::new(x.clone())));
                                     }
                                 }
                                 QueueData::RemoveRoom(x) => {
@@ -1811,6 +2077,26 @@ pub fn HandleQueueRequest(
                                     }
                                     NGQueueRoom.remove(&x.rid);
                                     // ng
+                                    // aram
+                                    let mut r = ARAMQueueRoom.get(&x.rid);
+                                    if let Some(r) = r {
+                                        let mut rg = ARAMReadyGroups.get(&r.borrow().gid);
+                                        if let Some(rg) = rg {
+                                            for rid in &rg.borrow().rid {
+                                                if rid == &x.rid {
+                                                    continue;
+                                                }
+                                                let mut room = ARAMQueueRoom.get(rid);
+                                                if let Some(room) = room {
+                                                    room.borrow_mut().gid = 0;
+                                                    room.borrow_mut().ready = 0;
+                                                }
+                                            }
+                                        }
+                                        ARAMReadyGroups.remove(&r.borrow().gid);
+                                    }
+                                    ARAMQueueRoom.remove(&x.rid);
+                                    // aram
                                     // rank
                                     r = RKQueueRoom.get(&x.rid);
                                     if let Some(r) = r {
@@ -1925,11 +2211,13 @@ pub fn init(
         let mut isServerLive = true;
         let mut isBackup = isBackup.clone();
         let mut TotalRoom: BTreeMap<u64, Rc<RefCell<RoomData>>> = BTreeMap::new();
+        let mut TotalHeros: BTreeMap<String, Rc<RefCell<HeroData>>> = BTreeMap::new();
         //let mut QueueRoom: BTreeMap<u64, Rc<RefCell<RoomData>>> = BTreeMap::new();
         let mut ReadyGroups: BTreeMap<u64, Rc<RefCell<FightGroup>>> = BTreeMap::new();
         let mut PreStartGroups: BTreeMap<u64, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut GameingGroups: BTreeMap<u64, Rc<RefCell<FightGame>>> = BTreeMap::new();
         let mut NGGameingGroups: BTreeMap<u64, Rc<RefCell<NGGame>>> = BTreeMap::new();
+        let mut ARAMGameingGroups: BTreeMap<u64, Rc<RefCell<ARAMGame>>> = BTreeMap::new();
         let mut RKGameingGroups: BTreeMap<u64, Rc<RefCell<RKGame>>> = BTreeMap::new();
         let mut ATGameingGroups: BTreeMap<u64, Rc<RefCell<ATGame>>> = BTreeMap::new();
         let mut TotalUsers: BTreeMap<String, Rc<RefCell<User>>> = BTreeMap::new();
@@ -1939,6 +2227,7 @@ pub fn init(
         let mut GameingRoom: BTreeMap<u64, Rc<RefCell<GameRoomData>>> = BTreeMap::new();
         let mut LossSend: Vec<MqttMsg> = vec![];
         let mut AbandonGames: BTreeMap<u64, bool> = BTreeMap::new();
+        let mut HeroSwapping: BTreeMap<String, Rc<RefCell<HeroSwappingData>>> = BTreeMap::new();
         let mut room_id: u64 = 1;
         let mut group_id: u64 = 0;
         let mut game_id: u64 = 0;
@@ -1949,6 +2238,8 @@ pub fn init(
         let mut bForceCloseRkState = false;
         let mut atState = "close";
         let mut bForceCloseAtState = false;
+        let mut aramState = "open";
+        let mut bForceCloseAramState = false;
         let mut currentState = "ng";
         let sql = format!(r#"select * from user;"#);
         let qres2: mysql::QueryResult = conn.query(sql.clone())?;
@@ -1960,13 +2251,16 @@ pub fn init(
         let mut current_ng_queue_cnt: i32 = 0;
         let mut current_rk_queue_cnt: i32 = 0;
         let mut current_at_queue_cnt: i32 = 0;
+        let mut current_aram_queue_cnt: i32 = 0;
         let mut ng_solo_queue_cnt: i32 = 0;
         let mut ng_queue_cnt: i32 = 0;
         let mut rk_queue_cnt: i32 = 0;
         let mut at_queue_cnt: i32 = 0;
+        let mut aram_queue_cnt: i32 = 0;
         let mut current_ng_game_cnt: i32 = 0;
         let mut current_rk_game_cnt: i32 = 0;
         let mut current_at_game_cnt: i32 = 0;
+        let mut current_aram_game_cnt: i32 = 0;
         let mut current_online_cnt: i32 = 0;
         let mut isUpdateCount = false;
         let mut isNewDay = false;
@@ -1980,6 +2274,7 @@ pub fn init(
                 ng: mysql::from_value_opt(a.get("ng").ok_or(Error::from(core::fmt::Error))?)?,
                 rk: mysql::from_value_opt(a.get("rk").ok_or(Error::from(core::fmt::Error))?)?,
                 at: mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?,
+                aram: mysql::from_value_opt(a.get("aram").ok_or(Error::from(core::fmt::Error))?)?,
                 raindrop: mysql::from_value_opt(a.get("raindrop").ok_or(Error::from(core::fmt::Error))?)?,
                 first_win: mysql::from_value_opt(a.get("first_win").ok_or(Error::from(core::fmt::Error))?)?,
                 email: mysql::from_value_opt(a.get("email").ok_or(Error::from(core::fmt::Error))?)?,
@@ -1994,6 +2289,17 @@ pub fn init(
         let sql3 = format!("update user set status='offline';");
         conn.query(sql3.clone())?;
         println!("game id: {}, line: {}", game_id, line!());
+        let sql4 = format!("select * from hero_list;");
+        let qres3: mysql::QueryResult = conn.query(sql4.clone())?;
+        for row in qres3 {
+            let a = row?.clone();
+            let hero = HeroData {
+                name: mysql::from_value_opt(a.get("name").ok_or(Error::from(core::fmt::Error))?)?,
+                enable: mysql::from_value_opt(a.get("enable").ok_or(Error::from(core::fmt::Error))?)?,
+            };
+            println!("{:?}, line: {}", hero, line!());
+            TotalHeros.insert(hero.name.clone(), Rc::new(RefCell::new(hero.clone())));
+        }
         loop {
             select! {
                 recv(update200ms) -> _ => {
@@ -2018,6 +2324,19 @@ pub fn init(
                                         ..Default::default()
                                     };
                                     NGGameingGroups.insert(group.borrow().game_id,  Rc::new(RefCell::new(ngGame.clone())));
+                                    isUpdateCount = true;
+                                }
+                                if group.borrow().mode == "aram" {
+                                    let aramGame = ARAMGame {
+                                        teams: group.borrow().teams.clone(),
+                                        room_names: group.borrow().room_names.clone(),
+                                        user_names: group.borrow().user_names.clone(),
+                                        game_id: group.borrow().game_id,
+                                        user_count: group.borrow().user_count,
+                                        TotalHeros: TotalHeros.clone(),
+                                        ..Default::default()
+                                    };
+                                    ARAMGameingGroups.insert(group.borrow().game_id,  Rc::new(RefCell::new(aramGame.clone())));
                                     isUpdateCount = true;
                                 }
                                 if group.borrow().mode == "rk" {
@@ -2161,7 +2480,7 @@ pub fn init(
                         if currentState == "ng" {
                             currentState = "rk";
                             msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
-                                    msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
+                                    msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}", "aram":"{}"}}"#, ngState, rkState, atState, aramState)})?;
                         }
                     } else {
                         rkState = "close";
@@ -2169,7 +2488,7 @@ pub fn init(
                         if currentState == "rk" {
                             currentState = "ng";
                             msgtx.try_send(MqttMsg{topic:format!("server/res/check_state"),
-                                    msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)})?;
+                                    msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}", "aram":"{}"}}"#, ngState, rkState, atState, aramState)})?;
                         }
                     }
                     if bForceCloseAtState {
@@ -2215,11 +2534,27 @@ pub fn init(
                     for (game_id, fg) in &mut NGGameingGroups {
                         process_ng(msgtx.clone(), tx2.clone(), sender.clone(), TotalUsers.clone(), game_id, fg);
                     }
+                    for (game_id, fg) in &mut ARAMGameingGroups {
+                        process_aram(msgtx.clone(), tx2.clone(), sender.clone(), TotalUsers.clone(), game_id, fg);
+                    }
                     for (game_id, fg) in &mut RKGameingGroups {
                         process_rk(msgtx.clone(), tx2.clone(), sender.clone(), TotalUsers.clone(), game_id, fg);
                     }
                     for (game_id, fg) in &mut ATGameingGroups {
                         process_at(msgtx.clone(), tx2.clone(), sender.clone(), TotalUsers.clone(), game_id, fg);
+                    }
+                    let mut rm_swapping_list: Vec<String> = Vec::new();
+                    for (user_id, heroSwappingData) in &mut HeroSwapping {
+                        let time = heroSwappingData.borrow().time.clone();
+                        if time == 0 {
+                            msgtx.try_send(MqttMsg{topic:format!("game/{}/res/swap_hero", heroSwappingData.borrow().game_id),
+                                msg: format!(r#"{{"id":"{}", "from":"{}", "action":"timeout"}}"#, heroSwappingData.borrow().id, heroSwappingData.borrow().from)})?;
+                            rm_swapping_list.push(user_id.clone());
+                        }
+                        heroSwappingData.borrow_mut().time = time - 1;
+                    }
+                    for rm in rm_swapping_list {
+                        HeroSwapping.remove(&rm);
                     }
                 }
 
@@ -2293,6 +2628,9 @@ pub fn init(
                         if let Some(fg) = NGGameingGroups.get(&gameOverData.game) {
                             gameOverData.time = fg.borrow().time;
                         }
+                        if let Some(fg) = ARAMGameingGroups.get(&gameOverData.game) {
+                            gameOverData.time = fg.borrow().time;
+                        }
                         if let Some(fg) = RKGameingGroups.get(&gameOverData.game) {
                             gameOverData.time = fg.borrow().time;
                         }
@@ -2317,6 +2655,17 @@ pub fn init(
                             }
                         }
                         NGGameingGroups.remove(&game);
+
+                        if let Some(fg) = ARAMGameingGroups.get(&game) {
+                            for uid in &fg.borrow().user_names {
+                                if let Some(u) = TotalUsers.get(uid) {
+                                    u.borrow_mut().isLocked = false;
+                                    u.borrow_mut().hero = "".to_string();
+                                    u.borrow_mut().gid = 0;
+                                }
+                            }
+                        }
+                        ARAMGameingGroups.remove(&game);
 
                         if let Some(fg) = RKGameingGroups.get(&game) {
                             for uid in &fg.borrow().user_names {
@@ -2352,6 +2701,7 @@ pub fn init(
                     let mut ng_cnt = 0;
                     let mut rk_cnt = 0;
                     let mut at_cnt = 0;
+                    let mut aram_cnt = 0;
                     for row in qres2 {
                         let a = row?.clone();
                         online_cnt = mysql::from_value_opt(a.get("count(*)").ok_or(Error::from(core::fmt::Error))?)?;
@@ -2385,29 +2735,43 @@ pub fn init(
                         }
                         at_cnt += 1;
                     }
+                    for (game_id, fg) in &mut ARAMGameingGroups {
+                        fg.borrow_mut().time += 5;
+                        if fg.borrow_mut().time >= 7200 {
+                            let delSql = format!(r#"delete from Gaming where game='{}';"#, game_id);
+                            conn.query(delSql.clone())?;
+                            timeout_list.push(*game_id);
+                        }
+                        aram_cnt += 1;
+                    }
                     for rm in timeout_list {
                         NGGameingGroups.remove(&rm);
                         RKGameingGroups.remove(&rm);
                         ATGameingGroups.remove(&rm);
+                        ARAMGameingGroups.remove(&rm);
                     }
                     if isUpdateCount || online_cnt != current_online_cnt || current_ng_game_cnt != ng_cnt ||
                     current_rk_game_cnt != rk_cnt ||
                     current_at_game_cnt != at_cnt ||
+                    current_aram_game_cnt != aram_cnt ||
                     current_ng_solo_queue_cnt != ng_solo_queue_cnt ||
                     current_ng_queue_cnt != ng_queue_cnt ||
                     current_rk_queue_cnt != rk_queue_cnt ||
-                    current_at_game_cnt != at_queue_cnt{
+                    current_at_queue_cnt != at_queue_cnt ||
+                    current_aram_queue_cnt != aram_queue_cnt{
                         isUpdateCount = false;
                         current_online_cnt = online_cnt;
                         current_ng_game_cnt = ng_cnt;
                         current_rk_game_cnt = rk_cnt;
                         current_at_game_cnt = at_cnt;
+                        current_aram_game_cnt = aram_cnt;
                         current_ng_solo_queue_cnt = ng_solo_queue_cnt;
                         current_ng_queue_cnt = ng_queue_cnt;
                         current_rk_queue_cnt = rk_queue_cnt;
-                        current_at_game_cnt = at_queue_cnt;                        
+                        current_at_queue_cnt = at_queue_cnt;
+                        current_aram_game_cnt = aram_queue_cnt;
                         msgtx.try_send(MqttMsg{topic:format!("server/res/online_count"),
-                            msg: format!(r#"{{"count":{}, "ngGameCount":{}, "rkGameCount":{}, "atGameCount":{},"ngSoloQueueCount":{} ,"ngQueueCount":{}, "rkQueueCount":{}, "atQueueCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt,ng_solo_queue_cnt, ng_queue_cnt, rk_queue_cnt, at_queue_cnt)})?;   
+                            msg: format!(r#"{{"count":{}, "ngGameCount":{}, "rkGameCount":{}, "atGameCount":{}, "aramGameCount":{},"ngSoloQueueCount":{} ,"ngQueueCount":{}, "rkQueueCount":{}, "atQueueCount":{}, "aramQueueCount":{}}}"#, online_cnt, ng_cnt, rk_cnt, at_cnt, aram_cnt,ng_solo_queue_cnt, ng_queue_cnt, rk_queue_cnt, at_queue_cnt, aram_queue_cnt)})?;   
                     }
                 }
                 recv(rx) -> d => {
@@ -2680,6 +3044,73 @@ pub fn init(
                                         println!("send ban hero : {}, {}, line: {}", u.borrow().id, x.hero, line!());
                                     }
                                 },
+                                RoomEventData::GetHeros(x) => {
+                                    let mut heros: Vec<HeroData> = Vec::new();
+                                    for (name, hero)in &TotalHeros {
+                                        let hero_tmp = HeroData {
+                                            name: hero.borrow().name.clone(),
+                                            enable: hero.borrow().enable,
+                                        };
+                                        heros.push(hero_tmp);
+                                    }
+                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/get_heros", x.game_id),
+                                        msg: format!(r#"{{"heros":"{}"}}"#, serde_json::to_string(&heros)?)};
+                                },
+                                RoomEventData::SwapHero(x) => {
+                                    if let Some(u) = TotalUsers.get(&x.id) {
+                                        if let Some(u2) = TotalUsers.get(&x.from) {
+                                            if x.action == "response" {
+                                                HeroSwapping.remove(&x.id);
+                                                HeroSwapping.remove(&x.from);
+                                                if x.is_accept {
+                                                    if u.borrow().hero != "" && u2.borrow().hero != "" {
+                                                        let hero_tmp = u.borrow().hero.clone();
+                                                        u.borrow_mut().hero = u2.borrow().hero.clone();
+                                                        u2.borrow_mut().hero = hero_tmp;
+                                                        let msgtx2 = msgtx.clone();
+                                                        let mqttmsg1 = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id.clone()),
+                                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id.clone(), u.borrow().hero.clone())};
+                                                        msgtx2.try_send(mqttmsg1);
+                                                        let mqttmsg1 = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u2.borrow().id.clone()),
+                                                            msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u2.borrow().id.clone(), u2.borrow().hero.clone())};
+                                                        msgtx2.try_send(mqttmsg1);
+                                                        mqttmsg = MqttMsg{topic:format!("game/{}/res/swap_hero", x.game_id),
+                                                            msg: format!(r#"{{"id":"{}", "from":"{}", "action":"success"}}"#, x.id, x.from)};
+                                                    }
+                                                } else {
+                                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/swap_hero", x.game_id),
+                                                        msg: format!(r#"{{"id":"{}", "from":"{}", "action":"reject"}}"#, x.id, x.from)};
+                                                }
+                                            } else if x.action == "request" {
+                                                if let Some(u) = HeroSwapping.get(&x.id) {
+                                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/swap_hero", x.game_id),
+                                                        msg: format!(r#"{{"id":"{}", "from":"{}", "action":"busy"}}"#, x.id, x.from)};
+                                                } else {
+                                                    HeroSwapping.insert(x.id.clone(), Rc::new(RefCell::new(HeroSwappingData{
+                                                        id: x.id.clone(),
+                                                        from: x.from.clone(),
+                                                        game_id: x.game_id.clone(),
+                                                        time: SWAP_TIME,
+                                                    })));
+                                                    HeroSwapping.insert(x.from.clone(), Rc::new(RefCell::new(HeroSwappingData{
+                                                        id: x.id.clone(),
+                                                        from: x.from.clone(),
+                                                        game_id: x.game_id.clone(),
+                                                        time: SWAP_TIME,
+                                                    })));
+                                                    mqttmsg = MqttMsg{topic:format!("game/{}/res/swap_hero", x.game_id),
+                                                        msg: format!(r#"{{"id":"{}", "from":"{}", "action":"request"}}"#, x.id, x.from)};
+                                                }
+                                            } else if x.action == "cancel" {
+                                                HeroSwapping.remove(&x.id);
+                                                HeroSwapping.remove(&x.from);
+                                                mqttmsg = MqttMsg{topic:format!("game/{}/res/swap_hero", x.game_id),
+                                                        msg: format!(r#"{{"id":"{}", "from":"{}", "action":"cancel"}}"#, x.id, x.from)};
+                                            }
+                                        }
+                                    }
+                                    
+                                },
                                 RoomEventData::NGGameChooseHero(x) => {
                                     for (id, rg) in &x {
                                         for rid in rg {
@@ -2879,6 +3310,7 @@ pub fn init(
                                                         avg_ng: r.borrow().avg_ng.clone(),
                                                         avg_rk: r.borrow().avg_rk.clone(),
                                                         avg_at: r.borrow().avg_at.clone(),
+                                                        avg_aram: r.borrow().avg_aram.clone(),
                                                         ready: 0,
                                                         notify: false,
                                                         queue_cnt: r.borrow().queue_cnt.clone(),
@@ -2897,6 +3329,19 @@ pub fn init(
                                         }
                                         let mut rm_list: Vec<u64> = Vec::new();
                                         if let Some(fg) = NGGameingGroups.get(&x.game) {
+                                            for uid in &fg.borrow().user_names {
+                                                if let Some(u) = TotalUsers.get(uid) {
+                                                    u.borrow_mut().isLocked = false;
+                                                    u.borrow_mut().hero = "".to_string();
+                                                    u.borrow_mut().ban_hero = "".to_string();
+                                                    u.borrow_mut().gid = 0;
+                                                }
+                                            }
+                                            rm_list.push(fg.borrow().game_id);
+                                            mqttmsg = MqttMsg{topic:format!("game/{}/res/jump", x.game.clone()),
+                                                msg: format!(r#"{{"id":"{}","mgs":"jump"}}"#, x.id.clone())};
+                                        }
+                                        if let Some(fg) = ARAMGameingGroups.get(&x.game) {
                                             for uid in &fg.borrow().user_names {
                                                 if let Some(u) = TotalUsers.get(uid) {
                                                     u.borrow_mut().isLocked = false;
@@ -2942,6 +3387,7 @@ pub fn init(
                                             );
                                             let qres = conn.query(sql.clone())?;
                                             NGGameingGroups.remove(&rm);
+                                            ARAMGameingGroups.remove(&rm);
                                             RKGameingGroups.remove(&rm);
                                             ATGameingGroups.remove(&rm);
                                         }
@@ -2985,6 +3431,12 @@ pub fn init(
                                 },
                                 RoomEventData::Loading(x) => {
                                     if let Some(fg) = NGGameingGroups.get(&x.game) {
+                                        if let Some(u) = TotalUsers.get(&x.id) {
+                                            u.borrow_mut().isLoading = true;
+                                            info!("id : {}, isLoading : {}, line : {}", x.id, u.borrow_mut().isLoading, line!());
+                                        }
+                                    }
+                                    if let Some(fg) = ARAMGameingGroups.get(&x.game) {
                                         if let Some(u) = TotalUsers.get(&x.id) {
                                             u.borrow_mut().isLoading = true;
                                             info!("id : {}, isLoading : {}, line : {}", x.id, u.borrow_mut().isLoading, line!());
@@ -3120,6 +3572,7 @@ pub fn init(
                                                                     avg_ng: r.borrow().avg_ng.clone(),
                                                                     avg_rk: r.borrow().avg_rk.clone(),
                                                                     avg_at: r.borrow().avg_at.clone(),
+                                                                    avg_aram: r.borrow().avg_aram.clone(),
                                                                     ready: 0,
                                                                     notify: false,
                                                                     queue_cnt: r.borrow().queue_cnt.clone(),
@@ -3235,6 +3688,7 @@ pub fn init(
                                                     avg_ng: y.borrow().avg_ng.clone(),
                                                     avg_rk: y.borrow().avg_rk.clone(),
                                                     avg_at: y.borrow().avg_at.clone(),
+                                                    avg_aram: y.borrow().avg_aram.clone(),
                                                     ready: 0,
                                                     notify: false,
                                                     queue_cnt: 1,
@@ -3279,6 +3733,7 @@ pub fn init(
                                                 avg_ng: y.borrow().avg_ng.clone(),
                                                 avg_rk: y.borrow().avg_rk.clone(),
                                                 avg_at: y.borrow().avg_at.clone(),
+                                                avg_aram: y.borrow().avg_aram.clone(),
                                                 ready: ready + 1,
                                                 notify: true,
                                                 queue_cnt: 1,
@@ -3338,20 +3793,21 @@ pub fn init(
                                                 u2.borrow_mut().ng = mysql::from_value_opt(a.get("ng").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().rk = mysql::from_value_opt(a.get("rk").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().at = mysql::from_value_opt(a.get("at").ok_or(Error::from(core::fmt::Error))?)?;
+                                                u2.borrow_mut().aram = mysql::from_value_opt(a.get("aram").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().raindrop = mysql::from_value_opt(a.get("raindrop").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().phone = mysql::from_value_opt(a.get("phone").ok_or(Error::from(core::fmt::Error))?)?;
                                                 u2.borrow_mut().email = mysql::from_value_opt(a.get("email").ok_or(Error::from(core::fmt::Error))?)?;
                                             }
                                             u2.borrow_mut().online = true;
                                             mqttmsg = MqttMsg{topic:format!("member/{}/res/login", u2.borrow().id.clone()),
-                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop": {}, "hero":"{}", "phone":"{}", "email":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().raindrop, hero, u2.borrow().phone, u2.borrow().email)};
+                                                msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{},"aram":{}, "raindrop": {}, "hero":"{}", "phone":"{}", "email":"{}"}}"#, u2.borrow().ng, u2.borrow().rk, u2.borrow().at, u2.borrow().aram, u2.borrow().raindrop, hero, u2.borrow().phone, u2.borrow().email)};
                                         }
                                     }
                                     else {
                                         TotalUsers.insert(x.u.id.clone(), Rc::new(RefCell::new(x.u.clone())));
                                         sender.send(SqlData::Login(SqlLoginData {id: x.dataid.clone(), name: name.clone()}));
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/login", x.u.id.clone()),
-                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "raindrop": {}, "hero":""}}"#, 1200, 1200, 0, 1200)};
+                                            msg: format!(r#"{{"msg":"ok", "ng":{}, "rk":{}, "at":{}, "aram":{}, "raindrop": {}, "hero":""}}"#, 1200, 1200, 1200, 0, 1200)};
                                     }
                                 },
                                 RoomEventData::Logout(x) => {
@@ -3364,6 +3820,7 @@ pub fn init(
                                     }
                                     if let Some(u) = u {
                                         let ng_game_id = get_ng_game_id_by_id(&u.borrow().id, &NGGameingGroups, &TotalUsers);
+                                        let aram_game_id = get_aram_game_id_by_id(&u.borrow().id, &ARAMGameingGroups, &TotalUsers);
                                         let rk_game_id = get_rk_game_id_by_id(&u.borrow().id, &RKGameingGroups, &TotalUsers);
                                         let at_game_id = get_at_game_id_by_id(&u.borrow().id, &ATGameingGroups, &TotalUsers);
                                         if ng_game_id > 0 {
@@ -3371,6 +3828,15 @@ pub fn init(
                                             let jumpData = JumpData{
                                                 id: u.borrow().id.clone(),
                                                 game: ng_game_id,
+                                                msg: "jump".to_string(),
+                                            };
+                                            tx2.try_send(RoomEventData::Jump(jumpData));
+                                        }
+                                        if aram_game_id > 0 {
+                                            println!("aram game id : {}", aram_game_id);
+                                            let jumpData = JumpData{
+                                                id: u.borrow().id.clone(),
+                                                game: aram_game_id,
                                                 msg: "jump".to_string(),
                                             };
                                             tx2.try_send(RoomEventData::Jump(jumpData));
@@ -3502,6 +3968,7 @@ pub fn init(
                                             avg_ng: 0,
                                             avg_rk: 0,
                                             avg_at: 0,
+                                            avg_aram: 0,
                                             ready: 0,
                                             queue_cnt: 1,
                                             mode: x.mode.clone(),
@@ -3599,13 +4066,13 @@ pub fn init(
                                             }
                                         }
                                         mqttmsg = MqttMsg{topic:format!("server/res/check_state"),
-                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                            msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}", "aram":"{}"}}"#, ngState, rkState, atState, aramState)};
                                     }
                                 },
                                 RoomEventData::CheckState(x) => {
                                     if let Some(u) = TotalUsers.get(&x.id) {
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/check_state", x.id),
-                                                msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}"}}"#, ngState, rkState, atState)};
+                                                msg: format!(r#"{{"ng":"{}", "rk":"{}", "at":"{}", "aram":"{}"}}"#, ngState, rkState, atState, aramState)};
                                     }
                                 },
                                 RoomEventData::Free() => {
@@ -3670,6 +4137,7 @@ pub fn init(
                                     ng_queue_cnt = x.ng;
                                     rk_queue_cnt = x.rk;
                                     at_queue_cnt = x.at;
+                                    aram_queue_cnt = x.aram;
                                 },
                                 RoomEventData::SystemBan(x) => {
                                     if (x.password == "HibikiHibiki") {
@@ -3677,6 +4145,18 @@ pub fn init(
                                             "replace BAN values ('{}', date_add(now(), interval {} second));",
                                             x.id.clone(), x.time.clone()
                                         );
+                                        conn.query(sql.clone())?;
+                                    }
+                                },
+                                RoomEventData::UpdateHeros(x) => {
+                                    if (x.password == "HibikiHibiki") {
+                                        let sql = format!(
+                                            "replace hero_list values ('{}', {});",
+                                            x.name.clone(), x.enable.clone()
+                                        );
+                                        if let Some(hero) = TotalHeros.get(&x.name) {
+                                            hero.borrow_mut().enable = x.enable;
+                                        }
                                         conn.query(sql.clone())?;
                                     }
                                 }
@@ -3878,6 +4358,26 @@ pub fn ban_hero(
     Ok(())
 }
 
+pub fn get_heros(
+    id: String,
+    v: Value,
+    sender: Sender<RoomEventData>,
+) -> std::result::Result<(), Error> {
+    let data: GetHerosData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::GetHeros(data));
+    Ok(())
+}
+
+pub fn swap_hero(
+    id: String,
+    v: Value,
+    sender: Sender<RoomEventData>,
+) -> std::result::Result<(), Error> {
+    let data: SwapHeroData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::SwapHero(data));
+    Ok(())
+}
+
 pub fn lock_hero(
     id: String,
     v: Value,
@@ -4003,6 +4503,12 @@ pub fn free(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), 
 pub fn systemBan(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
     let data: SystemBanData = serde_json::from_value(v)?;
     sender.try_send(RoomEventData::SystemBan(data));
+    Ok(())
+}
+
+pub fn updateHeros(v: Value, sender: Sender<RoomEventData>) -> std::result::Result<(), Error> {
+    let data: UpdateHerosData = serde_json::from_value(v)?;
+    sender.try_send(RoomEventData::UpdateHeros(data));
     Ok(())
 }
 

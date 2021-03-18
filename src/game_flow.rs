@@ -37,9 +37,11 @@ pub enum GameingData {
     UpdateNGGame(NGGame),
     UpdateRKGame(RKGame),
     UpdateATGame(ATGame),
+    UpdateARAMGame(ARAMGame),
     RmoveNGGame(RemoveGameData),
     RmoveRKGame(RemoveGameData),
     RmoveATGame(RemoveGameData),
+    RmoveARAMGame(RemoveGameData),
 }
 
 pub fn process_ng(
@@ -432,6 +434,100 @@ pub fn process_at(
     Ok(())
 }
 
+pub fn process_aram(
+    msgtx: Sender<MqttMsg>,
+    tx2: Sender<RoomEventData>,
+    tx3: Sender<SqlData>,
+    TotalUsers: BTreeMap<String, Rc<RefCell<User>>>,
+    game_id: &u64,
+    group: &mut Rc<RefCell<ARAMGame>>,
+) -> Result<(), Error> {
+    let mode = "aram";
+    let res = group.borrow_mut().check_status();
+    match res {
+        ARAMGameStatus::Loading => {
+            if group.borrow_mut().check_loading() {
+                group.borrow_mut().next_status();
+                println!("next");
+            }
+        }
+        ARAMGameStatus::Ban => {
+            send_ban_msg(&msgtx, *game_id, 0, group.borrow().pick_position.clone());
+            group.borrow_mut().next_status();
+            println!("next");
+        }
+        ARAMGameStatus::Pick => {
+            group.borrow_mut().rollHeros();
+            send_heros_msg(&msgtx, *game_id, group.borrow().heros.clone());
+            for index in &group.borrow().pick_position {
+                if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
+                    let mqttmsg = MqttMsg{topic:format!("member/{}/res/ng_choose_hero", u.borrow().id),
+                        msg: format!(r#"{{"id":"{}", "hero":"{}"}}"#, u.borrow().id, u.borrow().hero.clone())};
+                    msgtx.try_send(mqttmsg)?;
+                }
+            }
+            group.borrow_mut().next_status();
+        }
+        ARAMGameStatus::ReadyToStart => {
+            if group.borrow().ready_to_start_time == ARAM_READY_TO_START_TIME {
+                let mut isJump = false;
+                for index in &group.borrow().pick_position {
+                    if let Some(u) = TotalUsers.get(&group.borrow().user_names[*index]) {
+                        if u.borrow().hero == "" {
+                            let jumpData = JumpData {
+                                id: u.borrow().id.clone(),
+                                game: *game_id,
+                                msg: "jump".to_string(),
+                            };
+                            tx2.try_send(RoomEventData::Jump(jumpData));
+                            isJump = true;
+                        }
+                    }
+                }
+                if !isJump {
+                    let mut chooseData: Vec<UserChooseData> = vec![];
+                    let mut values = format!("values ({}, '{}'", game_id, mode);
+                    for user_id in &group.borrow().user_names {
+                        if let Some(u) = TotalUsers.get(user_id) {
+                            let data = UserChooseData {
+                                steam_id: user_id.to_string(),
+                                hero: u.borrow().hero.clone(),
+                                ban_hero: u.borrow().ban_hero.clone(),
+                            };
+                            chooseData.push(data);
+                        }
+                    }
+                    let sqlGameInfoData = SqlGameInfoData {
+                        game: group.borrow().game_id,
+                        mode: mode.to_string(),
+                        chooseData: chooseData,
+                    };
+                    tx3.try_send(SqlData::UpdateGameInfo(sqlGameInfoData));
+                    send_ready_to_start_msg(
+                        &msgtx,
+                        *game_id,
+                        group.borrow().ready_to_start_time,
+                        group.borrow().user_names.clone(),
+                    );
+                }
+            }
+            if group.borrow_mut().ready_to_start_time < 0 {
+                send_gaming_msg(&msgtx, *game_id, group.borrow().user_names.clone());
+                for id in &group.borrow().user_names {
+                    tx2.try_send(RoomEventData::GameStart(GameStartData {
+                        id: id.to_string(),
+                    }));
+                }
+                group.borrow_mut().next_status();
+            }
+            group.borrow_mut().ready_to_start_time -= 1;
+        }
+        ARAMGameStatus::Gaming => {}
+        ARAMGameStatus::Finished => {}
+    }
+    Ok(())
+}
+
 fn send_ban_msg(
     msgtx: &Sender<MqttMsg>,
     game_id: u64,
@@ -492,6 +588,14 @@ fn send_gaming_msg(
             r#"{{"status":"gaming", "game": {}, "player":{:?}}}"#,
             game_id, user_names,
         ),
+    })?;
+    Ok(())
+}
+
+fn send_heros_msg(msgtx: &Sender<MqttMsg>, game_id: u64, heros: Vec<String>) -> Result<(), Error> {
+    msgtx.try_send(MqttMsg {
+        topic: format!("game/{}/res/heros", game_id),
+        msg: format!(r#"{{"heros":{:?}}}"#, heros,),
     })?;
     Ok(())
 }
