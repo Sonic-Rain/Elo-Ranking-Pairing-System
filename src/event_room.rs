@@ -3235,7 +3235,7 @@ pub fn init(
                                             buyGoodResData.goodData.imageURL = mysql::from_value(ea.get("imageURL").unwrap());
                                         }
                                         buyGoodResData.balance = u.borrow().raindrop - buyGoodResData.goodData.price;
-                                        if buyGoodResData.balance >= 0 {
+                                        if buyGoodResData.balance >= 0 && buyGoodResData.goodData.quantity > 0{
                                             u.borrow_mut().raindrop = buyGoodResData.balance;
                                             let mut sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn, date) values ('{}', '{}', '{}', '{}', '{}', '', now())",
                                                     buyGoodResData.steamID, buyGoodResData.goodData.name, buyGoodResData.goodData.kind, buyGoodResData.goodData.imageURL, buyGoodResData.goodData.description);
@@ -3260,9 +3260,11 @@ pub fn init(
                                             sql = format!("update user set raindrop = {} where id='{}'", buyGoodResData.balance, x.steamID);
                                             conn.query(sql.clone())?;
                                             conn.query(sql2.clone())?;
+                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/buy_good", x.steamID.clone()),
+                                                msg: format!(r#"{{"balance":{},"msg":"Ok"}}"#, buyGoodResData.balance)};
                                         }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/buy_good", x.steamID.clone()),
-                                            msg: format!(r#"{{"balance":{},"msg":"Ok"}}"#, buyGoodResData.balance)};
+                                            msg: format!(r#"{{"balance":{},"msg":"fail"}}"#, buyGoodResData.balance)};
                                     }
                                 },
                                 RoomEventData::GetGood(x) => {
