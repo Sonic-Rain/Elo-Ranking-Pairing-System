@@ -3235,6 +3235,7 @@ pub fn init(
                                             buyGoodResData.goodData.imageURL = mysql::from_value(ea.get("imageURL").unwrap());
                                         }
                                         buyGoodResData.balance = u.borrow().raindrop - buyGoodResData.goodData.price;
+                                        let mut result = format!("fail");
                                         if buyGoodResData.balance >= 0 && buyGoodResData.goodData.quantity > 0{
                                             u.borrow_mut().raindrop = buyGoodResData.balance;
                                             let mut sql2 = format!("insert into Items (steam_id, name, kind, imageURL, description, sn, date) values ('{}', '{}', '{}', '{}', '{}', '', now())",
@@ -3260,11 +3261,10 @@ pub fn init(
                                             sql = format!("update user set raindrop = {} where id='{}'", buyGoodResData.balance, x.steamID);
                                             conn.query(sql.clone())?;
                                             conn.query(sql2.clone())?;
-                                            mqttmsg = MqttMsg{topic:format!("member/{}/res/buy_good", x.steamID.clone()),
-                                                msg: format!(r#"{{"balance":{},"msg":"Ok"}}"#, buyGoodResData.balance)};
-                                        }
+                                            result = format!("Ok");
+                                        } 
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/buy_good", x.steamID.clone()),
-                                            msg: format!(r#"{{"balance":{},"msg":"fail"}}"#, buyGoodResData.balance)};
+                                                msg: format!(r#"{{"balance":{},"msg":"{}"}}"#, buyGoodResData.balance, result)};
                                     }
                                 },
                                 RoomEventData::GetGood(x) => {
@@ -3284,6 +3284,11 @@ pub fn init(
                                             goodData.description = mysql::from_value(ea.get("description").unwrap());
                                             goodData.imageURL = mysql::from_value(ea.get("imageURL").unwrap());
                                             goods.push(goodData);
+                                        }
+                                        for good in &mut goods {
+                                            let sql = format!("UPDATE Goods SET quantity={} where id={}", good.quantity, good.id);
+                                            info!("sql: {}, line: {}", sql, line!());
+                                            conn.query(sql.clone())?;
                                         }
                                         mqttmsg = MqttMsg{topic:format!("member/{}/res/get_good", x.steamID.clone()),
                                             msg: format!("{}", serde_json::to_string(&goods)?)};
